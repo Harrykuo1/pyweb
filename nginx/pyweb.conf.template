@@ -1,0 +1,56 @@
+# pyweb production-like nginx config.
+#
+# Run via ./nginx/start.sh; it substitutes __PYWEB_ROOT__ with the absolute
+# repo path and starts nginx with -c (so this file is read in isolation,
+# without merging into any system nginx) and -p /tmp/pyweb-nginx (so log,
+# pid, and temp paths land in a writable, non-privileged location).
+
+worker_processes  1;
+pid               pyweb-nginx.pid;
+error_log         pyweb-nginx-error.log warn;
+
+events {
+    worker_connections  256;
+}
+
+http {
+    # System mime.types ships with the nginx package; absolute path keeps
+    # this config self-contained when -p points at /tmp.
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    access_log    pyweb-nginx-access.log;
+    sendfile      on;
+    keepalive_timeout 65;
+
+    # Photo cap is 5 MB and PDF cap is 10 MB on the backend; allow some
+    # multipart overhead.
+    client_max_body_size 12m;
+
+    server {
+        listen      8080;
+        server_name localhost 127.0.0.1;
+
+        root  __PYWEB_ROOT__/frontend/dist;
+        index index.html;
+
+        # SPA history-mode fallback: any unknown path returns index.html so
+        # that vue-router can take over after the page loads. Real assets
+        # under /assets/ are served directly because $uri matches them.
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Reverse proxy to the FastAPI backend on the same host. Cookies
+        # round-trip transparently because the browser sees same-origin
+        # requests on :8080.
+        location /api/ {
+            proxy_pass         http://127.0.0.1:8000;
+            proxy_http_version 1.1;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+    }
+}

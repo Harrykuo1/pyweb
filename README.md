@@ -4,7 +4,7 @@
 
 ## 功能
 
-- **登入**：兩組固定帳號（管理員 / 檢視者），JWT 認證。
+- **登入**：兩組固定帳號（管理員 / 檢視者），server-side session 認證。
 - **成員介紹**：表格列出畢業年份、本名、目前就職／就讀、入群時間，可附照片與 Markdown 履歷。
 - **實習工作紀錄**：紀錄求職年份、公司、心得（含面試題目、實作、domain 問題）、時程表，可匿名。
 
@@ -80,6 +80,36 @@ npm run dev
 ```
 
 預設啟動於 `http://127.0.0.1:5173`。
+
+## Production-like 部署（nginx）
+
+模擬上線環境：把前端 build 成靜態檔，由 nginx 在 8080 同時服務靜態資源與反向代理 `/api` 到後端。前端走同源請求，**不需要 CORS / Vite proxy**。
+
+需求：系統已安裝 nginx（`sudo apt install nginx`）。我們的 nginx 跑在非 privileged port（8080）、log/pid 寫到 `/tmp/pyweb-nginx/`，**不會動到系統 nginx**。
+
+```bash
+# 1. build 前端（產出 frontend/dist/）
+cd frontend
+npm run build
+cd ..
+
+# 2. 確保後端有跑（uvicorn 仍在 8000）
+cd backend
+SESSION_SECRET=... SEED_ADMIN_USERNAME=... ...   # 填好 .env
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+cd ..
+
+# 3. 啟動專用 nginx（前景跑，Ctrl+C 結束）
+./nginx/start.sh
+
+# 或背景跑：
+./nginx/start.sh -g 'daemon on;'
+
+# 結束：
+./nginx/stop.sh
+```
+
+開瀏覽器到 [http://localhost:8080/](http://localhost:8080/)。設定檔在 [nginx/pyweb.conf.template](nginx/pyweb.conf.template)，排除問題時看 `/tmp/pyweb-nginx/pyweb-nginx-error.log`。
 
 ## 帳號（種子資料）
 
