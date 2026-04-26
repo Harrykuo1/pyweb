@@ -7,10 +7,12 @@ import {
   ElPopconfirm,
   ElTable,
   ElTableColumn,
+  ElTooltip,
 } from 'element-plus'
-import { Plus, Refresh, Sort } from '@element-plus/icons-vue'
+import { Document, Plus, Refresh, Sort } from '@element-plus/icons-vue'
 
 import MemberFormDialog from '../components/MemberFormDialog.vue'
+import MemberPhotoCell from '../components/MemberPhotoCell.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 
@@ -63,6 +65,15 @@ async function deleteMember(member) {
   }
 }
 
+function viewResume(member) {
+  // Wired in the next commit when ResumeViewerDialog lands.
+  ElMessage.info(`「${member.real_name}」的履歷檢視器將於下個 commit 加入`)
+}
+
+function hasAnyResume(member) {
+  return member.has_resume_md || member.has_resume_pdf
+}
+
 function formatDate(iso) {
   if (!iso) return '-'
   return new Date(iso).toLocaleDateString('zh-TW', {
@@ -100,15 +111,41 @@ onMounted(loadMembers)
     <el-table
       v-loading="loading"
       :data="members"
-      stripe
       class="members-table"
       empty-text="尚無成員資料"
     >
+      <el-table-column label="照片" width="140">
+        <template #default="{ row }">
+          <MemberPhotoCell :member="row" @changed="loadMembers" />
+        </template>
+      </el-table-column>
       <el-table-column prop="graduation_year" label="畢業年份" width="100" />
       <el-table-column prop="real_name" label="本名" width="160" />
       <el-table-column prop="current_position" label="目前就職／就讀" />
       <el-table-column label="入群時間" width="140">
         <template #default="{ row }">{{ formatDate(row.joined_at) }}</template>
+      </el-table-column>
+      <el-table-column label="履歷" width="120" align="center">
+        <template #default="{ row }">
+          <el-tooltip
+            v-if="!hasAnyResume(row)"
+            content="此成員尚未提供履歷"
+            placement="top"
+          >
+            <el-button size="small" :icon="Document" disabled>履歷</el-button>
+          </el-tooltip>
+          <el-button
+            v-else
+            size="small"
+            type="primary"
+            plain
+            :icon="Document"
+            data-test="view-resume-button"
+            @click="viewResume(row)"
+          >
+            履歷
+          </el-button>
+        </template>
       </el-table-column>
       <el-table-column v-if="auth.isAdmin" label="操作" width="200" align="center">
         <template #default="{ row }">

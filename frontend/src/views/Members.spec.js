@@ -20,8 +20,11 @@ const sampleMembers = [
     graduation_year: 2022,
     real_name: 'Alice',
     current_position: 'SWE',
-    resume_md: null,
+    resume_md: '# resume',
     joined_at: '2022-01-01T00:00:00+00:00',
+    has_photo: true,
+    has_resume_md: true,
+    has_resume_pdf: false,
   },
   {
     id: 2,
@@ -30,6 +33,9 @@ const sampleMembers = [
     current_position: 'PM',
     resume_md: null,
     joined_at: '2023-06-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
   },
 ]
 
@@ -42,10 +48,10 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-async function mountAsAdmin() {
+async function mountAsAdmin(members = sampleMembers) {
   const auth = useAuthStore()
   auth.user = { id: 1, username: 'a', role: 'admin' }
-  vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+  vi.spyOn(membersApi, 'list').mockResolvedValue(members)
   const wrapper = mount(Members, { attachTo: document.body })
   await flushPromises()
   return wrapper
@@ -100,6 +106,7 @@ describe('Members.vue', () => {
     await flushPromises()
     list.mockClear()
 
+    // The first action button in the empty-list state is "切換排序".
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
 
@@ -123,6 +130,33 @@ describe('Members.vue', () => {
     expect(wrapper.find('[data-test="delete-button"]').exists()).toBe(false)
   })
 
+  it('resume button is enabled for members with at least one resume format', async () => {
+    const wrapper = await mountAsAdmin()
+    const buttons = wrapper.findAll('[data-test="view-resume-button"]')
+    // Only Alice has a resume_md, so only one resume button is enabled.
+    expect(buttons.length).toBe(1)
+  })
+
+  it('resume button is rendered as disabled tooltip for members without any resume', async () => {
+    const noResume = [
+      {
+        id: 1,
+        graduation_year: 2024,
+        real_name: 'Carol',
+        current_position: 'X',
+        resume_md: null,
+        joined_at: '2024-01-01T00:00:00+00:00',
+        has_photo: false,
+        has_resume_md: false,
+        has_resume_pdf: false,
+      },
+    ]
+    const wrapper = await mountAsAdmin(noResume)
+    expect(wrapper.findAll('[data-test="view-resume-button"]').length).toBe(0)
+    // The disabled placeholder button still renders inside the table.
+    expect(wrapper.text()).toContain('履歷')
+  })
+
   it('confirming delete calls membersApi.remove and re-fetches', async () => {
     const wrapper = await mountAsAdmin()
     const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
@@ -130,11 +164,9 @@ describe('Members.vue', () => {
       sampleMembers.filter((m) => m.id !== 1),
     )
 
-    // Open the popconfirm on the first row.
     await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
     await flushPromises()
 
-    // Confirm button is the popper's primary button labelled "刪除".
     const confirmBtn = Array.from(
       wrapper.element.querySelectorAll('.el-popconfirm__action button'),
     ).find((b) => b.textContent.trim() === '刪除')
