@@ -9,7 +9,7 @@ import {
   ElSegmented,
   ElUpload,
 } from 'element-plus'
-import { Delete, Document, Upload } from '@element-plus/icons-vue'
+import { Delete, Upload } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
@@ -25,7 +25,6 @@ const emit = defineEmits(['update:modelValue', 'changed'])
 
 const auth = useAuthStore()
 
-// Bumping this re-mounts the iframe so the browser refetches the new PDF.
 const cacheBuster = ref(Date.now())
 const tab = ref('pdf')
 
@@ -47,7 +46,6 @@ watch(
   ([open]) => {
     if (!open || !props.member) return
     cacheBuster.value = Date.now()
-    // Default selection: PDF if available, else Markdown.
     if (props.member.has_resume_pdf) tab.value = 'pdf'
     else if (props.member.has_resume_md) tab.value = 'md'
   },
@@ -102,60 +100,27 @@ defineExpose({ handleUploadPdf, handleDeletePdf })
   <el-dialog
     :model-value="modelValue"
     :title="member ? `${member.real_name} 的履歷` : '履歷'"
-    width="820"
+    width="1000"
+    class="resume-dialog"
     :close-on-click-modal="false"
     :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div v-if="member" class="resume-viewer">
-      <header class="viewer-header">
+      <div v-if="availableFormats.length > 1" class="switcher-row">
         <el-segmented
-          v-if="availableFormats.length > 1"
           v-model="tab"
           :options="availableFormats"
+          size="large"
+          class="rounded-switcher"
           data-test="format-segmented"
         />
-        <span v-else-if="availableFormats.length === 1" class="single-tag">
-          僅有 {{ availableFormats[0].label }} 格式
-        </span>
+      </div>
+      <div v-else-if="availableFormats.length === 1" class="single-tag-row">
+        僅有 {{ availableFormats[0].label }} 格式
+      </div>
 
-        <div v-if="auth.isAdmin" class="admin-actions">
-          <el-upload
-            :show-file-list="false"
-            :auto-upload="false"
-            accept="application/pdf"
-            :on-change="handleUploadPdf"
-            data-test="upload-pdf"
-          >
-            <el-button :icon="Upload" size="small" plain>
-              {{ member.has_resume_pdf ? '替換 PDF' : '上傳 PDF' }}
-            </el-button>
-          </el-upload>
-          <el-popconfirm
-            v-if="member.has_resume_pdf"
-            title="確定要刪除這份 PDF 履歷嗎？"
-            confirm-button-text="刪除"
-            cancel-button-text="取消"
-            confirm-button-type="danger"
-            :teleported="false"
-            @confirm="handleDeletePdf"
-          >
-            <template #reference>
-              <el-button
-                :icon="Delete"
-                size="small"
-                type="danger"
-                plain
-                data-test="delete-pdf"
-              >
-                刪除 PDF
-              </el-button>
-            </template>
-          </el-popconfirm>
-        </div>
-      </header>
-
-      <div class="viewer-body">
+      <div class="viewer-body" :class="{ 'is-pdf': tab === 'pdf' && availableFormats.length }">
         <div v-if="availableFormats.length === 0" class="empty-state">
           <el-empty description="尚未上傳履歷" />
         </div>
@@ -174,58 +139,150 @@ defineExpose({ handleUploadPdf, handleDeletePdf })
     </div>
 
     <template #footer>
-      <el-button @click="close">關閉</el-button>
+      <div class="footer-row">
+        <div class="footer-admin">
+          <template v-if="auth.isAdmin && member">
+            <el-upload
+              :show-file-list="false"
+              :auto-upload="false"
+              accept="application/pdf"
+              :on-change="handleUploadPdf"
+              data-test="upload-pdf"
+            >
+              <el-button :icon="Upload" size="small" plain>
+                {{ member.has_resume_pdf ? '替換 PDF' : '上傳 PDF' }}
+              </el-button>
+            </el-upload>
+            <el-popconfirm
+              v-if="member.has_resume_pdf"
+              title="確定要刪除這份 PDF 履歷嗎？"
+              confirm-button-text="刪除"
+              cancel-button-text="取消"
+              confirm-button-type="danger"
+              :teleported="false"
+              @confirm="handleDeletePdf"
+            >
+              <template #reference>
+                <el-button
+                  :icon="Delete"
+                  size="small"
+                  type="danger"
+                  plain
+                  data-test="delete-pdf"
+                >
+                  刪除 PDF
+                </el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </div>
+        <el-button @click="close">關閉</el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
+.resume-dialog :deep(.el-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.resume-dialog :deep(.el-dialog__body) {
+  padding: 16px 24px 0;
+}
+
+.resume-dialog :deep(.el-dialog__footer) {
+  padding: 16px 24px;
+  border-top: 1px solid #f2f3f5;
+}
+
 .resume-viewer {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.viewer-header {
+.switcher-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.single-tag {
+.rounded-switcher :deep(.el-segmented) {
+  --el-segmented-padding: 4px;
+  background: #f0f2f5;
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.rounded-switcher :deep(.el-segmented__item) {
+  border-radius: 999px;
+  padding: 0 24px;
+  min-width: 120px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.rounded-switcher :deep(.el-segmented__item.is-selected) {
+  background: #ffffff;
+  color: #409eff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.single-tag-row {
+  text-align: center;
   color: #909399;
   font-size: 13px;
-}
-
-.admin-actions {
-  display: flex;
-  gap: 8px;
+  padding: 4px 0;
 }
 
 .viewer-body {
-  min-height: 480px;
   border: 1px solid #e4e7ed;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
-  background: #fafafa;
+  background: #ffffff;
+  min-height: 70vh;
+  display: flex;
 }
 
-.empty-state {
-  padding: 40px 0;
+.viewer-body.is-pdf {
+  background: #525659;
+  border-color: #525659;
 }
 
 .pdf-frame {
+  flex: 1;
   width: 100%;
-  height: 600px;
+  height: 70vh;
   border: 0;
+  display: block;
 }
 
 .md-frame {
-  padding: 16px 24px;
-  max-height: 600px;
+  flex: 1;
+  padding: 24px 32px;
+  max-height: 70vh;
   overflow: auto;
-  background: #ffffff;
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.footer-admin {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>
