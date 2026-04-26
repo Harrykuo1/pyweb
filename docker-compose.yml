@@ -4,10 +4,13 @@ services:
       context: ./backend
     env_file:
       - .env
-    # SQLite path is fixed by the Dockerfile (DATABASE_URL=/data/pyweb.db);
-    # the named volume below persists it across container restarts.
+    # SQLite path is fixed by the Dockerfile (DATABASE_URL=/data/pyweb.db).
+    # Bind-mount ./data on the host so the file is editable / inspectable
+    # with normal host tools (sqlite3, DBeaver, scp, ...). The container's
+    # pyweb user runs as uid 1000 — match your host user uid so writes
+    # round-trip without chown.
     volumes:
-      - pyweb_data:/data
+      - ./data:/data
     expose:
       - "8000"
     restart: unless-stopped
@@ -22,6 +25,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-volumes:
-  pyweb_data:

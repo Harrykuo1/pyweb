@@ -18,6 +18,11 @@ ENV/
 *.sqlite
 *.sqlite3
 
+# Bind-mounted runtime data (docker-compose). Keep the directory but
+# never commit the actual DB; .gitkeep retains the folder in git.
+/data/*
+!/data/.gitkeep
+
 # Environment variables
 .env
 .env.local

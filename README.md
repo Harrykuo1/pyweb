@@ -118,9 +118,11 @@ docker compose down -v
 |---|---|---|---|
 | `backend` | `backend/Dockerfile` (python:3.13-slim) | 不對外 | `:8000` 由 nginx 反代 |
 | `frontend` | `frontend/Dockerfile` (multi-stage：node build → nginx serve) | `8081:8080` | 服務 `dist/` + 反代 `/api` |
-| `pyweb_data` | named volume | — | 掛在 backend `/data`，存 `pyweb.db` |
+| `./data` | bind mount | — | 掛在 backend `/data`，存 `pyweb.db` |
 
 backend 容器啟動時會跑 `app/init_db.py`，依 `.env` 內的 `SEED_*` 變數種帳號。再次啟動 init 是冪等的，**不會覆蓋既有密碼**。
+
+SQLite 檔以 bind mount 落在 [data/pyweb.db](data/)，host 上可直接 `sqlite3 data/pyweb.db` 或拿 DBeaver 開。整個 `data/` 目錄已被 gitignore，但 `.gitkeep` 保留資料夾結構。要重置資料：`rm data/pyweb.db && docker compose restart backend`。
 
 ### host nginx + venv（無 Docker）
 
