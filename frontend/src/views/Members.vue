@@ -13,6 +13,7 @@ import { Document, Plus, Refresh, Sort } from '@element-plus/icons-vue'
 
 import MemberFormDialog from '../components/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/MemberPhotoCell.vue'
+import ResumeViewerDialog from '../components/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 
@@ -24,6 +25,9 @@ const order = ref('asc')
 
 const dialogOpen = ref(false)
 const editingMember = ref(null)
+
+const resumeOpen = ref(false)
+const resumeMember = ref(null)
 
 async function loadMembers() {
   loading.value = true
@@ -66,8 +70,19 @@ async function deleteMember(member) {
 }
 
 function viewResume(member) {
-  // Wired in the next commit when ResumeViewerDialog lands.
-  ElMessage.info(`「${member.real_name}」的履歷檢視器將於下個 commit 加入`)
+  resumeMember.value = member
+  resumeOpen.value = true
+}
+
+async function reloadAndRebindResume() {
+  await loadMembers()
+  // Re-point the resume dialog at the freshly fetched row so flag changes
+  // (e.g. resume_pdf was deleted) are reflected without a full close/reopen.
+  if (resumeMember.value) {
+    const fresh = members.value.find((m) => m.id === resumeMember.value.id)
+    resumeMember.value = fresh ?? null
+    if (!fresh) resumeOpen.value = false
+  }
 }
 
 function hasAnyResume(member) {
@@ -185,6 +200,12 @@ onMounted(loadMembers)
       v-model="dialogOpen"
       :member="editingMember"
       @saved="loadMembers"
+    />
+
+    <ResumeViewerDialog
+      v-model="resumeOpen"
+      :member="resumeMember"
+      @changed="reloadAndRebindResume"
     />
   </div>
 </template>
