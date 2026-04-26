@@ -4,16 +4,13 @@ import { mount } from '@vue/test-utils'
 import App from './App.vue'
 
 describe('App', () => {
-  it('mounts without throwing', () => {
+  it('mounts a RouterView root', () => {
     const wrapper = mount(App, {
       global: {
-        stubs: {
-          // Stub out the default scaffold component to keep this smoke test
-          // independent of HelloWorld's internals.
-          HelloWorld: true,
-        },
+        stubs: { RouterView: true },
       },
     })
     expect(wrapper.exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true)
   })
 })
