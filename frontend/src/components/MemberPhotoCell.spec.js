@@ -71,7 +71,7 @@ describe('MemberPhotoCell', () => {
     // Find the underlying el-upload component instance and call its on-change.
     const uploadEl = wrapper.findComponent({ name: 'ElUpload' })
     const onChange = uploadEl.props('onChange')
-    await onChange({ file })
+    await onChange({ raw: file, name: file.name, size: file.size })
     await flushPromises()
 
     expect(upload).toHaveBeenCalledWith(2, file)
@@ -88,7 +88,7 @@ describe('MemberPhotoCell', () => {
     Object.defineProperty(huge, 'size', { value: 5 * 1024 * 1024 + 1 })
 
     const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
-    await onChange({ file: huge })
+    await onChange({ raw: huge, name: huge.name, size: huge.size })
     await flushPromises()
 
     expect(upload).not.toHaveBeenCalled()
@@ -104,7 +104,7 @@ describe('MemberPhotoCell', () => {
     Object.defineProperty(gif, 'size', { value: 100 })
 
     const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
-    await onChange({ file: gif })
+    await onChange({ raw: gif, name: gif.name, size: gif.size })
     await flushPromises()
 
     expect(upload).not.toHaveBeenCalled()

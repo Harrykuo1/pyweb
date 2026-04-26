@@ -90,7 +90,11 @@ function close() {
   emit('update:modelValue', false)
 }
 
-function handlePdfChange({ file }) {
+function handlePdfChange(uploadFile) {
+  // el-upload's on-change passes its UploadFile wrapper; .raw holds the
+  // native File needed for FormData.
+  const file = uploadFile?.raw ?? uploadFile
+  if (!file || typeof file.size !== 'number') return
   if (file.size > 10 * 1024 * 1024) {
     ElMessage.error('PDF 不可超過 10 MB')
     return

@@ -166,7 +166,7 @@ describe('MemberFormDialog', () => {
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'current_position', 'SWE')
     const file = pdfFile()
-    await wrapper.vm.handlePdfChange({ file })
+    await wrapper.vm.handlePdfChange({ raw: file, name: file.name, size: file.size })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -192,7 +192,7 @@ describe('MemberFormDialog', () => {
       },
     })
     const file = pdfFile()
-    await wrapper.vm.handlePdfChange({ file })
+    await wrapper.vm.handlePdfChange({ raw: file, name: file.name, size: file.size })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -233,7 +233,8 @@ describe('MemberFormDialog', () => {
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'current_position', 'SWE')
-    await wrapper.vm.handlePdfChange({ file: pdfFile(11 * 1024 * 1024) })
+    const big = pdfFile(11 * 1024 * 1024)
+    await wrapper.vm.handlePdfChange({ raw: big, name: big.name, size: big.size })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -248,9 +249,8 @@ describe('MemberFormDialog', () => {
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'current_position', 'SWE')
-    await wrapper.vm.handlePdfChange({
-      file: pdfFile(1024, 'application/msword', 'r.docx'),
-    })
+    const docx = pdfFile(1024, 'application/msword', 'r.docx')
+    await wrapper.vm.handlePdfChange({ raw: docx, name: docx.name, size: docx.size })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -275,7 +275,8 @@ describe('MemberFormDialog', () => {
       },
     })
     wrapper.vm.markPdfForRemoval()
-    await wrapper.vm.handlePdfChange({ file: pdfFile() })
+    const f = pdfFile()
+    await wrapper.vm.handlePdfChange({ raw: f, name: f.name, size: f.size })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -293,7 +294,8 @@ describe('MemberFormDialog', () => {
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'current_position', 'SWE')
-    await wrapper.vm.handlePdfChange({ file: pdfFile() })
+    const f = pdfFile()
+    await wrapper.vm.handlePdfChange({ raw: f, name: f.name, size: f.size })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -304,7 +306,8 @@ describe('MemberFormDialog', () => {
 
   it('opening dialog clears any leftover pending PDF state', async () => {
     const wrapper = await mountDialog()
-    await wrapper.vm.handlePdfChange({ file: pdfFile() })
+    const f = pdfFile()
+    await wrapper.vm.handlePdfChange({ raw: f, name: f.name, size: f.size })
     expect(wrapper.text()).toContain('已選擇')
 
     // Re-open with a new member; the form should reset.

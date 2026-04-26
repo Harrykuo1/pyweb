@@ -129,7 +129,7 @@ describe('ResumeViewerDialog', () => {
     const file = new File(['%PDF'], 'r.pdf', { type: 'application/pdf' })
     Object.defineProperty(file, 'size', { value: 1024 })
 
-    await wrapper.vm.handleUploadPdf({ file })
+    await wrapper.vm.handleUploadPdf({ raw: file, name: file.name, size: file.size })
     await flushPromises()
 
     expect(upload).toHaveBeenCalledWith(2, file)
@@ -145,7 +145,7 @@ describe('ResumeViewerDialog', () => {
     const big = new File(['x'], 'big.pdf', { type: 'application/pdf' })
     Object.defineProperty(big, 'size', { value: 10 * 1024 * 1024 + 1 })
 
-    await wrapper.vm.handleUploadPdf({ file: big })
+    await wrapper.vm.handleUploadPdf({ raw: big, name: big.name, size: big.size })
     expect(upload).not.toHaveBeenCalled()
   })
 
@@ -158,7 +158,7 @@ describe('ResumeViewerDialog', () => {
     const docx = new File(['x'], 'r.docx', { type: 'application/msword' })
     Object.defineProperty(docx, 'size', { value: 100 })
 
-    await wrapper.vm.handleUploadPdf({ file: docx })
+    await wrapper.vm.handleUploadPdf({ raw: docx, name: docx.name, size: docx.size })
     expect(upload).not.toHaveBeenCalled()
   })
 

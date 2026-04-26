@@ -23,7 +23,11 @@ function photoSrc() {
   return membersApi.photoUrl(props.member.id, cacheBuster.value)
 }
 
-async function handleUpload({ file }) {
+async function handleUpload(uploadFile) {
+  // el-upload's on-change passes its UploadFile wrapper; the native File
+  // we need for FormData is at .raw.
+  const file = uploadFile?.raw ?? uploadFile
+  if (!file || typeof file.size !== 'number') return
   if (file.size > 5 * 1024 * 1024) {
     ElMessage.error('照片大小不可超過 5 MB')
     return
