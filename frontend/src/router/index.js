@@ -11,9 +11,15 @@ const routes = [
   },
   {
     path: '/',
-    name: 'home',
-    component: () => import('../views/Home.vue'),
+    component: () => import('../layouts/AuthLayout.vue'),
     meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'home',
+        component: () => import('../views/Home.vue'),
+      },
+    ],
   },
   {
     path: '/:pathMatch(.*)*',
