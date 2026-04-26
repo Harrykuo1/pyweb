@@ -91,7 +91,6 @@ defineExpose({ handleDelete, handleUpload })
         confirm-button-text="移除"
         cancel-button-text="取消"
         confirm-button-type="danger"
-        :teleported="false"
         @confirm="handleDelete"
       >
         <template #reference>

@@ -310,8 +310,17 @@ defineExpose({ handlePdfChange, markPdfForRemoval, clearPdfChange })
 
 .pdf-buttons {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* el-upload renders as a block-level wrapper around its trigger button.
+   Strip the inherent line-height padding so the button row sits flush
+   with sibling el-button siblings. */
+.pdf-buttons :deep(.el-upload) {
+  display: inline-flex;
+  align-items: center;
 }
 
 .pdf-hint {
