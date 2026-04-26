@@ -19,7 +19,13 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", values_callable=lambda e: [m.value for m in e]),
+        Enum(
+            UserRole,
+            name="user_role",
+            values_callable=lambda e: [m.value for m in e],
+            create_constraint=True,
+            validate_strings=True,
+        ),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
