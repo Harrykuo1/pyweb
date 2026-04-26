@@ -56,6 +56,16 @@ Docker is **out of scope** — focus on functionality first.
 - **No backwards-compat shims** unless the user asks for them.
 - Validate at system boundaries (user input, external APIs); trust internal code.
 
+### 2.6 Unit Tests (MANDATORY)
+- **Every feature ships with a passing unit test** — backend or frontend, no exceptions.
+- **Tests must pass before the next commit.** If a test fails, fix the code (not the test) before moving on.
+- **Bundle test with feature** — include the test in the same commit as the feature it covers. Tests are part of "done", not a separate phase.
+- **DB-touching tests use mock / in-memory data** — never a persistent database. Backend tests use the in-memory SQLite fixture from `backend/tests/conftest.py`. Never touch `pyweb.db`.
+- **Backend stack**: `pytest` + FastAPI `TestClient` (`httpx`-backed). Tests live in `backend/tests/`.
+- **Frontend stack**: `vitest` + `@vue/test-utils` + `happy-dom` / `jsdom`. Tests live next to source as `*.spec.js` or under `__tests__/`.
+- **Trivial plumbing exempt**: pure declarative config additions (declaring a Pydantic field) don't need a dedicated test if the next feature's test exercises them end-to-end. Use this exemption sparingly — when in doubt, write the test.
+- **Run before committing**: `cd backend && pytest`; `cd frontend && npm run test`.
+
 ---
 
 ## 3. Feature Requirements
