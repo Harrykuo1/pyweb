@@ -15,7 +15,7 @@
 | 前端 | Vue 3（Composition API + `<script setup>`）、Vue Router、Pinia、Element Plus、md-editor-v3、DOMPurify |
 | 後端 | FastAPI、SQLAlchemy、Pydantic |
 | 資料庫 | SQLite |
-| 認證 | JWT（access token，存於 `localStorage`） |
+| 認證 | Server-side session（Starlette `SessionMiddleware`，簽章式 cookie） |
 
 ## 專案結構
 
@@ -47,7 +47,7 @@ pyweb/
 |---|---|
 | 0 | 專案初始化（前後端骨架、`.gitignore`） |
 | 1 | 資料庫 schema + 初始化兩組帳號 |
-| 2 | 後端 JWT 登入 API + 權限 dependency |
+| 2 | 後端 Session 登入 API + 權限 dependency |
 | 3 | 前端登入頁 + router guard + Pinia auth store |
 | 4 | 成員 CRUD API + 前端列表頁 + 表單 |
 | 5 | 成員照片上傳／顯示 |
@@ -65,7 +65,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # 填入 JWT_SECRET 等變數
+cp .env.example .env   # 填入 SESSION_SECRET 等變數
 uvicorn app.main:app --reload
 ```
 

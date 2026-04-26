@@ -12,7 +12,7 @@ A community member management website that records member profiles and internshi
 - **Frontend**: Vue 3 (Composition API with `<script setup>`) + Vue Router + Pinia + Element Plus + md-editor-v3
 - **Backend**: FastAPI + SQLAlchemy + Pydantic
 - **Database**: SQLite
-- **Auth**: JWT (access token, stored in frontend `localStorage`)
+- **Auth**: server-side session via Starlette `SessionMiddleware` (signed cookie, `itsdangerous`). NOT JWT.
 - **Markdown Rendering**: server stores raw Markdown; frontend renders with DOMPurify to prevent XSS
 
 Docker is **out of scope** — focus on functionality first.
@@ -64,9 +64,9 @@ Docker is **out of scope** — focus on functionality first.
 - Two seeded accounts (bcrypt-hashed, written by `init_db.py`):
   - **admin** — full CRUD
   - **viewer** — read-only
-- JWT payload includes a `role` field (`admin` | `viewer`).
-- Backend: FastAPI `Depends` for permission guards.
-- Frontend: Vue Router guard + component-level button visibility control.
+- Session stored server-side via Starlette `SessionMiddleware` (signed cookie). Login writes `user_id` and `role` into `request.session`; logout clears it.
+- Backend: FastAPI `Depends` reads `request.session` for permission guards (`require_admin`, `require_user`).
+- Frontend: cookie sent automatically by browser; axios must use `withCredentials: true`. Vue Router guard + component-level button visibility.
 - Show clear error message on login failure.
 
 ### 3.2 Members Page `/members`
@@ -158,7 +158,7 @@ Commit incrementally through each phase. Always present the phase's TODO list an
 ## 6. Security Notes
 
 - Passwords: bcrypt hashed, never logged.
-- JWT secret: read from environment variable, never committed.
+- Session secret: read from `SESSION_SECRET` env var, never committed. Cookies marked `httponly` + `samesite=lax`; `secure` flag enabled in production.
 - XSS: all user-supplied Markdown rendered through DOMPurify on the client.
 - File uploads: validate MIME type and size on the backend; reject non-image content for the photo field.
 - SQL: use SQLAlchemy ORM / parameterized queries — never string-concatenate SQL.

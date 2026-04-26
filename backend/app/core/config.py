@@ -2,9 +2,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    jwt_secret: str
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    session_secret: str
+    session_max_age_seconds: int = 86400
     database_url: str = "sqlite:///./pyweb.db"
 
     model_config = SettingsConfigDict(
