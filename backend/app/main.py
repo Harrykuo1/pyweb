@@ -4,6 +4,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
 from app.routers import auth as auth_router
+from app.routers import members as members_router
 
 app = FastAPI(title="pyweb backend")
 
@@ -25,6 +26,7 @@ app.add_middleware(
 
 
 app.include_router(auth_router.router)
+app.include_router(members_router.router)
 
 
 @app.get("/health")
