@@ -2,7 +2,6 @@
 import { onMounted, ref } from 'vue'
 import {
   ElButton,
-  ElEmpty,
   ElIcon,
   ElMessage,
   ElTable,
@@ -10,6 +9,7 @@ import {
 } from 'element-plus'
 import { Plus, Refresh, Sort } from '@element-plus/icons-vue'
 
+import MemberFormDialog from '../components/MemberFormDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 
@@ -18,6 +18,9 @@ const auth = useAuthStore()
 const members = ref([])
 const loading = ref(false)
 const order = ref('asc')
+
+const dialogOpen = ref(false)
+const editingMember = ref(null)
 
 async function loadMembers() {
   loading.value = true
@@ -33,6 +36,16 @@ async function loadMembers() {
 function toggleOrder() {
   order.value = order.value === 'asc' ? 'desc' : 'asc'
   loadMembers()
+}
+
+function openCreate() {
+  editingMember.value = null
+  dialogOpen.value = true
+}
+
+function openEdit(member) {
+  editingMember.value = { ...member }
+  dialogOpen.value = true
 }
 
 function formatDate(iso) {
@@ -62,7 +75,7 @@ onMounted(loadMembers)
           type="primary"
           :icon="Plus"
           data-test="add-member-button"
-          @click="ElMessage.info('表單將於下個 commit 加入')"
+          @click="openCreate"
         >
           新增成員
         </el-button>
@@ -83,12 +96,25 @@ onMounted(loadMembers)
         <template #default="{ row }">{{ formatDate(row.joined_at) }}</template>
       </el-table-column>
       <el-table-column v-if="auth.isAdmin" label="操作" width="180" align="center">
-        <template #default>
-          <el-button size="small" plain disabled>編輯</el-button>
+        <template #default="{ row }">
+          <el-button
+            size="small"
+            plain
+            data-test="edit-button"
+            @click="openEdit(row)"
+          >
+            編輯
+          </el-button>
           <el-button size="small" type="danger" plain disabled>刪除</el-button>
         </template>
       </el-table-column>
     </el-table>
+
+    <MemberFormDialog
+      v-model="dialogOpen"
+      :member="editingMember"
+      @saved="loadMembers"
+    />
   </div>
 </template>
 
