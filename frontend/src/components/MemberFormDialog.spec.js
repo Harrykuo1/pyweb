@@ -149,4 +149,182 @@ describe('MemberFormDialog', () => {
 
     expect(wrapper.emitted('saved')).toBeFalsy()
   })
+
+  // ---------- PDF upload integration ----------
+
+  function pdfFile(size = 1024, type = 'application/pdf', name = 'r.pdf') {
+    const f = new File(['%PDF'], name, { type })
+    Object.defineProperty(f, 'size', { value: size })
+    return f
+  }
+
+  it('create with selected PDF uploads after create succeeds', async () => {
+    const create = vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 11 })
+    const upload = vi.spyOn(membersApi, 'uploadResumePdf').mockResolvedValue({})
+
+    const wrapper = await mountDialog()
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'current_position', 'SWE')
+    const file = pdfFile()
+    await wrapper.vm.handlePdfChange({ file })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(upload).toHaveBeenCalledWith(11, file)
+    expect(wrapper.emitted('saved')).toBeTruthy()
+  })
+
+  it('edit with selected PDF uploads after update succeeds', async () => {
+    const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
+    const upload = vi.spyOn(membersApi, 'uploadResumePdf').mockResolvedValue({})
+
+    const wrapper = await mountDialog({
+      member: {
+        id: 7,
+        graduation_year: 2020,
+        real_name: 'Old',
+        current_position: 'Old',
+        resume_md: null,
+        joined_at: null,
+        has_resume_pdf: false,
+      },
+    })
+    const file = pdfFile()
+    await wrapper.vm.handlePdfChange({ file })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalled()
+    expect(upload).toHaveBeenCalledWith(7, file)
+  })
+
+  it('edit with markPdfForRemoval calls deleteResumePdf after update', async () => {
+    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
+    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
+    const upload = vi.spyOn(membersApi, 'uploadResumePdf')
+
+    const wrapper = await mountDialog({
+      member: {
+        id: 7,
+        graduation_year: 2020,
+        real_name: 'Old',
+        current_position: 'Old',
+        resume_md: null,
+        joined_at: null,
+        has_resume_pdf: true,
+      },
+    })
+    wrapper.vm.markPdfForRemoval()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(del).toHaveBeenCalledWith(7)
+    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it('handlePdfChange rejects oversized files without setting state', async () => {
+    const upload = vi.spyOn(membersApi, 'uploadResumePdf')
+    vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+
+    const wrapper = await mountDialog()
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'current_position', 'SWE')
+    await wrapper.vm.handlePdfChange({ file: pdfFile(11 * 1024 * 1024) })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it('handlePdfChange rejects non-PDF MIME', async () => {
+    const upload = vi.spyOn(membersApi, 'uploadResumePdf')
+    vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+
+    const wrapper = await mountDialog()
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'current_position', 'SWE')
+    await wrapper.vm.handlePdfChange({
+      file: pdfFile(1024, 'application/msword', 'r.docx'),
+    })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it('selecting a new file overrides a pending removal', async () => {
+    const upload = vi.spyOn(membersApi, 'uploadResumePdf').mockResolvedValue({})
+    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
+    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
+
+    const wrapper = await mountDialog({
+      member: {
+        id: 7,
+        graduation_year: 2020,
+        real_name: 'Old',
+        current_position: 'Old',
+        resume_md: null,
+        joined_at: null,
+        has_resume_pdf: true,
+      },
+    })
+    wrapper.vm.markPdfForRemoval()
+    await wrapper.vm.handlePdfChange({ file: pdfFile() })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(upload).toHaveBeenCalled()
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('still emits saved and closes when basic save passes but PDF upload fails', async () => {
+    vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+    vi.spyOn(membersApi, 'uploadResumePdf').mockRejectedValue(
+      Object.assign(new Error('413'), { response: { status: 413 } }),
+    )
+
+    const wrapper = await mountDialog()
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'current_position', 'SWE')
+    await wrapper.vm.handlePdfChange({ file: pdfFile() })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('saved')).toBeTruthy()
+    expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
+  })
+
+  it('opening dialog clears any leftover pending PDF state', async () => {
+    const wrapper = await mountDialog()
+    await wrapper.vm.handlePdfChange({ file: pdfFile() })
+    expect(wrapper.text()).toContain('已選擇')
+
+    // Re-open with a new member; the form should reset.
+    await wrapper.setProps({
+      modelValue: false,
+    })
+    await wrapper.setProps({
+      modelValue: true,
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'X',
+        current_position: 'Y',
+        resume_md: null,
+        joined_at: null,
+        has_resume_pdf: false,
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('已選擇')
+  })
 })

@@ -9,7 +9,9 @@ import {
   ElInput,
   ElInputNumber,
   ElMessage,
+  ElUpload,
 } from 'element-plus'
+import { Delete, Document, Upload } from '@element-plus/icons-vue'
 
 import { membersApi } from '../api/members'
 
@@ -33,11 +35,35 @@ const form = reactive({
   joined_at: null,
 })
 
+// PDF state lives outside the el-form because the upload is a separate
+// API call after the basic save returns.
+const pdfFile = ref(null)              // newly selected File, or null
+const pdfRemoveExisting = ref(false)   // edit-mode flag: drop the stored PDF on save
+
 const rules = {
   graduation_year: [{ required: true, message: '請輸入畢業年份', trigger: 'blur' }],
   real_name: [{ required: true, message: '請輸入本名', trigger: 'blur' }],
   current_position: [{ required: true, message: '請輸入目前就職／就讀', trigger: 'blur' }],
 }
+
+const pdfStatusText = computed(() => {
+  if (pdfFile.value) return `已選擇：${pdfFile.value.name}`
+  if (isEdit.value && props.member?.has_resume_pdf && !pdfRemoveExisting.value) {
+    return '目前已有 PDF'
+  }
+  if (pdfRemoveExisting.value) return '將於儲存時移除現有 PDF'
+  return '尚未提供 PDF'
+})
+
+const pdfHasPendingChange = computed(
+  () => pdfFile.value !== null || pdfRemoveExisting.value,
+)
+
+const pdfUploadButtonText = computed(() => {
+  if (pdfFile.value) return '更換選擇'
+  if (isEdit.value && props.member?.has_resume_pdf) return '替換 PDF'
+  return '選擇 PDF'
+})
 
 function resetForm(member) {
   Object.assign(form, {
@@ -47,6 +73,8 @@ function resetForm(member) {
     resume_md: member?.resume_md ?? '',
     joined_at: member?.joined_at ?? null,
   })
+  pdfFile.value = null
+  pdfRemoveExisting.value = false
   formRef.value?.clearValidate()
 }
 
@@ -62,10 +90,31 @@ function close() {
   emit('update:modelValue', false)
 }
 
+function handlePdfChange({ file }) {
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error('PDF 不可超過 10 MB')
+    return
+  }
+  if (file.type !== 'application/pdf') {
+    ElMessage.error('檔案必須是 PDF')
+    return
+  }
+  pdfFile.value = file
+  // Selecting a new file overrides any pending "remove" choice.
+  pdfRemoveExisting.value = false
+}
+
+function markPdfForRemoval() {
+  pdfRemoveExisting.value = true
+  pdfFile.value = null
+}
+
+function clearPdfChange() {
+  pdfFile.value = null
+  pdfRemoveExisting.value = false
+}
+
 function buildPayload() {
-  // Always send required fields. Send optional fields only when populated;
-  // strip joined_at when null so the backend keeps existing value on edit
-  // and falls back to now() on create.
   const payload = {
     graduation_year: form.graduation_year,
     real_name: form.real_name.trim(),
@@ -79,27 +128,51 @@ function buildPayload() {
   return payload
 }
 
+async function applyPdfChanges(memberId) {
+  if (pdfFile.value) {
+    await membersApi.uploadResumePdf(memberId, pdfFile.value)
+  } else if (pdfRemoveExisting.value && isEdit.value) {
+    await membersApi.deleteResumePdf(memberId)
+  }
+}
+
 async function handleSubmit() {
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
   submitting.value = true
+  let basicSaveOk = false
   try {
     const payload = buildPayload()
+    let memberId
     if (isEdit.value) {
-      await membersApi.update(props.member.id, payload)
-      ElMessage.success('已更新成員')
+      const updated = await membersApi.update(props.member.id, payload)
+      memberId = updated.id
     } else {
-      await membersApi.create(payload)
-      ElMessage.success('已新增成員')
+      const created = await membersApi.create(payload)
+      memberId = created.id
     }
+    basicSaveOk = true
+
+    await applyPdfChanges(memberId)
+
+    ElMessage.success(isEdit.value ? '已更新成員' : '已新增成員')
     emit('saved')
     close()
   } catch (err) {
-    if (err?.response?.status === 422) {
+    const status = err?.response?.status
+    if (basicSaveOk) {
+      // Basic info already saved; only the PDF step failed. Refresh the
+      // list so the caller sees the updated basic fields.
+      if (status === 413) ElMessage.error('成員已儲存，但 PDF 過大')
+      else if (status === 415) ElMessage.error('成員已儲存，但 PDF 格式不支援')
+      else ElMessage.error('成員已儲存，但 PDF 處理失敗')
+      emit('saved')
+      close()
+    } else if (status === 422) {
       ElMessage.error('輸入格式不正確')
-    } else if (err?.response?.status === 403) {
+    } else if (status === 403) {
       ElMessage.error('權限不足')
     } else {
       ElMessage.error('儲存失敗，請稍後再試')
@@ -108,6 +181,8 @@ async function handleSubmit() {
     submitting.value = false
   }
 }
+
+defineExpose({ handlePdfChange, markPdfForRemoval, clearPdfChange })
 </script>
 
 <template>
@@ -151,6 +226,48 @@ async function handleSubmit() {
           placeholder="可留空。Phase 7 將升級為 Markdown 編輯器"
         />
       </el-form-item>
+      <el-form-item label="履歷 PDF">
+        <div class="pdf-control">
+          <div class="pdf-status" :class="{ 'is-pending': pdfHasPendingChange }">
+            <el-icon><Document /></el-icon>
+            <span>{{ pdfStatusText }}</span>
+          </div>
+          <div class="pdf-buttons">
+            <el-upload
+              :show-file-list="false"
+              :auto-upload="false"
+              accept="application/pdf"
+              :on-change="handlePdfChange"
+              data-test="upload-pdf"
+            >
+              <el-button size="small" plain :icon="Upload">
+                {{ pdfUploadButtonText }}
+              </el-button>
+            </el-upload>
+            <el-button
+              v-if="isEdit && member?.has_resume_pdf && !pdfRemoveExisting && !pdfFile"
+              size="small"
+              type="danger"
+              plain
+              :icon="Delete"
+              data-test="mark-remove-pdf"
+              @click="markPdfForRemoval"
+            >
+              移除
+            </el-button>
+            <el-button
+              v-if="pdfHasPendingChange"
+              size="small"
+              plain
+              data-test="clear-pdf-change"
+              @click="clearPdfChange"
+            >
+              取消變更
+            </el-button>
+          </div>
+          <p class="pdf-hint">PDF 上限 10 MB，儲存時一併上傳</p>
+        </div>
+      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -166,3 +283,36 @@ async function handleSubmit() {
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.pdf-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.pdf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.pdf-status.is-pending {
+  color: #e6a23c;
+}
+
+.pdf-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pdf-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #909399;
+}
+</style>
