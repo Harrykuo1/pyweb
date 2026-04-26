@@ -3,6 +3,10 @@ import os
 # Set required env vars before importing app modules so Settings() loads.
 os.environ.setdefault("SESSION_SECRET", "test-session-secret")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("SEED_ADMIN_USERNAME", "test-admin")
+os.environ.setdefault("SEED_ADMIN_PASSWORD", "test-admin-pw")
+os.environ.setdefault("SEED_VIEWER_USERNAME", "test-viewer")
+os.environ.setdefault("SEED_VIEWER_PASSWORD", "test-viewer-pw")
 
 import pytest
 from sqlalchemy import create_engine
