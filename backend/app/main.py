@@ -1,6 +1,26 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+
+from app.core.config import settings
 
 app = FastAPI(title="pyweb backend")
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret,
+    max_age=settings.session_max_age_seconds,
+    same_site="lax",
+    https_only=False,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
