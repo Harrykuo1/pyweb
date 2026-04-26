@@ -28,5 +28,8 @@ class MemberResponse(BaseModel):
     current_position: str
     resume_md: str | None
     joined_at: datetime
+    has_photo: bool
+    has_resume_md: bool
+    has_resume_pdf: bool
 
     model_config = ConfigDict(from_attributes=True)
