@@ -85,6 +85,8 @@ npm run dev
 
 兩種選擇：**docker-compose（推薦，一鍵）** 或 **host nginx + venv（不裝 Docker 時的替代）**。
 
+> docker-compose 走 host port **8081**；host nginx 流程仍用 8080（兩者可同時跑、不衝突）。
+
 ### docker-compose
 
 需求：Docker Engine 24+ / Docker Compose v2+。
@@ -110,12 +112,12 @@ docker compose down
 docker compose down -v
 ```
 
-開瀏覽器到 [http://localhost:8080/](http://localhost:8080/)。三服務拓樸：
+開瀏覽器到 [http://localhost:8081/](http://localhost:8081/)。三服務拓樸：
 
 | 服務 | 鏡像來源 | 對外 port | 內部 |
 |---|---|---|---|
 | `backend` | `backend/Dockerfile` (python:3.13-slim) | 不對外 | `:8000` 由 nginx 反代 |
-| `frontend` | `frontend/Dockerfile` (multi-stage：node build → nginx serve) | `8080:8080` | 服務 `dist/` + 反代 `/api` |
+| `frontend` | `frontend/Dockerfile` (multi-stage：node build → nginx serve) | `8081:8080` | 服務 `dist/` + 反代 `/api` |
 | `pyweb_data` | named volume | — | 掛在 backend `/data`，存 `pyweb.db` |
 
 backend 容器啟動時會跑 `app/init_db.py`，依 `.env` 內的 `SEED_*` 變數種帳號。再次啟動 init 是冪等的，**不會覆蓋既有密碼**。

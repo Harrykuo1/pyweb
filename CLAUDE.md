@@ -14,7 +14,7 @@ A community member management website that records member profiles and internshi
 - **Database**: SQLite
 - **Auth**: server-side session via Starlette `SessionMiddleware` (signed cookie, `itsdangerous`). NOT JWT.
 - **Markdown Rendering**: server stores raw Markdown; frontend renders with DOMPurify to prevent XSS
-- **Deployment**: `docker compose up --build` brings up backend + nginx-fronted frontend on host port 8080. SQLite data persists in the `pyweb_data` named volume.
+- **Deployment**: `docker compose up --build` brings up backend + nginx-fronted frontend on host port 8081 (container exposes 8080 internally). SQLite data persists in the `pyweb_data` named volume.
 
 ---
 
