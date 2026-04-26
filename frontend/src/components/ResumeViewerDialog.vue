@@ -38,7 +38,12 @@ const availableFormats = computed(() => {
 
 const pdfSrc = computed(() => {
   if (!props.member) return ''
-  return membersApi.resumePdfUrl(props.member.id, cacheBuster.value)
+  // Tell the browser's built-in PDF viewer to drop its toolbar and side
+  // navigation pane, and fit the page to the iframe width. Chromium-based
+  // browsers (Chrome / Edge) respect these fragment parameters; others
+  // ignore them and fall back to their defaults.
+  const url = membersApi.resumePdfUrl(props.member.id, cacheBuster.value)
+  return `${url}#toolbar=0&navpanes=0&view=FitH`
 })
 
 watch(
@@ -209,23 +214,34 @@ defineExpose({ handleUploadPdf, handleDeletePdf })
 }
 
 .rounded-switcher :deep(.el-segmented) {
-  --el-segmented-padding: 4px;
   background: #f0f2f5;
   border-radius: 999px;
   padding: 4px;
+  --el-segmented-item-selected-bg-color: #ffffff;
+  --el-segmented-item-selected-color: #303133;
+  --el-segmented-item-hover-color: #303133;
+  --el-segmented-color: #606266;
 }
 
 .rounded-switcher :deep(.el-segmented__item) {
   border-radius: 999px;
   padding: 0 24px;
   min-width: 120px;
-  transition: background-color 0.2s, color 0.2s;
+  color: #606266;
+  transition: color 0.2s;
+}
+
+/* Element Plus paints the active state via a separate indicator element
+   that absolutely positions behind the selected item — override that one
+   instead of the item background. */
+.rounded-switcher :deep(.el-segmented__item-selected) {
+  background-color: #ffffff !important;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .rounded-switcher :deep(.el-segmented__item.is-selected) {
-  background: #ffffff;
-  color: #409eff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  color: #303133 !important;
 }
 
 .single-tag-row {
