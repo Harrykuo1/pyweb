@@ -1,13 +1,18 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# Placeholder DB URL; real value will come from settings in a later phase.
-DATABASE_URL = "sqlite:///./pyweb.db"
+from app.core.config import settings
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
+# SQLite needs check_same_thread=False because FastAPI runs handlers in
+# multiple threads from the same connection pool. For other engines this
+# argument is ignored.
+_connect_args = (
+    {"check_same_thread": False}
+    if settings.database_url.startswith("sqlite")
+    else {}
 )
+
+engine = create_engine(settings.database_url, connect_args=_connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -22,3 +27,10 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_models() -> None:
+    # Import models so they register with Base.metadata before create_all.
+    from app import models  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
