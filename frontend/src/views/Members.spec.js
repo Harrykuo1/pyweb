@@ -39,7 +39,17 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  document.body.innerHTML = ''
 })
+
+async function mountAsAdmin() {
+  const auth = useAuthStore()
+  auth.user = { id: 1, username: 'a', role: 'admin' }
+  vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+  const wrapper = mount(Members, { attachTo: document.body })
+  await flushPromises()
+  return wrapper
+}
 
 describe('Members.vue', () => {
   it('loads members on mount with default order=asc', async () => {
@@ -90,10 +100,65 @@ describe('Members.vue', () => {
     await flushPromises()
     list.mockClear()
 
-    // The first action button is "切換排序".
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
 
     expect(list).toHaveBeenCalledWith({ order: 'desc' })
+  })
+
+  it('admin sees edit and delete buttons on each row', async () => {
+    const wrapper = await mountAsAdmin()
+    expect(wrapper.findAll('[data-test="edit-button"]').length).toBe(2)
+    expect(wrapper.findAll('[data-test="delete-button"]').length).toBe(2)
+  })
+
+  it('viewer does not see edit/delete buttons', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 2, username: 'v', role: 'viewer' }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="edit-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="delete-button"]').exists()).toBe(false)
+  })
+
+  it('confirming delete calls membersApi.remove and re-fetches', async () => {
+    const wrapper = await mountAsAdmin()
+    const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
+    const list = vi.spyOn(membersApi, 'list').mockResolvedValue(
+      sampleMembers.filter((m) => m.id !== 1),
+    )
+
+    // Open the popconfirm on the first row.
+    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
+    await flushPromises()
+
+    // Confirm button is the popper's primary button labelled "刪除".
+    const confirmBtn = Array.from(
+      wrapper.element.querySelectorAll('.el-popconfirm__action button'),
+    ).find((b) => b.textContent.trim() === '刪除')
+    expect(confirmBtn).toBeDefined()
+    confirmBtn.click()
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledWith(1)
+    expect(list).toHaveBeenCalled()
+  })
+
+  it('cancelling delete does not call remove', async () => {
+    const wrapper = await mountAsAdmin()
+    const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
+
+    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
+    await flushPromises()
+
+    const cancelBtn = Array.from(
+      wrapper.element.querySelectorAll('.el-popconfirm__action button'),
+    ).find((b) => b.textContent.trim() === '取消')
+    cancelBtn?.click()
+    await flushPromises()
+
+    expect(remove).not.toHaveBeenCalled()
   })
 })

@@ -4,6 +4,7 @@ import {
   ElButton,
   ElIcon,
   ElMessage,
+  ElPopconfirm,
   ElTable,
   ElTableColumn,
 } from 'element-plus'
@@ -46,6 +47,20 @@ function openCreate() {
 function openEdit(member) {
   editingMember.value = { ...member }
   dialogOpen.value = true
+}
+
+async function deleteMember(member) {
+  try {
+    await membersApi.remove(member.id)
+    ElMessage.success(`已刪除「${member.real_name}」`)
+    loadMembers()
+  } catch (err) {
+    if (err?.response?.status === 403) {
+      ElMessage.error('權限不足')
+    } else {
+      ElMessage.error('刪除失敗，請稍後再試')
+    }
+  }
 }
 
 function formatDate(iso) {
@@ -95,7 +110,7 @@ onMounted(loadMembers)
       <el-table-column label="入群時間" width="140">
         <template #default="{ row }">{{ formatDate(row.joined_at) }}</template>
       </el-table-column>
-      <el-table-column v-if="auth.isAdmin" label="操作" width="180" align="center">
+      <el-table-column v-if="auth.isAdmin" label="操作" width="200" align="center">
         <template #default="{ row }">
           <el-button
             size="small"
@@ -105,7 +120,26 @@ onMounted(loadMembers)
           >
             編輯
           </el-button>
-          <el-button size="small" type="danger" plain disabled>刪除</el-button>
+          <el-popconfirm
+            :title="`確定要刪除「${row.real_name}」嗎？`"
+            confirm-button-text="刪除"
+            cancel-button-text="取消"
+            confirm-button-type="danger"
+            width="240"
+            :teleported="false"
+            @confirm="deleteMember(row)"
+          >
+            <template #reference>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                data-test="delete-button"
+              >
+                刪除
+              </el-button>
+            </template>
+          </el-popconfirm>
         </template>
       </el-table-column>
     </el-table>
