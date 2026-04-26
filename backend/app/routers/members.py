@@ -14,6 +14,9 @@ router = APIRouter(prefix="/api/members", tags=["members"])
 PHOTO_MAX_BYTES = 5 * 1024 * 1024
 ALLOWED_PHOTO_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
+RESUME_PDF_MAX_BYTES = 10 * 1024 * 1024
+RESUME_PDF_TYPE = "application/pdf"
+
 
 def _get_member_or_404(db: Session, member_id: int) -> Member:
     member = db.query(Member).filter_by(id=member_id).one_or_none()
@@ -140,4 +143,62 @@ def delete_member_photo(
     member = _get_member_or_404(db, member_id)
     member.photo = None
     member.photo_content_type = None
+    db.commit()
+
+
+# ---------- resume pdf ----------
+
+@router.get("/{member_id}/resume.pdf")
+async def get_member_resume_pdf(
+    member_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> Response:
+    member = _get_member_or_404(db, member_id)
+    if member.resume_pdf is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No resume pdf")
+    return Response(
+        content=member.resume_pdf,
+        media_type=RESUME_PDF_TYPE,
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'inline; filename="member-{member_id}-resume.pdf"',
+        },
+    )
+
+
+@router.post("/{member_id}/resume.pdf", response_model=MemberResponse)
+async def upload_member_resume_pdf(
+    member_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+) -> Member:
+    if file.content_type != RESUME_PDF_TYPE:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Resume must be {RESUME_PDF_TYPE}",
+        )
+    data = await file.read()
+    if len(data) > RESUME_PDF_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Resume must be at most {RESUME_PDF_MAX_BYTES} bytes",
+        )
+
+    member = _get_member_or_404(db, member_id)
+    member.resume_pdf = data
+    db.commit()
+    db.refresh(member)
+    return member
+
+
+@router.delete("/{member_id}/resume.pdf", status_code=status.HTTP_204_NO_CONTENT)
+def delete_member_resume_pdf(
+    member_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_admin),
+) -> None:
+    member = _get_member_or_404(db, member_id)
+    member.resume_pdf = None
     db.commit()
