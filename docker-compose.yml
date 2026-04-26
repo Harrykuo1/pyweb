@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    # SQLite path is fixed by the Dockerfile (DATABASE_URL=/data/pyweb.db);
+    # the named volume below persists it across container restarts.
+    volumes:
+      - pyweb_data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      # Repo root so the Dockerfile can COPY both frontend/ and nginx/.
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pyweb_data:

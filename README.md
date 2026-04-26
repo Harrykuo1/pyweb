@@ -81,35 +81,69 @@ npm run dev
 
 預設啟動於 `http://127.0.0.1:5173`。
 
-## Production-like 部署（nginx）
+## Production-like 部署
 
-模擬上線環境：把前端 build 成靜態檔，由 nginx 在 8080 同時服務靜態資源與反向代理 `/api` 到後端。前端走同源請求，**不需要 CORS / Vite proxy**。
+兩種選擇：**docker-compose（推薦，一鍵）** 或 **host nginx + venv（不裝 Docker 時的替代）**。
 
-需求：系統已安裝 nginx（`sudo apt install nginx`）。我們的 nginx 跑在非 privileged port（8080）、log/pid 寫到 `/tmp/pyweb-nginx/`，**不會動到系統 nginx**。
+### docker-compose
+
+需求：Docker Engine 24+ / Docker Compose v2+。
 
 ```bash
-# 1. build 前端（產出 frontend/dist/）
-cd frontend
-npm run build
-cd ..
+# 1. 準備 .env（基於 .env.docker.example 填入帳密與 SESSION_SECRET）
+cp .env.docker.example .env
+$EDITOR .env
 
-# 2. 確保後端有跑（uvicorn 仍在 8000）
+# 2. 一鍵啟動（首次會 build image，約 1–2 分鐘）
+docker compose up --build
+
+# 背景跑：
+docker compose up -d --build
+
+# 看 log：
+docker compose logs -f
+
+# 結束（保留 SQLite 資料）：
+docker compose down
+
+# 結束並清掉資料：
+docker compose down -v
+```
+
+開瀏覽器到 [http://localhost:8080/](http://localhost:8080/)。三服務拓樸：
+
+| 服務 | 鏡像來源 | 對外 port | 內部 |
+|---|---|---|---|
+| `backend` | `backend/Dockerfile` (python:3.13-slim) | 不對外 | `:8000` 由 nginx 反代 |
+| `frontend` | `frontend/Dockerfile` (multi-stage：node build → nginx serve) | `8080:8080` | 服務 `dist/` + 反代 `/api` |
+| `pyweb_data` | named volume | — | 掛在 backend `/data`，存 `pyweb.db` |
+
+backend 容器啟動時會跑 `app/init_db.py`，依 `.env` 內的 `SEED_*` 變數種帳號。再次啟動 init 是冪等的，**不會覆蓋既有密碼**。
+
+### host nginx + venv（無 Docker）
+
+模擬上線環境：把前端 build 成靜態檔，由系統 nginx 在 8080 同時服務靜態資源與反向代理 `/api` 到後端。前端走同源請求，不需要 CORS。
+
+需求：系統已安裝 nginx（`sudo apt install nginx`）。我們的 nginx 跑在非 privileged port（8080）、log/pid 寫到 `/tmp/pyweb-nginx/`，不會動到系統 nginx。
+
+```bash
+# 1. build 前端
+cd frontend && npm run build && cd ..
+
+# 2. 確保後端在跑
 cd backend
 SESSION_SECRET=... SEED_ADMIN_USERNAME=... ...   # 填好 .env
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 &
 cd ..
 
-# 3. 啟動專用 nginx（前景跑，Ctrl+C 結束）
-./nginx/start.sh
-
-# 或背景跑：
+# 3. 啟動專用 nginx
 ./nginx/start.sh -g 'daemon on;'
 
-# 結束：
+# 結束
 ./nginx/stop.sh
 ```
 
-開瀏覽器到 [http://localhost:8080/](http://localhost:8080/)。設定檔在 [nginx/pyweb.conf.template](nginx/pyweb.conf.template)，排除問題時看 `/tmp/pyweb-nginx/pyweb-nginx-error.log`。
+設定檔在 [nginx/pyweb.conf.template](nginx/pyweb.conf.template)，log 在 `/tmp/pyweb-nginx/pyweb-nginx-error.log`。
 
 ## 帳號（種子資料）
 

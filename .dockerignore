@@ -1,0 +1,11 @@
+# Top-level ignores common to all build contexts.
+.git
+.gitignore
+.github/
+.vscode/
+.idea/
+.claude/
+*.md
+docker-compose*.yml
+.env
+.env.*
