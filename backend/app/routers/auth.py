@@ -16,15 +16,18 @@ def login(
     request: Request,
     db: Session = Depends(get_db),
 ) -> User:
-    user = db.query(User).filter_by(username=payload.username).one_or_none()
-    if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-        )
-    request.session["user_id"] = user.id
-    request.session["role"] = user.role.value
-    return user
+    # bcrypt hashes are salted, so we cannot index by them. Two seeded
+    # accounts means the linear scan is fine; revisit if the user count grows.
+    for user in db.query(User).all():
+        if verify_password(payload.password, user.password_hash):
+            request.session["user_id"] = user.id
+            request.session["role"] = user.role.value
+            return user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid password",
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

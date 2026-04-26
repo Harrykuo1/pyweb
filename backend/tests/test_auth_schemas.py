@@ -5,24 +5,27 @@ from app.models import User, UserRole
 from app.schemas import LoginRequest, UserResponse
 
 
-def test_login_request_accepts_valid_payload():
-    req = LoginRequest(username="alice", password="hunter2")
-    assert req.username == "alice"
+def test_login_request_accepts_password_only():
+    req = LoginRequest(password="hunter2")
     assert req.password == "hunter2"
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"username": "", "password": "x"},
-        {"username": "alice", "password": ""},
-        {"username": "alice"},
-        {"password": "x"},
-    ],
-)
-def test_login_request_rejects_invalid_payload(payload):
+def test_login_request_rejects_empty_password():
     with pytest.raises(ValidationError):
-        LoginRequest(**payload)
+        LoginRequest(password="")
+
+
+def test_login_request_rejects_missing_password():
+    with pytest.raises(ValidationError):
+        LoginRequest()
+
+
+def test_login_request_ignores_unrelated_fields():
+    # Extra fields are silently dropped by Pydantic v2 default config; this
+    # documents the contract so a future stricter config flips the test.
+    req = LoginRequest(password="ok", username="ignored")
+    assert req.password == "ok"
+    assert not hasattr(req, "username")
 
 
 def test_user_response_from_orm_object():

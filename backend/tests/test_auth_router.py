@@ -35,11 +35,8 @@ def client(db_session):
         app.dependency_overrides.clear()
 
 
-def test_login_success_returns_user_and_sets_cookie(client):
-    r = client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "admin-pw"},
-    )
+def test_login_admin_password_returns_admin_user(client):
+    r = client.post("/api/auth/login", json={"password": "admin-pw"})
 
     assert r.status_code == 200
     body = r.json()
@@ -50,32 +47,27 @@ def test_login_success_returns_user_and_sets_cookie(client):
     assert "session" in r.cookies
 
 
+def test_login_viewer_password_returns_viewer_user(client):
+    r = client.post("/api/auth/login", json={"password": "viewer-pw"})
+
+    assert r.status_code == 200
+    assert r.json()["role"] == "viewer"
+
+
 def test_login_wrong_password_returns_401(client):
-    r = client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "WRONG"},
-    )
+    r = client.post("/api/auth/login", json={"password": "WRONG"})
 
     assert r.status_code == 401
-    assert r.json()["detail"] == "Invalid username or password"
+    assert r.json()["detail"] == "Invalid password"
 
 
-def test_login_unknown_user_returns_401(client):
-    r = client.post(
-        "/api/auth/login",
-        json={"username": "nobody", "password": "x"},
-    )
-
-    assert r.status_code == 401
-    assert r.json()["detail"] == "Invalid username or password"
+def test_login_rejects_empty_password(client):
+    r = client.post("/api/auth/login", json={"password": ""})
+    assert r.status_code == 422
 
 
-def test_login_rejects_empty_username(client):
-    r = client.post(
-        "/api/auth/login",
-        json={"username": "", "password": "x"},
-    )
-
+def test_login_rejects_missing_password(client):
+    r = client.post("/api/auth/login", json={})
     assert r.status_code == 422
 
 
@@ -85,10 +77,7 @@ def test_me_without_login_returns_401(client):
 
 
 def test_me_after_login_returns_current_user(client):
-    client.post(
-        "/api/auth/login",
-        json={"username": "viewer", "password": "viewer-pw"},
-    )
+    client.post("/api/auth/login", json={"password": "viewer-pw"})
     r = client.get("/api/auth/me")
 
     assert r.status_code == 200
@@ -97,10 +86,7 @@ def test_me_after_login_returns_current_user(client):
 
 
 def test_logout_clears_session(client):
-    client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "admin-pw"},
-    )
+    client.post("/api/auth/login", json={"password": "admin-pw"})
     assert client.get("/api/auth/me").status_code == 200
 
     r = client.post("/api/auth/logout")
@@ -112,10 +98,7 @@ def test_logout_clears_session(client):
 def test_full_session_lifecycle(client):
     assert client.get("/api/auth/me").status_code == 401
 
-    login = client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "admin-pw"},
-    )
+    login = client.post("/api/auth/login", json={"password": "admin-pw"})
     assert login.status_code == 200
 
     me = client.get("/api/auth/me")

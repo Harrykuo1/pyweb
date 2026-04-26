@@ -8,16 +8,13 @@ afterEach(() => {
 })
 
 describe('authApi.login', () => {
-  it('POSTs to /auth/login and returns the response body', async () => {
+  it('POSTs the password to /auth/login and returns the user', async () => {
     const fakeUser = { id: 1, username: 'admin', role: 'admin' }
     const post = vi.spyOn(client, 'post').mockResolvedValue({ data: fakeUser })
 
-    const result = await authApi.login('admin', 'pw')
+    const result = await authApi.login('pw')
 
-    expect(post).toHaveBeenCalledWith('/auth/login', {
-      username: 'admin',
-      password: 'pw',
-    })
+    expect(post).toHaveBeenCalledWith('/auth/login', { password: 'pw' })
     expect(result).toEqual(fakeUser)
   })
 
@@ -26,7 +23,7 @@ describe('authApi.login', () => {
       Object.assign(new Error('401'), { response: { status: 401 } }),
     )
 
-    await expect(authApi.login('admin', 'wrong')).rejects.toThrow()
+    await expect(authApi.login('wrong')).rejects.toThrow()
   })
 })
 

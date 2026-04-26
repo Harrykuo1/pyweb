@@ -9,21 +9,21 @@ import {
   ElIcon,
   ElInput,
 } from 'element-plus'
-import { Lock, User } from '@element-plus/icons-vue'
+import { Lock } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '../stores/auth'
+import loginBg from '../assets/login-bg.jpg'
 
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
 const formRef = ref(null)
-const form = reactive({ username: '', password: '' })
+const form = reactive({ password: '' })
 const submitting = ref(false)
 const errorMessage = ref('')
 
 const rules = {
-  username: [{ required: true, message: '請輸入帳號', trigger: 'blur' }],
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }],
 }
 
@@ -35,12 +35,12 @@ async function handleSubmit() {
   submitting.value = true
   errorMessage.value = ''
   try {
-    await auth.login(form.username, form.password)
+    await auth.login(form.password)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.push(redirect)
   } catch (err) {
     if (err?.response?.status === 401) {
-      errorMessage.value = '帳號或密碼錯誤'
+      errorMessage.value = '密碼錯誤'
     } else {
       errorMessage.value = '登入失敗，請稍後再試'
     }
@@ -51,14 +51,15 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="login-page">
+  <div class="login-page" :style="{ backgroundImage: `url(${loginBg})` }">
+    <div class="login-overlay" />
     <el-card class="login-card" shadow="always">
       <div class="login-header">
         <div class="logo-circle">
-          <el-icon :size="28"><User /></el-icon>
+          <el-icon :size="28"><Lock /></el-icon>
         </div>
         <h2 class="title">pyweb 社群</h2>
-        <p class="subtitle">請登入以繼續</p>
+        <p class="subtitle">請輸入密碼以繼續</p>
       </div>
 
       <el-form
@@ -68,15 +69,6 @@ async function handleSubmit() {
         label-position="top"
         @submit.prevent="handleSubmit"
       >
-        <el-form-item label="帳號" prop="username">
-          <el-input
-            v-model="form.username"
-            size="large"
-            placeholder="請輸入帳號"
-            autocomplete="username"
-            :prefix-icon="User"
-          />
-        </el-form-item>
         <el-form-item label="密碼" prop="password">
           <el-input
             v-model="form.password"
@@ -110,18 +102,38 @@ async function handleSubmit() {
 
 <style scoped>
 .login-page {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: 24px;
-  background: linear-gradient(135deg, #e0f2fe 0%, #f5f7fa 50%, #ede9fe 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Soft white veil so the photo stays visible but the card stays readable. */
+.login-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(237, 233, 254, 0.5) 100%
+  );
+  backdrop-filter: blur(2px);
+  pointer-events: none;
 }
 
 .login-card {
+  position: relative;
   width: 100%;
   max-width: 400px;
   border-radius: 12px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 
 .login-header {

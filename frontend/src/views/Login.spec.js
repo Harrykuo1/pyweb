@@ -5,6 +5,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 import Login from './Login.vue'
 
+// Vite's static asset import resolves to a string URL at runtime; the test
+// environment doesn't run the asset pipeline, so stub the import.
+vi.mock('../assets/login-bg.jpg', () => ({ default: '/test-bg.jpg' }))
+
 const pushMock = vi.fn()
 let routeQuery = {}
 
@@ -23,10 +27,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function fillAndSubmit(wrapper, username, password) {
+async function submitWithPassword(wrapper, password) {
   const inputs = wrapper.findAll('input')
-  await inputs[0].setValue(username)
-  await inputs[1].setValue(password)
+  await inputs[0].setValue(password)
   await wrapper.find('form').trigger('submit.prevent')
   await flushPromises()
 }
@@ -37,9 +40,9 @@ describe('Login.vue', () => {
     const loginSpy = vi.spyOn(auth, 'login').mockResolvedValue()
 
     const wrapper = mount(Login)
-    await fillAndSubmit(wrapper, 'admin', 'pw')
+    await submitWithPassword(wrapper, 'pw')
 
-    expect(loginSpy).toHaveBeenCalledWith('admin', 'pw')
+    expect(loginSpy).toHaveBeenCalledWith('pw')
     expect(pushMock).toHaveBeenCalledWith('/')
   })
 
@@ -49,21 +52,21 @@ describe('Login.vue', () => {
     vi.spyOn(auth, 'login').mockResolvedValue()
 
     const wrapper = mount(Login)
-    await fillAndSubmit(wrapper, 'admin', 'pw')
+    await submitWithPassword(wrapper, 'pw')
 
     expect(pushMock).toHaveBeenCalledWith('/members')
   })
 
-  it('shows credential error on 401', async () => {
+  it('shows password error on 401', async () => {
     const auth = useAuthStore()
     vi.spyOn(auth, 'login').mockRejectedValue(
       Object.assign(new Error('401'), { response: { status: 401 } }),
     )
 
     const wrapper = mount(Login)
-    await fillAndSubmit(wrapper, 'admin', 'wrong')
+    await submitWithPassword(wrapper, 'wrong')
 
-    expect(wrapper.find('[data-test="error"]').text()).toBe('帳號或密碼錯誤')
+    expect(wrapper.find('[data-test="error"]').text()).toBe('密碼錯誤')
     expect(pushMock).not.toHaveBeenCalled()
   })
 
@@ -74,15 +77,22 @@ describe('Login.vue', () => {
     )
 
     const wrapper = mount(Login)
-    await fillAndSubmit(wrapper, 'admin', 'pw')
+    await submitWithPassword(wrapper, 'pw')
 
     expect(wrapper.find('[data-test="error"]').text()).toBe('登入失敗，請稍後再試')
   })
 
-  it('declares required rules for both fields so Element Plus blocks empty submits', () => {
+  it('declares a required rule for password so Element Plus blocks empty submits', () => {
     const wrapper = mount(Login)
     const form = wrapper.findComponent({ name: 'ElForm' })
-    expect(form.props('rules').username[0].required).toBe(true)
     expect(form.props('rules').password[0].required).toBe(true)
+    expect(form.props('rules').username).toBeUndefined()
+  })
+
+  it('renders the bg image as inline style on .login-page', () => {
+    const wrapper = mount(Login)
+    const page = wrapper.find('.login-page')
+    expect(page.attributes('style') ?? '').toContain('background-image')
+    expect(page.attributes('style') ?? '').toContain('/test-bg.jpg')
   })
 })

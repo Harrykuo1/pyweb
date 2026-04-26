@@ -25,7 +25,7 @@ describe('useAuthStore', () => {
     vi.spyOn(authApi, 'login').mockResolvedValue(fakeUser)
 
     const store = useAuthStore()
-    await store.login('admin', 'pw')
+    await store.login('pw')
 
     expect(store.user).toEqual(fakeUser)
     expect(store.isAuthenticated).toBe(true)
@@ -40,7 +40,7 @@ describe('useAuthStore', () => {
     })
 
     const store = useAuthStore()
-    await store.login('viewer', 'pw')
+    await store.login('pw')
 
     expect(store.isAuthenticated).toBe(true)
     expect(store.isAdmin).toBe(false)
@@ -52,7 +52,7 @@ describe('useAuthStore', () => {
     )
 
     const store = useAuthStore()
-    await expect(store.login('x', 'y')).rejects.toThrow()
+    await expect(store.login('wrong')).rejects.toThrow()
     expect(store.user).toBeNull()
     expect(store.isAuthenticated).toBe(false)
   })
