@@ -25,6 +25,7 @@ async function handleLogout() {
 
       <nav class="nav-links">
         <router-link to="/" class="nav-link">首頁</router-link>
+        <router-link to="/members" class="nav-link">成員</router-link>
       </nav>
 
       <div class="navbar-right">

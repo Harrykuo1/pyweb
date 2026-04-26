@@ -1,13 +1,14 @@
 <script setup>
-import { ElCard, ElEmpty, ElIcon } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElCard, ElIcon } from 'element-plus'
 import { Calendar, OfficeBuilding, UserFilled } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 function notReady() {
-  // Real navigation lands in later phases (Phase 4 / 6).
   alert('此功能即將推出')
 }
 </script>
@@ -30,18 +31,20 @@ function notReady() {
         class="feature-card"
         shadow="hover"
         body-class="feature-card-body"
-        @click="notReady"
+        data-test="card-members"
+        @click="router.push('/members')"
       >
         <el-icon class="feature-icon" :size="32"><UserFilled /></el-icon>
         <h3 class="feature-title">成員介紹</h3>
         <p class="feature-desc">瀏覽所有社群成員的基本資訊與履歷。</p>
-        <div class="feature-status">即將推出</div>
+        <div class="feature-status">查看清單 →</div>
       </el-card>
 
       <el-card
         class="feature-card"
         shadow="hover"
         body-class="feature-card-body"
+        data-test="card-internships"
         @click="notReady"
       >
         <el-icon class="feature-icon" :size="32"><OfficeBuilding /></el-icon>

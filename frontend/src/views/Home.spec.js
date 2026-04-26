@@ -5,8 +5,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 import Home from './Home.vue'
 
+const pushMock = vi.fn()
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: pushMock }),
+}))
+
 beforeEach(() => {
   setActivePinia(createPinia())
+  pushMock.mockClear()
 })
 
 afterEach(() => {
@@ -51,6 +58,16 @@ describe('Home.vue', () => {
     expect(wrapper.text()).toContain('成員介紹')
     expect(wrapper.text()).toContain('實習工作紀錄')
     expect(wrapper.text()).toContain('活動紀錄')
+  })
+
+  it('clicking the members card navigates to /members', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'alice', role: 'admin' }
+
+    const wrapper = mount(Home)
+    await wrapper.find('[data-test="card-members"]').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith('/members')
   })
 
   it('renders without throwing when user is not yet populated', () => {

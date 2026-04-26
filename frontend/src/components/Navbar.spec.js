@@ -40,12 +40,14 @@ afterEach(() => {
 })
 
 describe('Navbar.vue', () => {
-  it('renders brand text', () => {
+  it('renders brand text and nav links', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.text()).toContain('pyweb 社群')
+    expect(wrapper.text()).toContain('首頁')
+    expect(wrapper.text()).toContain('成員')
   })
 
   it('shows username and 管理員 tag for admin', () => {
