@@ -1,0 +1,27 @@
+# Python build / test artifacts
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local DB and env (image must rely on Compose-supplied env / volume)
+*.db
+*.sqlite*
+.env
+.env.*
+
+# Tests are not needed at runtime
+tests/
+pytest.ini
+requirements-dev.txt
+
+# Misc
+.git
+.gitignore
+*.md
