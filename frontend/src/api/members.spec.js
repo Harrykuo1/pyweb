@@ -65,3 +65,77 @@ describe('membersApi.remove', () => {
     expect(del).toHaveBeenCalledWith('/members/7')
   })
 })
+
+describe('membersApi.photoUrl', () => {
+  it('returns the absolute /api path', () => {
+    expect(membersApi.photoUrl(7)).toBe('/api/members/7/photo')
+  })
+
+  it('appends a cache-buster when provided', () => {
+    const url = membersApi.photoUrl(7, 'abc 1')
+    expect(url).toBe('/api/members/7/photo?v=abc%201')
+  })
+})
+
+describe('membersApi.uploadPhoto', () => {
+  it('POSTs multipart form-data with the file field', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({
+      data: { id: 1, has_photo: true },
+    })
+    const file = new File(['data'], 'a.png', { type: 'image/png' })
+
+    const result = await membersApi.uploadPhoto(1, file)
+
+    expect(post).toHaveBeenCalledTimes(1)
+    const [url, body, options] = post.mock.calls[0]
+    expect(url).toBe('/members/1/photo')
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.get('file')).toBeInstanceOf(File)
+    expect(body.get('file').name).toBe('a.png')
+    expect(options.headers['Content-Type']).toBe('multipart/form-data')
+    expect(result.has_photo).toBe(true)
+  })
+})
+
+describe('membersApi.deletePhoto', () => {
+  it('DELETEs /members/:id/photo', async () => {
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+    await membersApi.deletePhoto(7)
+    expect(del).toHaveBeenCalledWith('/members/7/photo')
+  })
+})
+
+describe('membersApi.resumePdfUrl', () => {
+  it('returns /api path with .pdf suffix', () => {
+    expect(membersApi.resumePdfUrl(7)).toBe('/api/members/7/resume.pdf')
+  })
+
+  it('supports cache-buster', () => {
+    expect(membersApi.resumePdfUrl(7, 't')).toBe('/api/members/7/resume.pdf?v=t')
+  })
+})
+
+describe('membersApi.uploadResumePdf', () => {
+  it('POSTs multipart with the file', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({
+      data: { id: 1, has_resume_pdf: true },
+    })
+    const file = new File(['%PDF'], 'a.pdf', { type: 'application/pdf' })
+
+    const result = await membersApi.uploadResumePdf(1, file)
+
+    const [url, body, options] = post.mock.calls[0]
+    expect(url).toBe('/members/1/resume.pdf')
+    expect(body.get('file')).toBeInstanceOf(File)
+    expect(options.headers['Content-Type']).toBe('multipart/form-data')
+    expect(result.has_resume_pdf).toBe(true)
+  })
+})
+
+describe('membersApi.deleteResumePdf', () => {
+  it('DELETEs /members/:id/resume.pdf', async () => {
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+    await membersApi.deleteResumePdf(9)
+    expect(del).toHaveBeenCalledWith('/members/9/resume.pdf')
+  })
+})
