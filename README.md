@@ -65,11 +65,23 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # 填入 SESSION_SECRET 等變數
+pip install -r requirements-dev.txt   # 跑 pytest 用，可選
+cp .env.example .env                   # 填入 SESSION_SECRET、SEED_* 等變數
+python -m app.init_db                  # 建表並種兩組帳號（只跑一次）
 uvicorn app.main:app --reload
 ```
 
 預設啟動於 `http://127.0.0.1:8000`，健康檢查：`GET /health`。
+
+> **⚠️ 漏跑 `init_db` 會在第一次登入時 500（`no such table: users`）。** uvicorn 啟動時會自動建出空的 `pyweb.db` 檔，但裡面沒有 schema、也沒有種子帳號。
+
+跑測試：
+
+```bash
+cd backend
+.venv/bin/pytest        # 後端測試
+cd ../frontend && npm run test   # 前端測試
+```
 
 ### 前端
 
@@ -137,6 +149,7 @@ cd frontend && npm run build && cd ..
 # 2. 確保後端在跑
 cd backend
 SESSION_SECRET=... SEED_ADMIN_USERNAME=... ...   # 填好 .env
+.venv/bin/python -m app.init_db                  # 首次需建表 + 種帳號
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 &
 cd ..
 
@@ -151,11 +164,25 @@ cd ..
 
 ## 帳號（種子資料）
 
-由 `backend/app/init_db.py` 建立：
+由 `backend/app/init_db.py` 建立兩個固定角色：
 
 | 角色 | 權限 |
 |---|---|
-| `admin` | 增、刪、改、查 |
+| `admin` | 增、刪、改、查；可在 UI 修改兩個帳號的 username 與密碼 |
 | `viewer` | 僅查 |
 
-實際帳號／密碼於初始化時設定（請改寫 `init_db.py` 後再執行，勿將密碼入庫）。
+帳號的初始 username / 密碼來自 `.env`：
+
+```
+SEED_ADMIN_USERNAME=...
+SEED_ADMIN_PASSWORD=...
+SEED_VIEWER_USERNAME=...
+SEED_VIEWER_PASSWORD=...
+```
+
+> **⚠️ `.env` 的 `SEED_*` 只在「首次初始化」生效。** `init_db.py` 對既有 user 一律跳過、**不會覆蓋密碼或更名**。事後想改：
+>
+> - **推薦**：登入 admin → 點 navbar 右上「帳號設定」→ 改 username / 密碼。
+> - **完全重置**：`rm backend/pyweb.db && cd backend && .venv/bin/python -m app.init_db`（會清掉所有資料，包含成員與實習紀錄）。
+
+登入只認密碼（不問 username），所以兩個帳號的密碼必須不同；UI 在改密碼時會擋住撞號。
