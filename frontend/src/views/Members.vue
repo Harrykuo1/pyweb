@@ -239,10 +239,39 @@ onMounted(loadMembers)
 .actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .members-table {
   background: #ffffff;
   border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+  .title {
+    font-size: 18px;
+  }
+
+  /* Table columns sum to ~860 px which is wider than a phone viewport;
+     let it scroll horizontally inside the card instead of overflowing the
+     whole page. The table component already wraps its body in a scrollable
+     element-plus inner, but we also need the wrapper itself not to clip. */
+  .members-table {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Force the underlying table to keep its design width so columns don't
+     squeeze into unreadable widths. */
+  .members-table :deep(.el-table__body),
+  .members-table :deep(.el-table__header) {
+    min-width: 860px;
+  }
+
+  /* Stack the action buttons full-width on phones so each is easy to tap. */
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 </style>
