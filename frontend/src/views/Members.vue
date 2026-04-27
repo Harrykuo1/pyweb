@@ -252,8 +252,30 @@ onMounted(loadMembers)
     </div>
 
     <!-- ---------- GRID VIEW ---------- -->
-    <div v-if="viewMode === 'grid'" v-loading="loading" class="grid-stage">
-      <div v-if="sortedMembers.length > 0" class="member-grid">
+    <div v-if="viewMode === 'grid'" class="grid-stage">
+      <!-- Skeleton placeholders cover the initial fetch so users see card
+           shapes immediately instead of an EP spinner overlay. -->
+      <div v-if="loading" class="member-grid" data-test="grid-skeleton">
+        <div
+          v-for="i in 8"
+          :key="`skel-${i}`"
+          class="member-card-skeleton"
+        >
+          <div class="skel-photo shimmer"></div>
+          <div class="skel-body">
+            <div class="skel-line skel-line--name shimmer"></div>
+            <div class="skel-line skel-line--position shimmer"></div>
+            <div class="skel-divider"></div>
+            <div class="skel-line skel-line--meta shimmer"></div>
+            <div class="skel-actions">
+              <div class="skel-btn shimmer"></div>
+              <div class="skel-btn shimmer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="sortedMembers.length > 0" class="member-grid">
         <article
           v-for="m in sortedMembers"
           :key="m.id"
@@ -336,7 +358,7 @@ onMounted(loadMembers)
         </article>
       </div>
 
-      <div v-else-if="!loading" class="empty-state" data-test="empty-state">
+      <div v-else class="empty-state" data-test="empty-state">
         <div class="empty-icon" aria-hidden="true">
           <el-icon :size="32"><UserFilled /></el-icon>
         </div>
@@ -707,6 +729,92 @@ onMounted(loadMembers)
   margin-left: auto;
   display: inline-flex;
   gap: 4px;
+}
+
+/* ---------- Skeleton (initial-fetch placeholder) ---------- */
+.member-card-skeleton {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.skel-photo {
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+}
+
+.skel-body {
+  padding: var(--sp-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skel-line {
+  height: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 4px;
+}
+.skel-line--name {
+  width: 70%;
+  height: 14px;
+}
+.skel-line--position {
+  width: 55%;
+}
+.skel-line--meta {
+  width: 80%;
+  height: 10px;
+  margin-top: 4px;
+}
+
+.skel-divider {
+  height: 1px;
+  background: rgba(15, 23, 42, 0.06);
+  margin: 4px 0 2px;
+}
+
+.skel-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.skel-btn {
+  height: 28px;
+  width: 60px;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-sm);
+}
+
+/* Light-sweep shimmer — subtle but signals "loading" without being loud. */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: shimmer-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 /* ---------- Empty state ---------- */
