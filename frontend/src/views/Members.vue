@@ -1116,38 +1116,17 @@ onMounted(loadMembers)
   font-size: 13px;
 }
 
-/* Sort caret: replace EP's solid border-rendered triangles with SVGs so
-   we can show hollow outlines (sortable hint) by default and a filled
-   indigo triangle once the column is the active sort. */
-.members-table :deep(.el-table__header th.is-sortable .caret-wrapper .sort-caret) {
-  border: 0 !important;
-  width: 9px !important;
-  height: 7px !important;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 9px 7px;
+/* Sort indicator caret turns indigo when its column is the active sort. */
+.members-table :deep(.el-table__header th .caret-wrapper .ascending),
+.members-table :deep(.el-table__header th .caret-wrapper .descending) {
+  border-bottom-color: var(--ink-300);
+  border-top-color: var(--ink-300);
 }
-
-/* Default: hollow slate outlines */
-.members-table :deep(.el-table__header th.is-sortable .caret-wrapper .ascending) {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 7'><polygon points='4.5,1 8,6 1,6' fill='none' stroke='%2394a3b8' stroke-width='1' stroke-linejoin='round'/></svg>");
-}
-.members-table :deep(.el-table__header th.is-sortable .caret-wrapper .descending) {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 7'><polygon points='1,1 8,1 4.5,6' fill='none' stroke='%2394a3b8' stroke-width='1' stroke-linejoin='round'/></svg>");
-}
-
-/* Active: filled indigo */
 .members-table :deep(.el-table__header th.ascending .caret-wrapper .ascending) {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 7'><polygon points='4.5,1 8,6 1,6' fill='%236366f1'/></svg>");
+  border-bottom-color: var(--brand-primary);
 }
 .members-table :deep(.el-table__header th.descending .caret-wrapper .descending) {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 7'><polygon points='1,1 8,1 4.5,6' fill='%236366f1'/></svg>");
-}
-
-/* When sorted, hide the opposite direction so users see one arrow. */
-.members-table :deep(.el-table__header th.ascending .caret-wrapper .descending),
-.members-table :deep(.el-table__header th.descending .caret-wrapper .ascending) {
-  visibility: hidden;
+  border-top-color: var(--brand-primary);
 }
 
 /* Empty inner placeholder gets the same treatment as the grid empty
