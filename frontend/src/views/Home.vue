@@ -1,5 +1,4 @@
 <script setup>
-import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElIcon } from 'element-plus'
 import {
@@ -13,15 +12,6 @@ import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
-
-const greeting = computed(() => {
-  const h = new Date().getHours()
-  if (h < 5) return '夜深了'
-  if (h < 11) return '早安'
-  if (h < 14) return '午安'
-  if (h < 18) return '午後好'
-  return '晚上好'
-})
 
 function notReady() {
   alert('此功能即將推出')
@@ -38,7 +28,6 @@ function notReady() {
       </div>
 
       <div class="hero-inner">
-        <span class="hero-eyebrow">{{ greeting }}</span>
         <h1 class="hero-title">
           歡迎回來，{{ auth.user?.username }}
           <span class="wave" aria-hidden="true">👋</span>
@@ -134,16 +123,6 @@ function notReady() {
   position: relative;
   z-index: 1;
   max-width: 640px;
-}
-
-.hero-eyebrow {
-  display: inline-block;
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.72);
-  font-weight: 500;
-  margin-bottom: var(--sp-sm);
 }
 
 .hero-title {
