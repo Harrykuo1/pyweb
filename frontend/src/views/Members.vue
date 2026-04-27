@@ -439,9 +439,45 @@ onMounted(loadMembers)
     </div>
 
     <!-- ---------- LIST (TABLE) VIEW ---------- -->
+    <!-- Skeleton table mimics the real layout so the page doesn't shift
+         when data arrives — much calmer than the v-loading spinner overlay. -->
+    <div
+      v-if="viewMode === 'list' && loading"
+      class="table-skeleton"
+      data-test="table-skeleton"
+    >
+      <div class="ts-header">
+        <div class="ts-h-cell" style="width: 140px"></div>
+        <div class="ts-h-cell" style="width: 120px"></div>
+        <div class="ts-h-cell" style="width: 180px"></div>
+        <div class="ts-h-cell" style="flex: 1"></div>
+        <div class="ts-h-cell" style="width: 160px"></div>
+        <div class="ts-h-cell" style="width: 120px"></div>
+      </div>
+      <div v-for="r in 6" :key="`ts-row-${r}`" class="ts-row">
+        <div class="ts-photo-cell">
+          <div class="ts-photo shimmer"></div>
+        </div>
+        <div class="ts-cell" style="width: 120px">
+          <div class="ts-line shimmer" style="width: 60px"></div>
+        </div>
+        <div class="ts-cell" style="width: 180px">
+          <div class="ts-line shimmer" style="width: 70%"></div>
+        </div>
+        <div class="ts-cell" style="flex: 1">
+          <div class="ts-line shimmer" style="width: 80%"></div>
+        </div>
+        <div class="ts-cell" style="width: 160px">
+          <div class="ts-line shimmer" style="width: 50%"></div>
+        </div>
+        <div class="ts-cell" style="width: 120px">
+          <div class="ts-line shimmer" style="width: 40%"></div>
+        </div>
+      </div>
+    </div>
+
     <el-table
-      v-if="viewMode === 'list'"
-      v-loading="loading"
+      v-else-if="viewMode === 'list'"
       :data="filteredMembers"
       class="members-table"
       :default-sort="{ prop: 'joined_at', order: 'ascending' }"
@@ -985,6 +1021,67 @@ onMounted(loadMembers)
   font-size: 13px;
   border-bottom: 1px dashed rgba(99, 102, 241, 0.28);
   cursor: help;
+}
+
+/* ---------- Table skeleton (loading placeholder) ---------- */
+.table-skeleton {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.ts-header {
+  display: flex;
+  height: 48px;
+  background: var(--surface-1);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  align-items: center;
+  padding: 0 12px;
+  gap: 12px;
+}
+
+.ts-h-cell {
+  height: 12px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 4px;
+}
+
+.ts-row {
+  display: flex;
+  align-items: center;
+  padding: 14px 12px;
+  gap: 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
+}
+
+.ts-row:last-child {
+  border-bottom: 0;
+}
+
+.ts-photo-cell {
+  width: 140px;
+  display: flex;
+  justify-content: center;
+}
+
+.ts-photo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #eef2ff, #f3e8ff);
+}
+
+.ts-cell {
+  display: flex;
+  align-items: center;
+}
+
+.ts-line {
+  height: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 4px;
 }
 
 /* ---------- Table view ---------- */
