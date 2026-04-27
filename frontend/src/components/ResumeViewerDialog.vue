@@ -27,6 +27,7 @@ const auth = useAuthStore()
 
 const cacheBuster = ref(Date.now())
 const tab = ref('pdf')
+const uploadingPdf = ref(false)
 
 const availableFormats = computed(() => {
   if (!props.member) return []
@@ -75,6 +76,7 @@ async function handleUploadPdf(uploadFile) {
     ElMessage.error('檔案必須是 PDF')
     return
   }
+  uploadingPdf.value = true
   try {
     await membersApi.uploadResumePdf(props.member.id, file)
     cacheBuster.value = Date.now()
@@ -85,6 +87,8 @@ async function handleUploadPdf(uploadFile) {
     if (err?.response?.status === 413) ElMessage.error('檔案過大')
     else if (err?.response?.status === 415) ElMessage.error('格式不支援')
     else ElMessage.error('上傳失敗')
+  } finally {
+    uploadingPdf.value = false
   }
 }
 
@@ -174,10 +178,19 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
               :auto-upload="false"
               accept="application/pdf"
               :on-change="handleUploadPdf"
+              :disabled="uploadingPdf"
               data-test="upload-pdf"
             >
-              <el-button :icon="Upload" size="small" plain>
-                {{ member.has_resume_pdf ? '替換 PDF' : '上傳 PDF' }}
+              <el-button
+                :icon="uploadingPdf ? null : Upload"
+                size="small"
+                plain
+                :loading="uploadingPdf"
+                :disabled="uploadingPdf"
+              >
+                {{ uploadingPdf
+                  ? '上傳中…'
+                  : (member.has_resume_pdf ? '替換 PDF' : '上傳 PDF') }}
               </el-button>
             </el-upload>
             <el-button
@@ -186,6 +199,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
               size="small"
               type="danger"
               plain
+              :disabled="uploadingPdf"
               data-test="delete-pdf"
               @click="askDeletePdf"
             >

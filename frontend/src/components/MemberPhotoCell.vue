@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElUpload } from 'element-plus'
-import { Camera, Delete, UserFilled } from '@element-plus/icons-vue'
+import { Camera, Delete, Loading, UserFilled } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
 import PhotoCropDialog from './PhotoCropDialog.vue'
@@ -29,6 +29,7 @@ const cacheBuster = ref(Date.now())
 
 const cropOpen = ref(false)
 const pendingFile = ref(null)
+const uploading = ref(false)
 
 function photoSrc() {
   if (!props.member.has_photo) return null
@@ -54,6 +55,7 @@ function handlePicked(uploadFile) {
 }
 
 async function handleCropped(croppedFile) {
+  uploading.value = true
   try {
     await membersApi.uploadPhoto(props.member.id, croppedFile)
     cacheBuster.value = Date.now()
@@ -65,6 +67,7 @@ async function handleCropped(croppedFile) {
     else ElMessage.error('上傳失敗')
   } finally {
     pendingFile.value = null
+    uploading.value = false
   }
 }
 
@@ -123,7 +126,14 @@ defineExpose({ askDelete, handleDelete, handlePicked, handleCropped })
       <el-icon :size="variant === 'card' ? 48 : 26"><UserFilled /></el-icon>
     </el-avatar>
 
-    <div v-if="auth.isAdmin" class="photo-actions">
+    <div v-if="uploading" class="upload-overlay" data-test="photo-uploading">
+      <el-icon class="is-loading" :size="variant === 'card' ? 32 : 18">
+        <Loading />
+      </el-icon>
+      <span v-if="variant === 'card'" class="overlay-text">上傳中…</span>
+    </div>
+
+    <div v-if="auth.isAdmin && !uploading" class="photo-actions">
       <el-upload
         :show-file-list="false"
         :auto-upload="false"
@@ -201,6 +211,44 @@ defineExpose({ askDelete, handleDelete, handlePicked, handleCropped })
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* Upload-in-progress veil. Sits over the photo (and the actions are
+   hidden while uploading) so users see something is happening even
+   while the network request is in flight. */
+.upload-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.5);
+  color: #ffffff;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.photo-cell--thumb {
+  position: relative;
+}
+
+.photo-cell--thumb .upload-overlay {
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+}
+
+.photo-cell--card .upload-overlay {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.overlay-text {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
 }
 
 /* ---------- card variant: 1:1 photo at the top of a member card with
