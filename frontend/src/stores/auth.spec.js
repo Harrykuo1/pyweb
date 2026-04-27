@@ -97,4 +97,76 @@ describe('useAuthStore', () => {
     const store = useAuthStore()
     await expect(store.fetchMe()).rejects.toThrow()
   })
+
+  // ---------- viewAsViewer (admin preview mode) ----------
+
+  it('admin can toggle viewAsViewer; isAdmin becomes false in that mode', async () => {
+    vi.spyOn(authApi, 'login').mockResolvedValue({
+      id: 1,
+      username: 'admin',
+      role: 'admin',
+    })
+
+    const store = useAuthStore()
+    await store.login('pw')
+
+    expect(store.isActuallyAdmin).toBe(true)
+    expect(store.isAdmin).toBe(true)
+    expect(store.isViewingAsViewer).toBe(false)
+
+    store.setViewAsViewer(true)
+    expect(store.isActuallyAdmin).toBe(true)
+    expect(store.isAdmin).toBe(false)
+    expect(store.isViewingAsViewer).toBe(true)
+
+    store.setViewAsViewer(false)
+    expect(store.isAdmin).toBe(true)
+    expect(store.isViewingAsViewer).toBe(false)
+  })
+
+  it('non-admin call to setViewAsViewer is ignored', async () => {
+    vi.spyOn(authApi, 'login').mockResolvedValue({
+      id: 2,
+      username: 'viewer',
+      role: 'viewer',
+    })
+
+    const store = useAuthStore()
+    await store.login('pw')
+
+    store.setViewAsViewer(true)
+    expect(store.viewAsViewer).toBe(false)
+    expect(store.isAdmin).toBe(false)
+    expect(store.isViewingAsViewer).toBe(false)
+  })
+
+  it('login resets a stale viewAsViewer flag', async () => {
+    vi.spyOn(authApi, 'login')
+      .mockResolvedValueOnce({ id: 1, username: 'admin', role: 'admin' })
+      .mockResolvedValueOnce({ id: 1, username: 'admin', role: 'admin' })
+
+    const store = useAuthStore()
+    await store.login('pw')
+    store.setViewAsViewer(true)
+    expect(store.viewAsViewer).toBe(true)
+
+    await store.login('pw')
+    expect(store.viewAsViewer).toBe(false)
+  })
+
+  it('logout clears viewAsViewer too', async () => {
+    vi.spyOn(authApi, 'login').mockResolvedValue({
+      id: 1,
+      username: 'admin',
+      role: 'admin',
+    })
+    vi.spyOn(authApi, 'logout').mockResolvedValue()
+
+    const store = useAuthStore()
+    await store.login('pw')
+    store.setViewAsViewer(true)
+    await store.logout()
+
+    expect(store.viewAsViewer).toBe(false)
+  })
 })

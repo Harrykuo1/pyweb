@@ -50,24 +50,22 @@ describe('Navbar.vue', () => {
     expect(wrapper.text()).toContain('成員')
   })
 
-  it('shows username and 管理員 tag for admin', () => {
+  it('shows username and 管理員 role tag for admin', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.text()).toContain('alice')
-    expect(wrapper.text()).toContain('管理員')
-    expect(wrapper.text()).not.toContain('檢視者')
+    expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('管理員')
   })
 
-  it('shows 檢視者 tag for viewer', () => {
+  it('shows 檢視者 role tag for viewer', () => {
     const auth = useAuthStore()
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.text()).toContain('bob')
-    expect(wrapper.text()).toContain('檢視者')
-    expect(wrapper.text()).not.toContain('管理員')
+    expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
   })
 
   it('logout button calls store.logout and pushes /login on success', async () => {
@@ -76,9 +74,36 @@ describe('Navbar.vue', () => {
     const logoutSpy = vi.spyOn(auth, 'logout').mockResolvedValue()
 
     const wrapper = mount(Navbar, { global: { stubs } })
-    await wrapper.find('button').trigger('click')
+    // The first plain button is the el-switch's trigger; logout is the
+    // last button in the row.
+    const buttons = wrapper.findAll('button')
+    await buttons[buttons.length - 1].trigger('click')
 
     expect(logoutSpy).toHaveBeenCalled()
     expect(pushMock).toHaveBeenCalledWith('/login')
+  })
+
+  it('preview-as-viewer toggle is shown for admin only', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+    expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(true)
+  })
+
+  it('preview-as-viewer toggle is hidden for viewer', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 2, username: 'bob', role: 'viewer' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+    expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(false)
+  })
+
+  it('admin in preview mode shows 檢視者 tag and 預覽中 badge', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    auth.setViewAsViewer(true)
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
+    expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(true)
   })
 })

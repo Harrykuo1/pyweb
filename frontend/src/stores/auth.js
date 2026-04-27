@@ -6,16 +6,28 @@ import { authApi } from '../api/auth'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
 
+  // Admin-only UI affordance: while true, isAdmin pretends to be false so
+  // every v-if="auth.isAdmin" hides itself, letting an admin preview the
+  // viewer experience without losing real backend permissions.
+  const viewAsViewer = ref(false)
+
   const isAuthenticated = computed(() => user.value !== null)
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  const actualRole = computed(() => user.value?.role ?? null)
+  const isActuallyAdmin = computed(() => actualRole.value === 'admin')
+  const isAdmin = computed(() => isActuallyAdmin.value && !viewAsViewer.value)
+  const isViewingAsViewer = computed(
+    () => isActuallyAdmin.value && viewAsViewer.value,
+  )
 
   async function login(password) {
     user.value = await authApi.login(password)
+    viewAsViewer.value = false
   }
 
   async function logout() {
     await authApi.logout()
     user.value = null
+    viewAsViewer.value = false
   }
 
   // Used by router guard on first navigation to restore session from cookie.
@@ -32,5 +44,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, isAuthenticated, isAdmin, login, logout, fetchMe }
+  function setViewAsViewer(flag) {
+    if (!isActuallyAdmin.value) return
+    viewAsViewer.value = !!flag
+  }
+
+  return {
+    user,
+    viewAsViewer,
+    isAuthenticated,
+    isAdmin,
+    isActuallyAdmin,
+    isViewingAsViewer,
+    actualRole,
+    login,
+    logout,
+    fetchMe,
+    setViewAsViewer,
+  }
 })

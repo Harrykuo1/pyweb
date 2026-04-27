@@ -1,11 +1,19 @@
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElButton, ElMessage, ElTag } from 'element-plus'
+import { ElButton, ElMessage, ElSwitch, ElTag, ElTooltip } from 'element-plus'
 
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+
+// el-switch's v-model needs a writable ref-like — bridge the store action
+// through a computed setter.
+const previewAsViewer = computed({
+  get: () => auth.viewAsViewer,
+  set: (v) => auth.setViewAsViewer(v),
+})
 
 async function handleLogout() {
   try {
@@ -29,6 +37,17 @@ async function handleLogout() {
       </nav>
 
       <div class="navbar-right">
+        <el-tooltip
+          v-if="auth.isActuallyAdmin"
+          content="切換後 UI 會以檢視者身分顯示，後端權限不變"
+          placement="bottom"
+        >
+          <label class="preview-toggle" data-test="preview-toggle">
+            <span class="preview-label">預覽為檢視者</span>
+            <el-switch v-model="previewAsViewer" size="small" />
+          </label>
+        </el-tooltip>
+
         <span v-if="auth.user" class="user-block">
           <span class="username">{{ auth.user.username }}</span>
           <el-tag
@@ -39,6 +58,13 @@ async function handleLogout() {
           >
             {{ auth.isAdmin ? '管理員' : '檢視者' }}
           </el-tag>
+          <span
+            v-if="auth.isViewingAsViewer"
+            class="preview-badge"
+            data-test="preview-badge"
+          >
+            預覽中
+          </span>
         </span>
         <el-button text @click="handleLogout">登出</el-button>
       </div>
@@ -104,6 +130,19 @@ async function handleLogout() {
   gap: 16px;
 }
 
+.preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.preview-label {
+  font-size: 13px;
+  color: #606266;
+}
+
 .user-block {
   display: inline-flex;
   align-items: center;
@@ -113,5 +152,14 @@ async function handleLogout() {
 .username {
   font-size: 14px;
   color: #606266;
+}
+
+.preview-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fdf6ec;
+  color: #e6a23c;
+  border: 1px solid #f5dab1;
 }
 </style>
