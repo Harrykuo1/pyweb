@@ -146,4 +146,25 @@ function notReady() {
   font-size: 12px;
   color: #909399;
 }
+
+@media (max-width: 640px) {
+  .welcome-card {
+    padding: 18px;
+  }
+
+  .welcome-title {
+    font-size: 20px;
+  }
+
+  .feature-grid {
+    /* Slightly smaller minmax so a single phone-width card doesn't waste
+       horizontal space. */
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  :deep(.feature-card-body) {
+    padding: 16px;
+  }
+}
 </style>
