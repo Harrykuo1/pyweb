@@ -254,8 +254,9 @@ async function handleLogout() {
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #fde68a, #fbbf24);
-  color: #78350f;
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.22);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
