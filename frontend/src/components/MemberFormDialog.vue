@@ -11,7 +11,9 @@ import {
   ElMessage,
   ElUpload,
 } from 'element-plus'
-import { Document, Upload } from '@element-plus/icons-vue'
+import { Delete, Document, Upload } from '@element-plus/icons-vue'
+
+import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
 
 import { membersApi } from '../api/members'
 
@@ -36,10 +38,15 @@ const form = reactive({
 })
 
 // PDF state lives outside the el-form because the upload is a separate
-// API call after the basic save returns. PDF *removal* is intentionally
-// not available from this form — it's a destructive admin action that
-// should go through the password-protected dialog in ResumeViewerDialog.
+// API call after the basic save returns.
 const pdfFile = ref(null) // newly selected File, or null
+// Tracks an in-session PDF removal — destructive, so it runs through
+// DeleteWithPasswordDialog and hits the API immediately rather than
+// being batched into the form's save click.
+const pdfDeletedThisSession = ref(false)
+const pdfDeleteDialogOpen = ref(false)
+const pdfDeleteSubmitting = ref(false)
+const pdfDeleteError = ref('')
 
 const rules = {
   graduation_year: [{ required: true, message: '請輸入畢業年份', trigger: 'blur' }],
@@ -47,9 +54,17 @@ const rules = {
   current_position: [{ required: true, message: '請輸入目前就職／就讀', trigger: 'blur' }],
 }
 
+const hasExistingPdf = computed(
+  () =>
+    isEdit.value &&
+    props.member?.has_resume_pdf &&
+    !pdfDeletedThisSession.value,
+)
+
 const pdfStatusText = computed(() => {
   if (pdfFile.value) return `已選擇：${pdfFile.value.name}`
-  if (isEdit.value && props.member?.has_resume_pdf) return '目前已有 PDF'
+  if (hasExistingPdf.value) return '目前已有 PDF'
+  if (pdfDeletedThisSession.value) return '已移除 PDF'
   return '尚未提供 PDF'
 })
 
@@ -70,6 +85,9 @@ function resetForm(member) {
     joined_at: member?.joined_at ?? null,
   })
   pdfFile.value = null
+  pdfDeletedThisSession.value = false
+  pdfDeleteDialogOpen.value = false
+  pdfDeleteError.value = ''
   formRef.value?.clearValidate()
 }
 
@@ -103,6 +121,34 @@ function handlePdfChange(uploadFile) {
 
 function clearPdfChange() {
   pdfFile.value = null
+}
+
+function askDeletePdf() {
+  pdfDeleteError.value = ''
+  pdfDeleteDialogOpen.value = true
+}
+
+async function handleDeletePdf(password) {
+  if (!isEdit.value || !props.member?.id) return
+  pdfDeleteSubmitting.value = true
+  pdfDeleteError.value = ''
+  try {
+    await membersApi.deleteResumePdf(props.member.id, password)
+    pdfDeletedThisSession.value = true
+    pdfDeleteDialogOpen.value = false
+    ElMessage.success('已移除 PDF 履歷')
+    // Tell the parent the member's resume_pdf flag changed so the
+    // members list refreshes; the form keeps its local state via
+    // pdfDeletedThisSession until close.
+    emit('saved')
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 401) pdfDeleteError.value = '密碼錯誤'
+    else if (status === 403) pdfDeleteError.value = '權限不足'
+    else pdfDeleteError.value = '移除失敗，請稍後再試'
+  } finally {
+    pdfDeleteSubmitting.value = false
+  }
 }
 
 function buildPayload() {
@@ -233,6 +279,17 @@ defineExpose({ handlePdfChange, clearPdfChange })
               </el-button>
             </el-upload>
             <el-button
+              v-if="hasExistingPdf && !pdfFile"
+              size="small"
+              type="danger"
+              plain
+              :icon="Delete"
+              data-test="mark-remove-pdf"
+              @click="askDeletePdf"
+            >
+              移除
+            </el-button>
+            <el-button
               v-if="pdfHasPendingChange"
               size="small"
               plain
@@ -259,6 +316,16 @@ defineExpose({ handlePdfChange, clearPdfChange })
       </el-button>
     </template>
   </el-dialog>
+
+  <DeleteWithPasswordDialog
+    v-model="pdfDeleteDialogOpen"
+    title="移除 PDF 履歷"
+    :item-name="member?.real_name ?? ''"
+    warning="將永久移除這位成員的 PDF 履歷檔。此操作無法復原。"
+    :loading="pdfDeleteSubmitting"
+    :error-message="pdfDeleteError"
+    @confirm="handleDeletePdf"
+  />
 </template>
 
 <style scoped>

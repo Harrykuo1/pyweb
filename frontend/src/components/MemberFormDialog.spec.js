@@ -201,8 +201,9 @@ describe('MemberFormDialog', () => {
     expect(upload).toHaveBeenCalledWith(7, file)
   })
 
-  it('edit form does not expose a PDF removal button (use the resume viewer instead)', async () => {
+  it('handleDeletePdf calls deleteResumePdf with the typed password and emits saved', async () => {
     vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
+    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
 
     const wrapper = await mountDialog({
       member: {
@@ -216,7 +217,42 @@ describe('MemberFormDialog', () => {
       },
     })
 
-    expect(wrapper.find('[data-test="mark-remove-pdf"]').exists()).toBe(false)
+    // The 「移除」 button is rendered for an edit-mode member with an
+    // existing PDF and no pending replacement.
+    expect(wrapper.find('[data-test="mark-remove-pdf"]').exists()).toBe(true)
+
+    await wrapper.vm.handleDeletePdf('admin-pw')
+    await flushPromises()
+
+    expect(del).toHaveBeenCalledWith(7, 'admin-pw')
+    expect(wrapper.emitted('saved')).toBeTruthy()
+    expect(wrapper.vm.pdfDeletedThisSession).toBe(true)
+  })
+
+  it('handleDeletePdf on 401 keeps dialog open and surfaces 密碼錯誤', async () => {
+    vi.spyOn(membersApi, 'deleteResumePdf').mockRejectedValue(
+      Object.assign(new Error('401'), { response: { status: 401 } }),
+    )
+
+    const wrapper = await mountDialog({
+      member: {
+        id: 7,
+        graduation_year: 2020,
+        real_name: 'Old',
+        current_position: 'Old',
+        resume_md: null,
+        joined_at: null,
+        has_resume_pdf: true,
+      },
+    })
+    wrapper.vm.askDeletePdf()
+    await flushPromises()
+    await wrapper.vm.handleDeletePdf('wrong-pw')
+    await flushPromises()
+
+    expect(wrapper.vm.pdfDeleteError).toBe('密碼錯誤')
+    expect(wrapper.vm.pdfDeleteDialogOpen).toBe(true)
+    expect(wrapper.vm.pdfDeletedThisSession).toBe(false)
   })
 
   it('handlePdfChange rejects oversized files without setting state', async () => {
