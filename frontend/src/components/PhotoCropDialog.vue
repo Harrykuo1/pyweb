@@ -157,6 +157,15 @@ defineExpose({ handleConfirm })
   max-height: 100%;
 }
 
+/* cropperjs 2.x renders into a <cropper-canvas> custom element. The default
+   display: inline collapses the canvas inside our fixed-height wrap, so
+   force it to fill the available box. */
+.cropper-wrap :deep(cropper-canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .hint {
   margin: 12px 0 0;
   font-size: 12px;
