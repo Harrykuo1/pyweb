@@ -37,3 +37,11 @@ h4 {
   font-weight: 600;
   color: #303133;
 }
+
+/* Phone-class breakpoint. Anything narrower than this gets the compact
+   layout overrides defined alongside each component. */
+@media (max-width: 640px) {
+  :root {
+    font-size: 13px;
+  }
+}

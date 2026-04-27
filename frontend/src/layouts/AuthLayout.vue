@@ -24,4 +24,10 @@ import Navbar from '../components/Navbar.vue'
   margin: 0 auto;
   padding: 24px;
 }
+
+@media (max-width: 640px) {
+  .content {
+    padding: 12px;
+  }
+}
 </style>
