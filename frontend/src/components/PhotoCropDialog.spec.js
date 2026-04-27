@@ -88,4 +88,38 @@ describe('PhotoCropDialog', () => {
     expect(cropped[0][0].type).toBe('image/jpeg')
     expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
   })
+
+  it('honors outputType / outputSize / outputFilename props', async () => {
+    const wrapper = mount(PhotoCropDialog, {
+      props: {
+        modelValue: false,
+        sourceFile: null,
+        outputType: 'image/png',
+        outputSize: 256,
+        outputFilename: 'logo',
+      },
+    })
+    await wrapper.setProps({ modelValue: true, sourceFile: makeFile() })
+    await flushPromises()
+
+    await wrapper.vm.handleConfirm()
+    await flushPromises()
+
+    const file = wrapper.emitted('cropped')[0][0]
+    expect(file.type).toBe('image/png')
+    expect(file.name).toBe('logo.png')
+  })
+
+  it('renders custom title when provided', async () => {
+    const wrapper = mount(PhotoCropDialog, {
+      props: {
+        modelValue: true,
+        sourceFile: makeFile(),
+        title: '裁切 Logo',
+      },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    expect(document.body.innerHTML).toContain('裁切 Logo')
+  })
 })

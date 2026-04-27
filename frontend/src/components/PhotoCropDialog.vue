@@ -6,9 +6,23 @@ import Cropper from 'cropperjs'
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
   sourceFile: { type: File, default: null },
+  // Defaults are tuned for the avatar use-case. Other call sites (e.g.
+  // login-logo) override them to preserve transparency or use a smaller
+  // canvas size.
+  outputType: { type: String, default: 'image/jpeg' },
+  outputQuality: { type: Number, default: 0.9 },
+  outputSize: { type: Number, default: 512 },
+  outputFilename: { type: String, default: 'photo' },
+  title: { type: String, default: '裁切照片（1:1）' },
 })
 
 const emit = defineEmits(['update:modelValue', 'cropped'])
+
+const EXT_BY_TYPE = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
 
 const imgRef = ref(null)
 const objectUrl = ref('')
@@ -93,17 +107,21 @@ async function handleConfirm() {
 
   submitting.value = true
   try {
-    // Render at 512x512 — generous for an avatar, well under the 5 MB cap
-    // and identical width/height makes downstream <img> sizing trivial.
-    const canvas = await selection.$toCanvas({ width: 512, height: 512 })
+    const size = props.outputSize
+    const canvas = await selection.$toCanvas({ width: size, height: size })
     const blob = await new Promise((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', 0.9),
+      canvas.toBlob(resolve, props.outputType, props.outputQuality),
     )
     if (!blob) {
       ElMessage.error('裁切失敗，請重新選擇照片')
       return
     }
-    const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+    const ext = EXT_BY_TYPE[props.outputType] ?? 'png'
+    const file = new File(
+      [blob],
+      `${props.outputFilename}.${ext}`,
+      { type: props.outputType },
+    )
     emit('cropped', file)
     close()
   } finally {
@@ -117,7 +135,7 @@ defineExpose({ handleConfirm })
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="裁切照片（1:1）"
+    :title="title"
     width="640"
     :close-on-click-modal="false"
     :append-to-body="true"
