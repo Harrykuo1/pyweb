@@ -2,7 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import User, UserRole
-from app.schemas import LoginRequest, UserResponse
+from app.schemas import (
+    LoginRequest,
+    UpdatePasswordRequest,
+    UpdateUsernameRequest,
+    UserResponse,
+)
 
 
 def test_login_request_accepts_password_only():
@@ -41,3 +46,41 @@ def test_user_response_excludes_password_hash():
     dumped = UserResponse.model_validate(u).model_dump()
     assert "password_hash" not in dumped
     assert dumped == {"id": 1, "username": "x", "role": UserRole.VIEWER}
+
+
+def test_update_username_request_accepts_valid_name():
+    req = UpdateUsernameRequest(username="alice")
+    assert req.username == "alice"
+
+
+def test_update_username_request_rejects_empty_name():
+    with pytest.raises(ValidationError):
+        UpdateUsernameRequest(username="")
+
+
+def test_update_username_request_rejects_too_long_name():
+    with pytest.raises(ValidationError):
+        UpdateUsernameRequest(username="x" * 65)
+
+
+def test_update_password_request_accepts_both_fields():
+    req = UpdatePasswordRequest(current_password="old", new_password="new")
+    assert req.current_password == "old"
+    assert req.new_password == "new"
+
+
+def test_update_password_request_rejects_empty_current_password():
+    with pytest.raises(ValidationError):
+        UpdatePasswordRequest(current_password="", new_password="new")
+
+
+def test_update_password_request_rejects_empty_new_password():
+    with pytest.raises(ValidationError):
+        UpdatePasswordRequest(current_password="old", new_password="")
+
+
+def test_update_password_request_rejects_missing_fields():
+    with pytest.raises(ValidationError):
+        UpdatePasswordRequest(new_password="new")
+    with pytest.raises(ValidationError):
+        UpdatePasswordRequest(current_password="old")

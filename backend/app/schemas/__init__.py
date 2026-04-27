@@ -1,4 +1,9 @@
-from app.schemas.auth import LoginRequest, UserResponse
+from app.schemas.auth import (
+    LoginRequest,
+    UpdatePasswordRequest,
+    UpdateUsernameRequest,
+    UserResponse,
+)
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
 
 __all__ = [
@@ -6,5 +11,7 @@ __all__ = [
     "MemberCreate",
     "MemberResponse",
     "MemberUpdate",
+    "UpdatePasswordRequest",
+    "UpdateUsernameRequest",
     "UserResponse",
 ]
