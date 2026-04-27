@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { ElAvatar, ElButton, ElIcon, ElMessage, ElPopconfirm, ElUpload } from 'element-plus'
 import { Camera, Delete, UserFilled } from '@element-plus/icons-vue'
 
+import PhotoCropDialog from './PhotoCropDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 
@@ -18,14 +19,16 @@ const auth = useAuthStore()
 // re-fetches after an upload or delete.
 const cacheBuster = ref(Date.now())
 
+const cropOpen = ref(false)
+const pendingFile = ref(null)
+
 function photoSrc() {
   if (!props.member.has_photo) return null
   return membersApi.photoUrl(props.member.id, cacheBuster.value)
 }
 
-async function handleUpload(uploadFile) {
-  // el-upload's on-change passes its UploadFile wrapper; the native File
-  // we need for FormData is at .raw.
+function handlePicked(uploadFile) {
+  // el-upload hands us its UploadFile wrapper; native File lives at .raw.
   const file = uploadFile?.raw ?? uploadFile
   if (!file || typeof file.size !== 'number') return
   if (file.size > 5 * 1024 * 1024) {
@@ -36,8 +39,15 @@ async function handleUpload(uploadFile) {
     ElMessage.error('照片格式必須為 PNG / JPEG / WebP')
     return
   }
+  // Defer the actual upload to PhotoCropDialog so the user can frame the
+  // 1:1 area locally first.
+  pendingFile.value = file
+  cropOpen.value = true
+}
+
+async function handleCropped(croppedFile) {
   try {
-    await membersApi.uploadPhoto(props.member.id, file)
+    await membersApi.uploadPhoto(props.member.id, croppedFile)
     cacheBuster.value = Date.now()
     ElMessage.success('已上傳照片')
     emit('changed')
@@ -45,6 +55,8 @@ async function handleUpload(uploadFile) {
     if (err?.response?.status === 413) ElMessage.error('檔案過大')
     else if (err?.response?.status === 415) ElMessage.error('格式不支援')
     else ElMessage.error('上傳失敗')
+  } finally {
+    pendingFile.value = null
   }
 }
 
@@ -59,7 +71,7 @@ async function handleDelete() {
   }
 }
 
-defineExpose({ handleDelete, handleUpload })
+defineExpose({ handleDelete, handlePicked, handleCropped })
 </script>
 
 <template>
@@ -78,7 +90,7 @@ defineExpose({ handleDelete, handleUpload })
         :show-file-list="false"
         :auto-upload="false"
         accept="image/png,image/jpeg,image/webp"
-        :on-change="handleUpload"
+        :on-change="handlePicked"
         data-test="upload-photo"
       >
         <el-button size="small" :icon="Camera" plain>
@@ -104,6 +116,12 @@ defineExpose({ handleDelete, handleUpload })
         </template>
       </el-popconfirm>
     </div>
+
+    <PhotoCropDialog
+      v-model="cropOpen"
+      :source-file="pendingFile"
+      @cropped="handleCropped"
+    />
   </div>
 </template>
 
@@ -122,6 +140,7 @@ defineExpose({ handleDelete, handleUpload })
 
 .photo-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 </style>
