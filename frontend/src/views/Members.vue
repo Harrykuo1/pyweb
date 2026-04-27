@@ -908,6 +908,30 @@ onMounted(loadMembers)
   --el-table-tr-bg-color: #ffffff;
 }
 
+/* Indigo gradient strip on the left edge of a hovered row — matches the
+   Home feature-card accent language. ::before lives on the first cell
+   so it spans the entire row's vertical extent. */
+.members-table :deep(.el-table__body tr.el-table__row .el-table__cell:first-child) {
+  position: relative;
+}
+
+.members-table :deep(.el-table__body tr.el-table__row .el-table__cell:first-child)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--brand-primary), var(--brand-accent));
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+  pointer-events: none;
+}
+
+.members-table :deep(.el-table__body tr.el-table__row:hover .el-table__cell:first-child)::before {
+  opacity: 1;
+}
+
 /* Header polish: stronger weight, tighter tracking, taller cells. */
 .members-table :deep(.el-table__header th.el-table__cell) {
   font-size: 12px;
