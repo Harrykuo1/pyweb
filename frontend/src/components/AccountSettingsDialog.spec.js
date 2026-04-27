@@ -239,15 +239,23 @@ describe('AccountSettingsDialog', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('圖片不可超過 2 MB')
   })
 
-  it('selecting a valid file shows pending preview and enables upload', async () => {
+  // SVG bypasses cropping, so picking an SVG file goes straight to "pending"
+  // — used as a shortcut by the next handful of tests that want to skip the
+  // crop step. The crop flow itself is exercised in dedicated tests below.
+  function pickSvg(name = 'logo.svg', size = 16) {
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile(name, 'image/svg+xml', size)
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    return file
+  }
+
+  it('selecting a valid SVG shows pending preview and enables upload', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
     const wrapper = await mountDialog()
     await openSiteTab(wrapper)
 
-    const input = document.querySelector('[data-test="logo-file-input"]')
-    const file = makeFile('logo.png', 'image/png')
-    Object.defineProperty(input, 'files', { value: [file], configurable: true })
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    pickSvg()
     await flushPromises()
 
     const preview = document.querySelector('[data-test="logo-pending-img"]')
@@ -263,15 +271,16 @@ describe('AccountSettingsDialog', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
     const upload = vi
       .spyOn(settingsApi, 'uploadImage')
-      .mockResolvedValue({ key: 'login_logo', size: 16, content_type: 'image/png' })
+      .mockResolvedValue({
+        key: 'login_logo',
+        size: 16,
+        content_type: 'image/svg+xml',
+      })
 
     const wrapper = await mountDialog()
     await openSiteTab(wrapper)
 
-    const input = document.querySelector('[data-test="logo-file-input"]')
-    const file = makeFile('logo.png', 'image/png')
-    Object.defineProperty(input, 'files', { value: [file], configurable: true })
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    const file = pickSvg()
     await flushPromises()
 
     document.querySelector('[data-test="logo-upload"]').click()
@@ -279,8 +288,6 @@ describe('AccountSettingsDialog', () => {
 
     expect(upload).toHaveBeenCalledWith('login_logo', file)
     expect(ElMessage.success).toHaveBeenCalledWith('登入頁 Logo 已更新')
-    // after upload, pending preview is cleared and logoExists -> true so the
-    // 恢復預設 button now renders.
     expect(
       document.querySelector('[data-test="logo-pending-img"]'),
     ).toBeNull()
@@ -298,10 +305,7 @@ describe('AccountSettingsDialog', () => {
     const wrapper = await mountDialog()
     await openSiteTab(wrapper)
 
-    const input = document.querySelector('[data-test="logo-file-input"]')
-    const file = makeFile('logo.png', 'image/png')
-    Object.defineProperty(input, 'files', { value: [file], configurable: true })
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    pickSvg()
     await flushPromises()
 
     document.querySelector('[data-test="logo-upload"]').click()
@@ -315,20 +319,14 @@ describe('AccountSettingsDialog', () => {
     vi.spyOn(settingsApi, 'uploadImage').mockResolvedValue({
       key: 'login_logo',
       size: 16,
-      content_type: 'image/png',
+      content_type: 'image/svg+xml',
     })
     const del = vi.spyOn(settingsApi, 'deleteImage').mockResolvedValue()
 
     const wrapper = await mountDialog()
     await openSiteTab(wrapper)
 
-    // Upload first so the delete button is rendered.
-    const input = document.querySelector('[data-test="logo-file-input"]')
-    Object.defineProperty(input, 'files', {
-      value: [makeFile('logo.png', 'image/png')],
-      configurable: true,
-    })
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    pickSvg()
     await flushPromises()
     document.querySelector('[data-test="logo-upload"]').click()
     await flushPromises()
@@ -344,6 +342,57 @@ describe('AccountSettingsDialog', () => {
     expect(
       document.querySelector('[data-test="logo-delete"]'),
     ).toBeNull()
+  })
+
+  it('picking a PNG opens the crop dialog and does NOT show a pending preview yet', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('logo.png', 'image/png')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(wrapper.vm.cropOpen).toBe(true)
+    expect(wrapper.vm.cropSourceFile?.name).toBe('logo.png')
+    // PNG output type preserves transparency.
+    expect(wrapper.vm.cropOutputType).toBe('image/png')
+    // No pending preview rendered until the user confirms the crop.
+    expect(
+      document.querySelector('[data-test="logo-pending-img"]'),
+    ).toBeNull()
+  })
+
+  it('picking a JPEG sets crop output type to image/jpeg', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('photo.jpg', 'image/jpeg')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(wrapper.vm.cropOutputType).toBe('image/jpeg')
+  })
+
+  it('confirming the crop swaps in the cropped file as the pending preview', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cropped')
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    // Simulate the upstream flow without going through the real cropper.
+    const cropped = makeFile('cropped.png', 'image/png', 32)
+    wrapper.vm.onCropConfirmed(cropped)
+    await flushPromises()
+
+    const preview = document.querySelector('[data-test="logo-pending-img"]')
+    expect(preview).not.toBeNull()
+    expect(preview.getAttribute('src')).toBe('blob:cropped')
+    expect(wrapper.vm.pendingLogoFile?.name).toBe('cropped.png')
   })
 
   it('upload without selecting a file warns and does not call api', async () => {

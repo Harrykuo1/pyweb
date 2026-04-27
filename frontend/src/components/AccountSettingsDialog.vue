@@ -11,6 +11,7 @@ import {
   ElTabs,
 } from 'element-plus'
 
+import PhotoCropDialog from './PhotoCropDialog.vue'
 import { authApi } from '../api/auth'
 import { settingImageUrl, settingsApi } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
@@ -23,6 +24,9 @@ const LOGO_ALLOWED_TYPES = [
   'image/webp',
   'image/svg+xml',
 ]
+// Cropping happens in a <canvas>, which can't rasterize SVG without losing
+// the vector form. Skip the crop step for SVG and upload as-is.
+const LOGO_CROPPABLE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -58,6 +62,9 @@ const pendingLogoFile = ref(null)
 const pendingLogoPreviewUrl = ref('')
 const logoUploading = ref(false)
 const logoDeleting = ref(false)
+const cropOpen = ref(false)
+const cropSourceFile = ref(null)
+const cropOutputType = ref('image/png')
 
 const currentLogoUrl = computed(() =>
   logoExists.value ? settingImageUrl(LOGO_KEY, logoCacheToken.value) : '',
@@ -86,6 +93,14 @@ function clearPendingLogo() {
   if (logoFileInput.value) logoFileInput.value.value = ''
 }
 
+function setPendingLogo(file) {
+  if (pendingLogoPreviewUrl.value) {
+    URL.revokeObjectURL(pendingLogoPreviewUrl.value)
+  }
+  pendingLogoFile.value = file
+  pendingLogoPreviewUrl.value = URL.createObjectURL(file)
+}
+
 function onLogoFileChange(event) {
   const file = event.target?.files?.[0] ?? null
   if (!file) {
@@ -102,12 +117,31 @@ function onLogoFileChange(event) {
     clearPendingLogo()
     return
   }
-  if (pendingLogoPreviewUrl.value) {
-    URL.revokeObjectURL(pendingLogoPreviewUrl.value)
+  // Reset the file input so picking the same file again still re-triggers
+  // change (browsers swallow it otherwise).
+  if (logoFileInput.value) logoFileInput.value.value = ''
+
+  if (LOGO_CROPPABLE_TYPES.includes(file.type)) {
+    cropSourceFile.value = file
+    // Match output type to input so we don't drop transparency on a PNG
+    // upload by re-encoding it as JPEG.
+    cropOutputType.value = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png'
+    cropOpen.value = true
+  } else {
+    // SVG bypasses cropping; render directly as the pending preview.
+    setPendingLogo(file)
   }
-  pendingLogoFile.value = file
-  pendingLogoPreviewUrl.value = URL.createObjectURL(file)
 }
+
+function onCropConfirmed(croppedFile) {
+  setPendingLogo(croppedFile)
+}
+
+// Whether the user confirmed or just closed the crop dialog, drop the
+// stashed source file so the next pick starts fresh.
+watch(cropOpen, (open) => {
+  if (!open) cropSourceFile.value = null
+})
 
 async function uploadLogo() {
   if (!pendingLogoFile.value) {
@@ -339,7 +373,7 @@ async function submitPassword(role) {
       <el-tab-pane label="網站圖片" name="site">
         <div class="section-title">登入頁 Logo</div>
         <p class="hint">
-          上傳後會取代登入頁原本的鎖頭圖示。建議使用方形透明 PNG（格式：PNG / JPEG / WebP / SVG，上限 2 MB）。
+          上傳後會取代登入頁原本的鎖頭圖示。選擇 PNG / JPEG / WebP 後可在彈出的對話框裁切成 1:1；SVG 會直接套用、不裁切。上限 2 MB。
         </p>
 
         <div class="logo-row">
@@ -411,6 +445,16 @@ async function submitPassword(role) {
     <template #footer>
       <el-button @click="visible = false">關閉</el-button>
     </template>
+
+    <PhotoCropDialog
+      v-model="cropOpen"
+      :source-file="cropSourceFile"
+      :output-type="cropOutputType"
+      :output-size="512"
+      output-filename="login-logo"
+      title="裁切登入頁 Logo（1:1）"
+      @cropped="onCropConfirmed"
+    />
   </el-dialog>
 </template>
 
