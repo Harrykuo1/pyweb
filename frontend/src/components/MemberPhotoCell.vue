@@ -97,11 +97,11 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
     />
     <el-avatar
       v-else
-      :size="variant === 'card' ? 120 : 48"
-      shape="square"
+      :size="variant === 'card' ? 120 : 56"
+      :shape="variant === 'card' ? 'square' : 'circle'"
       class="avatar"
     >
-      <el-icon :size="variant === 'card' ? 48 : 24"><UserFilled /></el-icon>
+      <el-icon :size="variant === 'card' ? 48 : 26"><UserFilled /></el-icon>
     </el-avatar>
 
     <div v-if="auth.isAdmin" class="photo-actions">
@@ -153,12 +153,14 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
 }
 
 .avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
-  background: #f0f2f5;
-  color: #c0c4cc;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #eef2ff, #f3e8ff);
+  color: var(--brand-primary);
   overflow: hidden;
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.08);
 }
 
 /* el-image renders an inner <img>; cover ensures the 1:1 crop is filled
