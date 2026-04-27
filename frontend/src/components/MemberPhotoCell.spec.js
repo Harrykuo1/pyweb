@@ -52,6 +52,33 @@ function makeFile(opts = {}) {
 }
 
 describe('MemberPhotoCell', () => {
+  it('renders an el-image with preview when the member has a photo', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'v', role: 'viewer' }
+    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+
+    const img = wrapper.findComponent({ name: 'ElImage' })
+    expect(img.exists()).toBe(true)
+    expect(wrapper.find('[data-test="photo-thumb"]').exists()).toBe(true)
+    // The previewable source list mirrors the thumbnail src so el-image's
+    // built-in viewer can pull up a full-size copy.
+    const list = img.props('previewSrcList')
+    expect(Array.isArray(list)).toBe(true)
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatch(/\/api\/members\/1\/photo\?v=/)
+    // Must teleport so the preview overlay escapes the table cell stacking.
+    expect(img.props('previewTeleported')).toBe(true)
+  })
+
+  it('renders the icon fallback (no preview) when no photo', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'v', role: 'viewer' }
+    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
+
+    expect(wrapper.findComponent({ name: 'ElImage' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ElAvatar' }).exists()).toBe(true)
+  })
+
   it('viewer sees no admin actions', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'v', role: 'viewer' }

@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { ElAvatar, ElButton, ElIcon, ElMessage, ElPopconfirm, ElUpload } from 'element-plus'
+import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElPopconfirm, ElUpload } from 'element-plus'
 import { Camera, Delete, UserFilled } from '@element-plus/icons-vue'
 
 import PhotoCropDialog from './PhotoCropDialog.vue'
@@ -76,9 +76,21 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
 
 <template>
   <div class="photo-cell">
-    <el-avatar
-      :size="48"
+    <el-image
+      v-if="member.has_photo"
       :src="photoSrc()"
+      :preview-src-list="[photoSrc()]"
+      :preview-teleported="true"
+      :z-index="9000"
+      hide-on-click-modal
+      fit="cover"
+      class="avatar avatar-clickable"
+      :alt="`${member.real_name} 的照片`"
+      data-test="photo-thumb"
+    />
+    <el-avatar
+      v-else
+      :size="48"
       shape="square"
       class="avatar"
     >
@@ -134,8 +146,24 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
 }
 
 .avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
   background: #f0f2f5;
   color: #c0c4cc;
+  overflow: hidden;
+}
+
+/* el-image renders an inner <img>; cover ensures the 1:1 crop is filled
+   even if the upload was a hair off. */
+.avatar.avatar-clickable {
+  cursor: zoom-in;
+}
+
+.avatar.avatar-clickable :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .photo-actions {
