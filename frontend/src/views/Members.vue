@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import {
   ElButton,
   ElIcon,
+  ElInput,
   ElMessage,
   ElPopconfirm,
   ElTable,
@@ -19,6 +20,7 @@ import {
   Plus,
   Refresh,
   School,
+  Search,
   UserFilled,
 } from '@element-plus/icons-vue'
 
@@ -88,8 +90,30 @@ const SORT_ORDERS = ['ascending', 'descending']
 const stringSort = (key) => (a, b) =>
   String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
 
+// ---------- Search ----------
+// Client-side substring match across name / position / graduation year. Fast
+// enough at community-scale (we don't expect 10k members) and avoids a
+// round-trip to the backend.
+const searchQuery = ref('')
+
+const filteredMembers = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return members.value
+  return members.value.filter((m) => {
+    const haystack = [
+      m.real_name,
+      m.current_position,
+      String(m.graduation_year ?? ''),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return haystack.includes(q)
+  })
+})
+
 const sortedMembers = computed(() => {
-  const arr = [...members.value]
+  const arr = [...filteredMembers.value]
   const k = sortKey.value
   const dir = sortOrder.value === 'asc' ? 1 : -1
   arr.sort((a, b) => {
@@ -104,6 +128,7 @@ const sortedMembers = computed(() => {
 })
 
 const memberCount = computed(() => members.value.length)
+const filteredCount = computed(() => filteredMembers.value.length)
 
 async function loadMembers() {
   loading.value = true
@@ -250,6 +275,25 @@ onMounted(loadMembers)
       </div>
     </header>
 
+    <!-- Search row — filters both views via filteredMembers. -->
+    <div class="search-row">
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜尋姓名、職位或畢業年份..."
+        clearable
+        :prefix-icon="Search"
+        class="search-input"
+        data-test="search-input"
+      />
+      <span
+        v-if="searchQuery && filteredCount !== memberCount"
+        class="search-count"
+        data-test="search-count"
+      >
+        {{ filteredCount }} / {{ memberCount }}
+      </span>
+    </div>
+
     <!-- Sort pills (grid mode only — table has its own column-click sort). -->
     <div v-if="viewMode === 'grid'" class="sort-row">
       <span class="sort-label">排序</span>
@@ -379,9 +423,12 @@ onMounted(loadMembers)
         <div class="empty-icon" aria-hidden="true">
           <el-icon :size="32"><UserFilled /></el-icon>
         </div>
-        <p class="empty-text">尚無成員資料</p>
+        <p v-if="searchQuery && memberCount > 0" class="empty-text">
+          找不到符合「{{ searchQuery }}」的成員
+        </p>
+        <p v-else class="empty-text">尚無成員資料</p>
         <el-button
-          v-if="auth.isAdmin"
+          v-if="auth.isAdmin && memberCount === 0"
           type="primary"
           :icon="Plus"
           @click="openCreate"
@@ -395,11 +442,18 @@ onMounted(loadMembers)
     <el-table
       v-if="viewMode === 'list'"
       v-loading="loading"
-      :data="members"
+      :data="filteredMembers"
       class="members-table"
-      empty-text="尚無成員資料"
       :default-sort="{ prop: 'joined_at', order: 'ascending' }"
     >
+      <template #empty>
+        <div class="table-empty" data-test="table-empty">
+          <p v-if="searchQuery && memberCount > 0" class="table-empty-text">
+            找不到符合「{{ searchQuery }}」的成員
+          </p>
+          <p v-else class="table-empty-text">尚無成員資料</p>
+        </div>
+      </template>
       <el-table-column label="照片" width="140">
         <template #default="{ row }">
           <MemberPhotoCell :member="row" @changed="loadMembers" />
@@ -623,6 +677,42 @@ onMounted(loadMembers)
   background: #ffffff;
   color: var(--brand-primary);
   box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Search row ---------- */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+}
+
+.search-input {
+  max-width: 360px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06) inset;
+  transition: box-shadow var(--dur) var(--ease);
+}
+
+.search-input :deep(.el-input__wrapper):hover {
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3) inset;
+}
+
+.search-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1.5px var(--brand-primary) inset;
+}
+
+.search-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--brand-primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 4px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
 }
 
 /* ---------- Sort pills ---------- */
@@ -969,13 +1059,21 @@ onMounted(loadMembers)
   border-top-color: var(--brand-primary);
 }
 
-/* Empty inner placeholder gets the same dashed-card treatment as the
-   grid empty state so toggling views feels consistent. */
+/* Empty inner placeholder gets the same treatment as the grid empty
+   state so toggling views feels consistent. */
 .members-table :deep(.el-table__empty-block) {
   min-height: 180px;
 }
 
-.members-table :deep(.el-table__empty-text) {
+.table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.table-empty-text {
+  margin: 0;
   color: var(--ink-500);
   font-size: 14px;
 }

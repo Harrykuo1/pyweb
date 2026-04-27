@@ -146,6 +146,39 @@ describe('Members.vue', () => {
     expect(text).toContain('PM')
   })
 
+  it('search input filters the table by name / position / year', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    // ElInput exposes the v-model via its component; setValue on it
+    // dispatches the right update:modelValue event without relying on
+    // happy-dom's combinator selector for the inner <input>.
+    const search = wrapper.findComponent('.search-input')
+    await search.setValue('alice')
+    await flushPromises()
+
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    expect(table.props('data')).toHaveLength(1)
+    expect(table.props('data')[0].real_name).toBe('Alice')
+    expect(wrapper.find('[data-test="search-count"]').text()).toBe('1 / 2')
+  })
+
+  it('search shows the no-results table-empty when nothing matches', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    const search = wrapper.findComponent('.search-input')
+    await search.setValue('nonexistent-zzz')
+    await flushPromises()
+
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    expect(table.props('data')).toHaveLength(0)
+    // EP renders the #empty slot inside the table once data is empty.
+    expect(wrapper.text()).toContain('找不到符合')
+  })
+
   it('grid mode exposes sort pills for the four sort keys with joined_at active asc', async () => {
     const wrapper = await mountInGridMode()
 
