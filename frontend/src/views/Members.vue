@@ -167,6 +167,21 @@ function formatDate(iso) {
   })
 }
 
+// Approximate "human" deltas — accuracy below a month is rounded to the
+// nearest week, between a month and a year to months, beyond that to
+// years. The full ISO date is shown on hover via the column's tooltip.
+function relativeTime(iso) {
+  if (!iso) return '-'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '-'
+  const days = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
+  if (days <= 0) return '今天'
+  if (days < 7) return `${days} 天前`
+  if (days < 30) return `${Math.floor(days / 7)} 週前`
+  if (days < 365) return `${Math.floor(days / 30)} 個月前`
+  return `${Math.floor(days / 365)} 年前`
+}
+
 onMounted(loadMembers)
 </script>
 
@@ -394,7 +409,11 @@ onMounted(loadMembers)
         width="120"
         sortable
         :sort-orders="SORT_ORDERS"
-      />
+      >
+        <template #default="{ row }">
+          <span class="year-chip">{{ row.graduation_year }} 級</span>
+        </template>
+      </el-table-column>
       <el-table-column
         prop="real_name"
         label="本名"
@@ -418,7 +437,11 @@ onMounted(loadMembers)
         sortable
         :sort-orders="SORT_ORDERS"
       >
-        <template #default="{ row }">{{ formatDate(row.joined_at) }}</template>
+        <template #default="{ row }">
+          <el-tooltip :content="formatDate(row.joined_at)" placement="top">
+            <span class="join-relative">{{ relativeTime(row.joined_at) }}</span>
+          </el-tooltip>
+        </template>
       </el-table-column>
       <el-table-column label="履歷" width="120" align="center">
         <template #default="{ row }">
@@ -845,6 +868,26 @@ onMounted(loadMembers)
   margin: 0;
   color: var(--ink-500);
   font-size: 14px;
+}
+
+/* ---------- Inline cell decorations (used by both table and grid) ---------- */
+.year-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.join-relative {
+  color: var(--ink-700);
+  font-size: 13px;
+  border-bottom: 1px dashed rgba(99, 102, 241, 0.28);
+  cursor: help;
 }
 
 /* ---------- Table view ---------- */
