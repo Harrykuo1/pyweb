@@ -202,8 +202,7 @@ defineExpose({ handlePdfChange, markPdfForRemoval, clearPdfChange })
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-width="120px"
-      label-position="right"
+      label-position="top"
     >
       <el-form-item label="畢業年份" prop="graduation_year">
         <el-input-number v-model="form.graduation_year" :min="1900" :max="2100" />
