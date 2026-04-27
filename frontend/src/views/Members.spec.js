@@ -71,8 +71,8 @@ async function mountAsAdmin(members = sampleMembers) {
   return wrapper
 }
 
-async function mountInListMode(members = sampleMembers, role = 'admin') {
-  localStorage.setItem('pyweb.members.viewMode', 'list')
+async function mountInGridMode(members = sampleMembers, role = 'admin') {
+  localStorage.setItem('pyweb.members.viewMode', 'grid')
   const auth = useAuthStore()
   auth.user = { id: 1, username: 'u', role }
   vi.spyOn(membersApi, 'list').mockResolvedValue(members)
@@ -93,64 +93,20 @@ describe('Members.vue', () => {
     expect(list).toHaveBeenCalledWith()
   })
 
-  it('defaults to grid view with joined_at ascending sort', async () => {
+  it('defaults to list view with the view-list toggle active', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)
     await flushPromises()
 
-    expect(wrapper.find('[data-test="view-grid"]').classes()).toContain('is-active')
-    expect(wrapper.find('[data-test="view-list"]').classes()).not.toContain('is-active')
-
-    const activePill = wrapper.find('[data-test="sort-joined_at"]')
-    expect(activePill.exists()).toBe(true)
-    expect(activePill.classes()).toContain('is-active')
-    expect(activePill.text()).toContain('↑')
-  })
-
-  it('exposes sort pills for joined_at, graduation_year, real_name, current_position', async () => {
-    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
-    const wrapper = mount(Members)
-    await flushPromises()
-
-    for (const key of ['joined_at', 'graduation_year', 'real_name', 'current_position']) {
-      expect(wrapper.find(`[data-test="sort-${key}"]`).exists()).toBe(true)
-    }
-  })
-
-  it('clicking the active sort pill toggles asc <-> desc', async () => {
-    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
-    const wrapper = mount(Members)
-    await flushPromises()
-
-    const pill = wrapper.find('[data-test="sort-joined_at"]')
-    expect(pill.text()).toContain('↑')
-
-    await pill.trigger('click')
-    expect(pill.text()).toContain('↓')
-
-    await pill.trigger('click')
-    expect(pill.text()).toContain('↑')
-  })
-
-  it('clicking a different sort pill switches the active key (asc default)', async () => {
-    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
-    const wrapper = mount(Members)
-    await flushPromises()
-
-    await wrapper.find('[data-test="sort-graduation_year"]').trigger('click')
-
-    const newActive = wrapper.find('[data-test="sort-graduation_year"]')
-    expect(newActive.classes()).toContain('is-active')
-    expect(newActive.text()).toContain('↑')
-    expect(
-      wrapper.find('[data-test="sort-joined_at"]').classes(),
-    ).not.toContain('is-active')
-  })
-
-  it('switching to list mode renders el-table with the four sortable columns', async () => {
-    const wrapper = await mountInListMode()
-
+    expect(wrapper.find('[data-test="view-list"]').classes()).toContain('is-active')
+    expect(wrapper.find('[data-test="view-grid"]').classes()).not.toContain('is-active')
     expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(true)
+  })
+
+  it('default list view renders el-table with the four sortable columns', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
 
     const cols = wrapper.findAllComponents({ name: 'ElTableColumn' })
     const sortable = Object.fromEntries(
@@ -166,8 +122,11 @@ describe('Members.vue', () => {
     }
   })
 
-  it('list-mode el-table default-sort is joined_at ascending', async () => {
-    const wrapper = await mountInListMode()
+  it('default list view el-table default-sort is joined_at ascending', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
     const table = wrapper.findComponent({ name: 'ElTable' })
     expect(table.props('defaultSort')).toEqual({
       prop: 'joined_at',
@@ -175,7 +134,7 @@ describe('Members.vue', () => {
     })
   })
 
-  it('renders rows for each member (grid view)', async () => {
+  it('renders rows for each member', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)
     await flushPromises()
@@ -187,11 +146,46 @@ describe('Members.vue', () => {
     expect(text).toContain('PM')
   })
 
-  it('renders one card per member with data-test="member-card"', async () => {
-    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
-    const wrapper = mount(Members)
-    await flushPromises()
+  it('grid mode exposes sort pills for the four sort keys with joined_at active asc', async () => {
+    const wrapper = await mountInGridMode()
 
+    for (const key of ['joined_at', 'graduation_year', 'real_name', 'current_position']) {
+      expect(wrapper.find(`[data-test="sort-${key}"]`).exists()).toBe(true)
+    }
+
+    const activePill = wrapper.find('[data-test="sort-joined_at"]')
+    expect(activePill.classes()).toContain('is-active')
+    expect(activePill.text()).toContain('↑')
+  })
+
+  it('grid mode: clicking the active sort pill toggles asc <-> desc', async () => {
+    const wrapper = await mountInGridMode()
+
+    const pill = wrapper.find('[data-test="sort-joined_at"]')
+    expect(pill.text()).toContain('↑')
+
+    await pill.trigger('click')
+    expect(pill.text()).toContain('↓')
+
+    await pill.trigger('click')
+    expect(pill.text()).toContain('↑')
+  })
+
+  it('grid mode: clicking a different sort pill switches the active key (asc default)', async () => {
+    const wrapper = await mountInGridMode()
+
+    await wrapper.find('[data-test="sort-graduation_year"]').trigger('click')
+
+    const newActive = wrapper.find('[data-test="sort-graduation_year"]')
+    expect(newActive.classes()).toContain('is-active')
+    expect(newActive.text()).toContain('↑')
+    expect(
+      wrapper.find('[data-test="sort-joined_at"]').classes(),
+    ).not.toContain('is-active')
+  })
+
+  it('grid mode renders one card per member with data-test="member-card"', async () => {
+    const wrapper = await mountInGridMode()
     expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
   })
 
@@ -229,7 +223,7 @@ describe('Members.vue', () => {
     expect(list).toHaveBeenCalled()
   })
 
-  it('admin sees edit and delete buttons on each card', async () => {
+  it('admin sees edit and delete buttons on each row', async () => {
     const wrapper = await mountAsAdmin()
     expect(wrapper.findAll('[data-test="edit-button"]').length).toBe(2)
     expect(wrapper.findAll('[data-test="delete-button"]').length).toBe(2)
@@ -269,27 +263,29 @@ describe('Members.vue', () => {
     ]
     const wrapper = await mountAsAdmin(noResume)
     expect(wrapper.findAll('[data-test="view-resume-button"]').length).toBe(0)
-    // The disabled placeholder button still renders inside the card.
+    // The disabled placeholder button still renders inside the row.
     expect(wrapper.text()).toContain('履歷')
   })
 
-  it('shows the empty-state when the member list is empty (admin)', async () => {
-    const wrapper = await mountAsAdmin([])
+  it('grid mode shows the empty-state when the member list is empty (admin)', async () => {
+    const wrapper = await mountInGridMode([])
     expect(wrapper.find('[data-test="empty-state"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('尚無成員資料')
   })
 
-  it('clicking view-list toggle switches to el-table and persists to localStorage', async () => {
+  it('clicking view-grid toggle switches to card grid and persists to localStorage', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)
     await flushPromises()
 
-    expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(false)
-
-    await wrapper.find('[data-test="view-list"]').trigger('click')
-
     expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(true)
-    expect(localStorage.getItem('pyweb.members.viewMode')).toBe('list')
+    expect(wrapper.findAll('[data-test="member-card"]').length).toBe(0)
+
+    await wrapper.find('[data-test="view-grid"]').trigger('click')
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(false)
+    expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
+    expect(localStorage.getItem('pyweb.members.viewMode')).toBe('grid')
   })
 
   // ElPopconfirm's confirm/cancel buttons live inside a teleported popper

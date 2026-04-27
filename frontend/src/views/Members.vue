@@ -39,13 +39,13 @@ const resumeMember = ref(null)
 
 // ---------- View mode ----------
 // Persisted to localStorage so a user's choice (cards vs. spreadsheet) sticks
-// across sessions. Reads default to 'grid'.
+// across sessions. Default is the table — the card grid is opt-in.
 const VIEW_KEY = 'pyweb.members.viewMode'
 function readInitialViewMode() {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
+    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list'
   } catch {
-    return 'grid'
+    return 'list'
   }
 }
 const viewMode = ref(readInitialViewMode())
