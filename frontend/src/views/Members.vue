@@ -1116,10 +1116,15 @@ onMounted(loadMembers)
   font-size: 13px;
 }
 
-/* Sort indicator caret turns indigo when its column is the active sort. */
-.members-table :deep(.el-table__header th .caret-wrapper .ascending),
-.members-table :deep(.el-table__header th .caret-wrapper .descending) {
+/* Sort caret colors. Each .sort-caret is a 0×0 box rendered as a
+   triangle via ONE colored border — the .ascending arrow is shaped by
+   border-bottom, the .descending one by border-top. Only set the
+   matching side here, otherwise both borders fill in and each caret
+   renders as two stacked triangles (= 4 visible per column). */
+.members-table :deep(.el-table__header th .caret-wrapper .ascending) {
   border-bottom-color: var(--ink-300);
+}
+.members-table :deep(.el-table__header th .caret-wrapper .descending) {
   border-top-color: var(--ink-300);
 }
 .members-table :deep(.el-table__header th.ascending .caret-wrapper .ascending) {
