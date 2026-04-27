@@ -118,9 +118,21 @@ h4 {
   border-radius: var(--radius-sm);
 }
 
-/* Spinning icon for ElMessage(... customClass: 'message-uploading' ...).
-   ElMessage teleports into <body> so its custom-class styling has to
-   live in a non-scoped stylesheet. */
+/* Persistent "上傳中…" / "儲存中…" toast styling. ElMessage teleports
+   into <body> so its custom-class styling has to live un-scoped. The
+   default EP info background reads as "barely there" — bump to a
+   slate-200-ish surface and a darker text/border so the loading
+   message feels like an active state, not a hint. */
+.message-uploading {
+  background: #e5e7eb !important;
+  border-color: #cbd5e1 !important;
+}
+
+.message-uploading .el-message__content {
+  color: #334155 !important;
+  font-weight: 500;
+}
+
 .message-uploading .el-message__icon {
   animation: pyweb-spin 1.1s linear infinite;
   color: var(--brand-primary);
