@@ -43,13 +43,13 @@ const resumeMember = ref(null)
 
 // ---------- View mode ----------
 // Persisted to localStorage so a user's choice (cards vs. spreadsheet) sticks
-// across sessions. Default is the table — the card grid is opt-in.
+// across sessions. Default is the card grid — community-style browsing.
 const VIEW_KEY = 'pyweb.members.viewMode'
 function readInitialViewMode() {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list'
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
   } catch {
-    return 'list'
+    return 'grid'
   }
 }
 const viewMode = ref(readInitialViewMode())
@@ -194,21 +194,6 @@ function formatDate(iso) {
   })
 }
 
-// Approximate "human" deltas — accuracy below a month is rounded to the
-// nearest week, between a month and a year to months, beyond that to
-// years. The full ISO date is shown on hover via the column's tooltip.
-function relativeTime(iso) {
-  if (!iso) return '-'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '-'
-  const days = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
-  if (days <= 0) return '今天'
-  if (days < 7) return `${days} 天前`
-  if (days < 30) return `${Math.floor(days / 7)} 週前`
-  if (days < 365) return `${Math.floor(days / 30)} 個月前`
-  return `${Math.floor(days / 365)} 年前`
-}
-
 onMounted(loadMembers)
 </script>
 
@@ -231,6 +216,24 @@ onMounted(loadMembers)
       </div>
 
       <div class="actions">
+        <div class="search-wrap">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜尋姓名、職位或畢業年份..."
+            clearable
+            :prefix-icon="Search"
+            class="search-input"
+            data-test="search-input"
+          />
+          <span
+            v-if="searchQuery && filteredCount !== memberCount"
+            class="search-count"
+            data-test="search-count"
+          >
+            {{ filteredCount }} / {{ memberCount }}
+          </span>
+        </div>
+
         <div class="view-toggle" role="tablist" aria-label="檢視模式">
           <button
             type="button"
@@ -274,25 +277,6 @@ onMounted(loadMembers)
         </el-button>
       </div>
     </header>
-
-    <!-- Search row — filters both views via filteredMembers. -->
-    <div class="search-row">
-      <el-input
-        v-model="searchQuery"
-        placeholder="搜尋姓名、職位或畢業年份..."
-        clearable
-        :prefix-icon="Search"
-        class="search-input"
-        data-test="search-input"
-      />
-      <span
-        v-if="searchQuery && filteredCount !== memberCount"
-        class="search-count"
-        data-test="search-count"
-      >
-        {{ filteredCount }} / {{ memberCount }}
-      </span>
-    </div>
 
     <!-- Sort pills (grid mode only — table has its own column-click sort). -->
     <div v-if="viewMode === 'grid'" class="sort-row">
@@ -356,7 +340,7 @@ onMounted(loadMembers)
             <div class="card-meta">
               <span class="card-year">
                 <el-icon :size="13"><School /></el-icon>
-                {{ m.graduation_year }} 級
+                {{ m.graduation_year }} 年
               </span>
               <span class="card-join">
                 <el-icon :size="13"><Calendar /></el-icon>
@@ -503,7 +487,7 @@ onMounted(loadMembers)
         :sort-orders="SORT_ORDERS"
       >
         <template #default="{ row }">
-          <span class="year-chip">{{ row.graduation_year }} 級</span>
+          <span class="year-chip">{{ row.graduation_year }} 年</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -529,11 +513,7 @@ onMounted(loadMembers)
         sortable
         :sort-orders="SORT_ORDERS"
       >
-        <template #default="{ row }">
-          <el-tooltip :content="formatDate(row.joined_at)" placement="top">
-            <span class="join-relative">{{ relativeTime(row.joined_at) }}</span>
-          </el-tooltip>
-        </template>
+        <template #default="{ row }">{{ formatDate(row.joined_at) }}</template>
       </el-table-column>
       <el-table-column label="履歷" width="120" align="center">
         <template #default="{ row }">
@@ -715,15 +695,15 @@ onMounted(loadMembers)
   box-shadow: var(--shadow-sm);
 }
 
-/* ---------- Search row ---------- */
-.search-row {
-  display: flex;
+/* ---------- Search (lives inside the header actions row) ---------- */
+.search-wrap {
+  display: inline-flex;
   align-items: center;
-  gap: var(--sp-md);
+  gap: 8px;
 }
 
 .search-input {
-  max-width: 360px;
+  width: 240px;
 }
 
 .search-input :deep(.el-input__wrapper) {
@@ -1016,13 +996,6 @@ onMounted(loadMembers)
   letter-spacing: 0.02em;
 }
 
-.join-relative {
-  color: var(--ink-700);
-  font-size: 13px;
-  border-bottom: 1px dashed rgba(99, 102, 241, 0.28);
-  cursor: help;
-}
-
 /* ---------- Table skeleton (loading placeholder) ---------- */
 .table-skeleton {
   background: #ffffff;
@@ -1143,12 +1116,21 @@ onMounted(loadMembers)
   font-size: 13px;
 }
 
-/* Sort indicator caret turns indigo when its column is the active sort. */
-.members-table :deep(.el-table__header th .caret-wrapper .ascending),
-.members-table :deep(.el-table__header th .caret-wrapper .descending) {
-  border-bottom-color: var(--ink-300);
-  border-top-color: var(--ink-300);
+/* Sort caret behaviour:
+   - Unsorted sortable column: both up/down show faintly as a "sortable" hint.
+   - Sorted column: only the active direction is visible (in indigo); the
+     opposite caret is hidden so users see one arrow, not two stacked. */
+.members-table :deep(.el-table__header th.is-sortable .caret-wrapper .ascending),
+.members-table :deep(.el-table__header th.is-sortable .caret-wrapper .descending) {
+  border-bottom-color: rgba(15, 23, 42, 0.18);
+  border-top-color: rgba(15, 23, 42, 0.18);
 }
+
+.members-table :deep(.el-table__header th.ascending .caret-wrapper .descending),
+.members-table :deep(.el-table__header th.descending .caret-wrapper .ascending) {
+  visibility: hidden;
+}
+
 .members-table :deep(.el-table__header th.ascending .caret-wrapper .ascending) {
   border-bottom-color: var(--brand-primary);
 }
