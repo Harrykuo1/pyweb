@@ -39,12 +39,25 @@ const sampleMembers = [
   },
 ]
 
+// Wrappers created with attachTo: document.body need explicit unmount —
+// otherwise Element Plus's popconfirm reference handlers leak between
+// tests and the next click silently no-ops. Track each one and unmount
+// during afterEach.
+let pendingTeardowns = []
+
 beforeEach(() => {
   setActivePinia(createPinia())
+  try {
+    localStorage.removeItem('pyweb.members.viewMode')
+  } catch {
+    /* ignore */
+  }
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
+  for (const w of pendingTeardowns) w.unmount()
+  pendingTeardowns = []
   document.body.innerHTML = ''
 })
 
@@ -53,6 +66,18 @@ async function mountAsAdmin(members = sampleMembers) {
   auth.user = { id: 1, username: 'a', role: 'admin' }
   vi.spyOn(membersApi, 'list').mockResolvedValue(members)
   const wrapper = mount(Members, { attachTo: document.body })
+  pendingTeardowns.push(wrapper)
+  await flushPromises()
+  return wrapper
+}
+
+async function mountInListMode(members = sampleMembers, role = 'admin') {
+  localStorage.setItem('pyweb.members.viewMode', 'list')
+  const auth = useAuthStore()
+  auth.user = { id: 1, username: 'u', role }
+  vi.spyOn(membersApi, 'list').mockResolvedValue(members)
+  const wrapper = mount(Members, { attachTo: document.body })
+  pendingTeardowns.push(wrapper)
   await flushPromises()
   return wrapper
 }
@@ -68,22 +93,64 @@ describe('Members.vue', () => {
     expect(list).toHaveBeenCalledWith()
   })
 
-  it('configures default-sort to joined_at ascending', async () => {
+  it('defaults to grid view with joined_at ascending sort', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)
     await flushPromises()
 
-    const table = wrapper.findComponent({ name: 'ElTable' })
-    expect(table.props('defaultSort')).toEqual({
-      prop: 'joined_at',
-      order: 'ascending',
-    })
+    expect(wrapper.find('[data-test="view-grid"]').classes()).toContain('is-active')
+    expect(wrapper.find('[data-test="view-list"]').classes()).not.toContain('is-active')
+
+    const activePill = wrapper.find('[data-test="sort-joined_at"]')
+    expect(activePill.exists()).toBe(true)
+    expect(activePill.classes()).toContain('is-active')
+    expect(activePill.text()).toContain('↑')
   })
 
-  it('marks the four expected columns sortable with two-state cycle', async () => {
+  it('exposes sort pills for joined_at, graduation_year, real_name, current_position', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)
     await flushPromises()
+
+    for (const key of ['joined_at', 'graduation_year', 'real_name', 'current_position']) {
+      expect(wrapper.find(`[data-test="sort-${key}"]`).exists()).toBe(true)
+    }
+  })
+
+  it('clicking the active sort pill toggles asc <-> desc', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    const pill = wrapper.find('[data-test="sort-joined_at"]')
+    expect(pill.text()).toContain('↑')
+
+    await pill.trigger('click')
+    expect(pill.text()).toContain('↓')
+
+    await pill.trigger('click')
+    expect(pill.text()).toContain('↑')
+  })
+
+  it('clicking a different sort pill switches the active key (asc default)', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    await wrapper.find('[data-test="sort-graduation_year"]').trigger('click')
+
+    const newActive = wrapper.find('[data-test="sort-graduation_year"]')
+    expect(newActive.classes()).toContain('is-active')
+    expect(newActive.text()).toContain('↑')
+    expect(
+      wrapper.find('[data-test="sort-joined_at"]').classes(),
+    ).not.toContain('is-active')
+  })
+
+  it('switching to list mode renders el-table with the four sortable columns', async () => {
+    const wrapper = await mountInListMode()
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(true)
 
     const cols = wrapper.findAllComponents({ name: 'ElTableColumn' })
     const sortable = Object.fromEntries(
@@ -99,7 +166,16 @@ describe('Members.vue', () => {
     }
   })
 
-  it('renders rows for each member', async () => {
+  it('list-mode el-table default-sort is joined_at ascending', async () => {
+    const wrapper = await mountInListMode()
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    expect(table.props('defaultSort')).toEqual({
+      prop: 'joined_at',
+      order: 'ascending',
+    })
+  })
+
+  it('renders rows for each member (grid view)', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)
     await flushPromises()
@@ -109,6 +185,14 @@ describe('Members.vue', () => {
     expect(text).toContain('Bob')
     expect(text).toContain('SWE')
     expect(text).toContain('PM')
+  })
+
+  it('renders one card per member with data-test="member-card"', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
   })
 
   it('shows the add-member button for admin', async () => {
@@ -139,14 +223,13 @@ describe('Members.vue', () => {
     await flushPromises()
     list.mockClear()
 
-    // Action buttons in order: 重新整理, (新增成員 if admin). [0] is refresh.
-    await wrapper.findAll('button')[0].trigger('click')
+    await wrapper.find('[data-test="refresh-button"]').trigger('click')
     await flushPromises()
 
     expect(list).toHaveBeenCalled()
   })
 
-  it('admin sees edit and delete buttons on each row', async () => {
+  it('admin sees edit and delete buttons on each card', async () => {
     const wrapper = await mountAsAdmin()
     expect(wrapper.findAll('[data-test="edit-button"]').length).toBe(2)
     expect(wrapper.findAll('[data-test="delete-button"]').length).toBe(2)
@@ -186,9 +269,40 @@ describe('Members.vue', () => {
     ]
     const wrapper = await mountAsAdmin(noResume)
     expect(wrapper.findAll('[data-test="view-resume-button"]').length).toBe(0)
-    // The disabled placeholder button still renders inside the table.
+    // The disabled placeholder button still renders inside the card.
     expect(wrapper.text()).toContain('履歷')
   })
+
+  it('shows the empty-state when the member list is empty (admin)', async () => {
+    const wrapper = await mountAsAdmin([])
+    expect(wrapper.find('[data-test="empty-state"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('尚無成員資料')
+  })
+
+  it('clicking view-list toggle switches to el-table and persists to localStorage', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(false)
+
+    await wrapper.find('[data-test="view-list"]').trigger('click')
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(true)
+    expect(localStorage.getItem('pyweb.members.viewMode')).toBe('list')
+  })
+
+  // ElPopconfirm's confirm/cancel buttons live inside a teleported popper
+  // and become flaky to drive through happy-dom once a previous test has
+  // mounted+unmounted in the same describe. Emit the events directly on
+  // the popconfirm component instead — that's the only seam our handler
+  // cares about. We pick the popconfirm by its 「確定要刪除」 title so we
+  // don't accidentally fire on the photo-deletion popconfirm.
+  function findDeleteMemberPopconfirm(wrapper, realName) {
+    return wrapper
+      .findAllComponents({ name: 'ElPopconfirm' })
+      .find((c) => c.props('title') === `確定要刪除「${realName}」嗎？`)
+  }
 
   it('confirming delete calls membersApi.remove and re-fetches', async () => {
     const wrapper = await mountAsAdmin()
@@ -197,14 +311,9 @@ describe('Members.vue', () => {
       sampleMembers.filter((m) => m.id !== 1),
     )
 
-    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
-    await flushPromises()
-
-    const confirmBtn = Array.from(
-      wrapper.element.querySelectorAll('.el-popconfirm__action button'),
-    ).find((b) => b.textContent.trim() === '刪除')
-    expect(confirmBtn).toBeDefined()
-    confirmBtn.click()
+    const popconfirm = findDeleteMemberPopconfirm(wrapper, 'Alice')
+    expect(popconfirm).toBeDefined()
+    popconfirm.vm.$emit('confirm')
     await flushPromises()
 
     expect(remove).toHaveBeenCalledWith(1)
@@ -215,13 +324,9 @@ describe('Members.vue', () => {
     const wrapper = await mountAsAdmin()
     const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
 
-    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
-    await flushPromises()
-
-    const cancelBtn = Array.from(
-      wrapper.element.querySelectorAll('.el-popconfirm__action button'),
-    ).find((b) => b.textContent.trim() === '取消')
-    cancelBtn?.click()
+    const popconfirm = findDeleteMemberPopconfirm(wrapper, 'Alice')
+    expect(popconfirm).toBeDefined()
+    popconfirm.vm.$emit('cancel')
     await flushPromises()
 
     expect(remove).not.toHaveBeenCalled()

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   ElButton,
+  ElIcon,
   ElMessage,
   ElPopconfirm,
   ElTable,
@@ -9,9 +10,13 @@ import {
   ElTooltip,
 } from 'element-plus'
 import {
+  Calendar,
   Document,
+  Grid,
+  Menu,
   Plus,
   Refresh,
+  School,
   UserFilled,
 } from '@element-plus/icons-vue'
 
@@ -32,6 +37,46 @@ const editingMember = ref(null)
 const resumeOpen = ref(false)
 const resumeMember = ref(null)
 
+// ---------- View mode ----------
+// Persisted to localStorage so a user's choice (cards vs. spreadsheet) sticks
+// across sessions. Reads default to 'grid'.
+const VIEW_KEY = 'pyweb.members.viewMode'
+function readInitialViewMode() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+const viewMode = ref(readInitialViewMode())
+function setViewMode(m) {
+  viewMode.value = m
+  try {
+    localStorage.setItem(VIEW_KEY, m)
+  } catch {
+    /* swallow — quota / private mode */
+  }
+}
+
+// ---------- Sort (drives the grid; el-table has its own header sort) ----------
+const SORT_OPTIONS = [
+  { key: 'joined_at', label: '入群時間' },
+  { key: 'graduation_year', label: '畢業年份' },
+  { key: 'real_name', label: '本名' },
+  { key: 'current_position', label: '職位' },
+]
+const sortKey = ref('joined_at')
+const sortOrder = ref('asc')
+
+function toggleSort(key) {
+  if (sortKey.value === key) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortOrder.value = 'asc'
+  }
+}
+
 // Sort orders are restricted to two states so a click cycles asc → desc →
 // asc instead of the el-table default asc → desc → none.
 const SORT_ORDERS = ['ascending', 'descending']
@@ -40,6 +85,23 @@ const SORT_ORDERS = ['ascending', 'descending']
 // gives the right ordering for Chinese / mixed CJK strings.
 const stringSort = (key) => (a, b) =>
   String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
+
+const sortedMembers = computed(() => {
+  const arr = [...members.value]
+  const k = sortKey.value
+  const dir = sortOrder.value === 'asc' ? 1 : -1
+  arr.sort((a, b) => {
+    const av = a[k]
+    const bv = b[k]
+    if (typeof av === 'number' && typeof bv === 'number') {
+      return (av - bv) * dir
+    }
+    return String(av ?? '').localeCompare(String(bv ?? ''), 'zh-Hant') * dir
+  })
+  return arr
+})
+
+const memberCount = computed(() => members.value.length)
 
 async function loadMembers() {
   loading.value = true
@@ -105,8 +167,6 @@ function formatDate(iso) {
   })
 }
 
-const memberCount = computed(() => members.value.length)
-
 onMounted(loadMembers)
 </script>
 
@@ -123,10 +183,44 @@ onMounted(loadMembers)
             {{ memberCount }} 位
           </span>
         </div>
-        <p class="subtitle">點欄位標題可切換排序方向</p>
+        <p class="subtitle">
+          {{ viewMode === 'grid' ? '點上方排序按鈕切換排序方向' : '點欄位標題可切換排序方向' }}
+        </p>
       </div>
+
       <div class="actions">
-        <el-button :icon="Refresh" @click="loadMembers">重新整理</el-button>
+        <div class="view-toggle" role="tablist" aria-label="檢視模式">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="viewMode === 'grid'"
+            :class="['view-btn', { 'is-active': viewMode === 'grid' }]"
+            data-test="view-grid"
+            title="卡片檢視"
+            @click="setViewMode('grid')"
+          >
+            <el-icon :size="16"><Grid /></el-icon>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="viewMode === 'list'"
+            :class="['view-btn', { 'is-active': viewMode === 'list' }]"
+            data-test="view-list"
+            title="列表檢視"
+            @click="setViewMode('list')"
+          >
+            <el-icon :size="16"><Menu /></el-icon>
+          </button>
+        </div>
+
+        <el-button
+          :icon="Refresh"
+          data-test="refresh-button"
+          @click="loadMembers"
+        >
+          重新整理
+        </el-button>
         <el-button
           v-if="auth.isAdmin"
           type="primary"
@@ -139,7 +233,128 @@ onMounted(loadMembers)
       </div>
     </header>
 
+    <!-- Sort pills (grid mode only — table has its own column-click sort). -->
+    <div v-if="viewMode === 'grid'" class="sort-row">
+      <span class="sort-label">排序</span>
+      <button
+        v-for="opt in SORT_OPTIONS"
+        :key="opt.key"
+        type="button"
+        :class="['sort-pill', { 'is-active': sortKey === opt.key }]"
+        :data-test="`sort-${opt.key}`"
+        @click="toggleSort(opt.key)"
+      >
+        {{ opt.label }}
+        <span v-if="sortKey === opt.key" class="sort-arrow" aria-hidden="true">
+          {{ sortOrder === 'asc' ? '↑' : '↓' }}
+        </span>
+      </button>
+    </div>
+
+    <!-- ---------- GRID VIEW ---------- -->
+    <div v-if="viewMode === 'grid'" v-loading="loading" class="grid-stage">
+      <div v-if="sortedMembers.length > 0" class="member-grid">
+        <article
+          v-for="m in sortedMembers"
+          :key="m.id"
+          class="member-card"
+          data-test="member-card"
+        >
+          <MemberPhotoCell
+            :member="m"
+            variant="card"
+            @changed="loadMembers"
+          />
+
+          <div class="card-body">
+            <h3 class="card-name">{{ m.real_name }}</h3>
+            <p class="card-position">{{ m.current_position }}</p>
+
+            <div class="card-meta">
+              <span class="card-year">
+                <el-icon :size="13"><School /></el-icon>
+                {{ m.graduation_year }} 級
+              </span>
+              <span class="card-join">
+                <el-icon :size="13"><Calendar /></el-icon>
+                {{ formatDate(m.joined_at) }}
+              </span>
+            </div>
+
+            <div class="card-actions">
+              <el-tooltip
+                v-if="!hasAnyResume(m)"
+                content="此成員尚未提供履歷"
+                placement="top"
+              >
+                <el-button size="small" :icon="Document" disabled>履歷</el-button>
+              </el-tooltip>
+              <el-button
+                v-else
+                size="small"
+                type="primary"
+                plain
+                :icon="Document"
+                data-test="view-resume-button"
+                @click="viewResume(m)"
+              >
+                履歷
+              </el-button>
+
+              <span v-if="auth.isAdmin" class="card-admin-actions">
+                <el-button
+                  size="small"
+                  plain
+                  data-test="edit-button"
+                  @click="openEdit(m)"
+                >
+                  編輯
+                </el-button>
+                <el-popconfirm
+                  :title="`確定要刪除「${m.real_name}」嗎？`"
+                  confirm-button-text="刪除"
+                  cancel-button-text="取消"
+                  confirm-button-type="danger"
+                  width="240"
+                  :teleported="false"
+                  @confirm="deleteMember(m)"
+                >
+                  <template #reference>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      plain
+                      data-test="delete-button"
+                    >
+                      刪除
+                    </el-button>
+                  </template>
+                </el-popconfirm>
+              </span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div v-else-if="!loading" class="empty-state" data-test="empty-state">
+        <div class="empty-icon" aria-hidden="true">
+          <el-icon :size="32"><UserFilled /></el-icon>
+        </div>
+        <p class="empty-text">尚無成員資料</p>
+        <el-button
+          v-if="auth.isAdmin"
+          type="primary"
+          :icon="Plus"
+          @click="openCreate"
+        >
+          新增第一位成員
+        </el-button>
+      </div>
+    </div>
+
+    <!-- ---------- LIST (TABLE) VIEW ---------- -->
     <el-table
+      v-if="viewMode === 'list'"
       v-loading="loading"
       :data="members"
       class="members-table"
@@ -260,6 +475,7 @@ onMounted(loadMembers)
   gap: var(--sp-lg);
 }
 
+/* ---------- Page header ---------- */
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -320,9 +536,210 @@ onMounted(loadMembers)
 .actions {
   display: flex;
   gap: var(--sp-sm);
+  align-items: center;
   flex-wrap: wrap;
 }
 
+/* ---------- View toggle (segmented) ---------- */
+.view-toggle {
+  display: inline-flex;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+}
+
+.view-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--ink-500);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.view-btn:hover {
+  color: var(--ink-700);
+}
+
+.view-btn.is-active {
+  background: #ffffff;
+  color: var(--brand-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Sort pills ---------- */
+.sort-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sort-label {
+  font-size: 12px;
+  color: var(--ink-500);
+  margin-right: 4px;
+  letter-spacing: 0.04em;
+}
+
+.sort-pill {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  color: var(--ink-700);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.sort-pill:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  color: var(--brand-primary);
+}
+
+.sort-pill.is-active {
+  background: var(--brand-primary);
+  color: #ffffff;
+  border-color: var(--brand-primary);
+}
+
+.sort-arrow {
+  font-size: 11px;
+}
+
+/* ---------- Grid view ---------- */
+.grid-stage {
+  min-height: 200px;
+}
+
+.member-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-md);
+}
+
+.member-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.member-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.card-body {
+  padding: var(--sp-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+  letter-spacing: -0.005em;
+}
+
+.card-position {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-500);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: var(--sp-sm);
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.card-year,
+.card-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.card-year {
+  color: var(--brand-primary);
+  font-weight: 500;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-sm);
+  margin-top: 6px;
+}
+
+.card-admin-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* ---------- Empty state ---------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-md);
+  padding: 64px 24px;
+  background: #ffffff;
+  border: 1px dashed rgba(15, 23, 42, 0.12);
+  border-radius: var(--radius-lg);
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--brand-primary);
+}
+
+.empty-text {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: 14px;
+}
+
+/* ---------- Table view (kept; commit 3 will restyle further) ---------- */
 .members-table {
   background: #ffffff;
   border-radius: var(--radius-lg);
@@ -347,8 +764,6 @@ onMounted(loadMembers)
     overflow-x: auto;
   }
 
-  /* Force the underlying table to keep its design width so columns don't
-     squeeze into unreadable widths. */
   .members-table :deep(.el-table__body),
   .members-table :deep(.el-table__header) {
     min-width: 860px;
@@ -358,6 +773,15 @@ onMounted(loadMembers)
   .actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .member-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--sp-sm);
+  }
+
+  .card-body {
+    padding: var(--sp-sm) var(--sp-md);
   }
 }
 </style>

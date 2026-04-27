@@ -9,6 +9,13 @@ import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
   member: { type: Object, required: true },
+  // 'thumb' = 48px square (table cell). 'card' = fills its parent (1:1
+  // aspect) with overlay admin actions in the top-right corner.
+  variant: {
+    type: String,
+    default: 'thumb',
+    validator: (v) => ['thumb', 'card'].includes(v),
+  },
 })
 
 const emit = defineEmits(['changed'])
@@ -75,7 +82,7 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
 </script>
 
 <template>
-  <div class="photo-cell">
+  <div :class="['photo-cell', `photo-cell--${variant}`]">
     <el-image
       v-if="member.has_photo"
       :src="photoSrc()"
@@ -90,11 +97,11 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
     />
     <el-avatar
       v-else
-      :size="48"
+      :size="variant === 'card' ? 120 : 48"
       shape="square"
       class="avatar"
     >
-      <el-icon :size="24"><UserFilled /></el-icon>
+      <el-icon :size="variant === 'card' ? 48 : 24"><UserFilled /></el-icon>
     </el-avatar>
 
     <div v-if="auth.isAdmin" class="photo-actions">
@@ -170,5 +177,62 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* ---------- card variant: 1:1 photo at the top of a member card with
+   admin actions floating in the top-right corner. ---------- */
+.photo-cell--card {
+  position: relative;
+  width: 100%;
+  gap: 0;
+}
+
+.photo-cell--card .avatar {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(135deg, #eef2ff, #f3e8ff);
+  color: var(--brand-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-cell--card :deep(.el-avatar) {
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 48px;
+}
+
+.photo-cell--card :deep(.el-image) {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.photo-cell--card .photo-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.photo-cell--card:hover .photo-actions,
+.photo-cell--card:focus-within .photo-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Frosted glass background on the floating buttons so they read against
+   any photo color. */
+.photo-cell--card .photo-actions :deep(.el-button) {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
 }
 </style>
