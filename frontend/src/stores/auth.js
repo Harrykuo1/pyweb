@@ -49,6 +49,20 @@ export const useAuthStore = defineStore('auth', () => {
     viewAsViewer.value = !!flag
   }
 
+  async function updateUsername(role, username) {
+    const updated = await authApi.updateUsername(role, username)
+    // If the admin renamed themselves, reflect it in the current session
+    // so the navbar shows the new name without a re-login.
+    if (user.value && updated.id === user.value.id) {
+      user.value = { ...user.value, username: updated.username }
+    }
+    return updated
+  }
+
+  async function updatePassword(role, currentPassword, newPassword) {
+    await authApi.updatePassword(role, currentPassword, newPassword)
+  }
+
   return {
     user,
     viewAsViewer,
@@ -61,5 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     fetchMe,
     setViewAsViewer,
+    updateUsername,
+    updatePassword,
   }
 })

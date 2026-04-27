@@ -12,4 +12,20 @@ export const authApi = {
     const { data } = await client.get('/auth/me')
     return data
   },
+  async listUsers() {
+    const { data } = await client.get('/auth/users')
+    return data
+  },
+  async updateUsername(role, username) {
+    const { data } = await client.patch(`/auth/users/${role}/username`, {
+      username,
+    })
+    return data
+  },
+  async updatePassword(role, currentPassword, newPassword) {
+    await client.patch(`/auth/users/${role}/password`, {
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+  },
 }

@@ -49,6 +49,48 @@ describe('authApi.getMe', () => {
   })
 })
 
+describe('authApi.listUsers', () => {
+  it('GETs /auth/users and returns the array', async () => {
+    const fakeUsers = [
+      { id: 1, username: 'admin', role: 'admin' },
+      { id: 2, username: 'viewer', role: 'viewer' },
+    ]
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: fakeUsers })
+
+    const result = await authApi.listUsers()
+
+    expect(get).toHaveBeenCalledWith('/auth/users')
+    expect(result).toEqual(fakeUsers)
+  })
+})
+
+describe('authApi.updateUsername', () => {
+  it('PATCHes /auth/users/{role}/username and returns the updated user', async () => {
+    const updated = { id: 2, username: 'watcher', role: 'viewer' }
+    const patch = vi.spyOn(client, 'patch').mockResolvedValue({ data: updated })
+
+    const result = await authApi.updateUsername('viewer', 'watcher')
+
+    expect(patch).toHaveBeenCalledWith('/auth/users/viewer/username', {
+      username: 'watcher',
+    })
+    expect(result).toEqual(updated)
+  })
+})
+
+describe('authApi.updatePassword', () => {
+  it('PATCHes /auth/users/{role}/password with both fields', async () => {
+    const patch = vi.spyOn(client, 'patch').mockResolvedValue({ data: null })
+
+    await authApi.updatePassword('admin', 'old', 'new')
+
+    expect(patch).toHaveBeenCalledWith('/auth/users/admin/password', {
+      current_password: 'old',
+      new_password: 'new',
+    })
+  })
+})
+
 describe('axios client', () => {
   it('uses /api baseURL and sends credentials', () => {
     expect(client.defaults.baseURL).toBe('/api')

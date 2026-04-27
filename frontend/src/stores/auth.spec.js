@@ -169,4 +169,56 @@ describe('useAuthStore', () => {
 
     expect(store.viewAsViewer).toBe(false)
   })
+
+  // ---------- updateUsername / updatePassword ----------
+
+  it('updateUsername calls api and refreshes own user when self renamed', async () => {
+    const store = useAuthStore()
+    store.user = { id: 1, username: 'admin', role: 'admin' }
+
+    vi.spyOn(authApi, 'updateUsername').mockResolvedValue({
+      id: 1,
+      username: 'boss',
+      role: 'admin',
+    })
+
+    const result = await store.updateUsername('admin', 'boss')
+
+    expect(authApi.updateUsername).toHaveBeenCalledWith('admin', 'boss')
+    expect(result.username).toBe('boss')
+    expect(store.user.username).toBe('boss')
+  })
+
+  it('updateUsername does not change current user when renaming the other account', async () => {
+    const store = useAuthStore()
+    store.user = { id: 1, username: 'admin', role: 'admin' }
+
+    vi.spyOn(authApi, 'updateUsername').mockResolvedValue({
+      id: 2,
+      username: 'watcher',
+      role: 'viewer',
+    })
+
+    await store.updateUsername('viewer', 'watcher')
+
+    expect(store.user.username).toBe('admin')
+  })
+
+  it('updatePassword forwards to api and resolves', async () => {
+    const spy = vi.spyOn(authApi, 'updatePassword').mockResolvedValue()
+
+    const store = useAuthStore()
+    await store.updatePassword('viewer', 'old', 'new')
+
+    expect(spy).toHaveBeenCalledWith('viewer', 'old', 'new')
+  })
+
+  it('updatePassword rethrows api errors', async () => {
+    vi.spyOn(authApi, 'updatePassword').mockRejectedValue(
+      Object.assign(new Error('409'), { response: { status: 409 } }),
+    )
+
+    const store = useAuthStore()
+    await expect(store.updatePassword('viewer', 'a', 'b')).rejects.toThrow()
+  })
 })
