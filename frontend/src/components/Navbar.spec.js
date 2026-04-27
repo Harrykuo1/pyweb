@@ -28,6 +28,11 @@ const stubs = {
     props: ['to'],
     template: '<a :href="to"><slot /></a>',
   },
+  AccountSettingsDialog: {
+    props: ['modelValue'],
+    template:
+      '<div data-test="account-dialog-stub" :data-open="String(modelValue)" />',
+  },
 }
 
 beforeEach(() => {
@@ -125,5 +130,44 @@ describe('Navbar.vue', () => {
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(false)
+  })
+
+  it('admin sees the account-settings button and viewer does not', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const adminWrapper = mount(Navbar, { global: { stubs } })
+    expect(
+      adminWrapper.find('[data-test="account-settings"]').exists(),
+    ).toBe(true)
+
+    setActivePinia(createPinia())
+    const auth2 = useAuthStore()
+    auth2.user = { id: 2, username: 'bob', role: 'viewer' }
+    const viewerWrapper = mount(Navbar, { global: { stubs } })
+    expect(
+      viewerWrapper.find('[data-test="account-settings"]').exists(),
+    ).toBe(false)
+  })
+
+  it('clicking account-settings opens the dialog', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const stub = wrapper.find('[data-test="account-dialog-stub"]')
+    expect(stub.attributes('data-open')).toBe('false')
+
+    await wrapper.find('[data-test="account-settings"]').trigger('click')
+    expect(stub.attributes('data-open')).toBe('true')
+  })
+
+  it('account dialog is not rendered for viewer', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 2, username: 'bob', role: 'viewer' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(
+      wrapper.find('[data-test="account-dialog-stub"]').exists(),
+    ).toBe(false)
   })
 })

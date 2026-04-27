@@ -1,8 +1,9 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElMessage, ElSwitch, ElTag, ElTooltip } from 'element-plus'
 
+import AccountSettingsDialog from './AccountSettingsDialog.vue'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -14,6 +15,8 @@ const previewAsViewer = computed({
   get: () => auth.viewAsViewer,
   set: (v) => auth.setViewAsViewer(v),
 })
+
+const accountDialogVisible = ref(false)
 
 async function handleLogout() {
   try {
@@ -67,9 +70,22 @@ async function handleLogout() {
             預覽中
           </span>
         </span>
+        <el-button
+          v-if="auth.isActuallyAdmin"
+          text
+          data-test="account-settings"
+          @click="accountDialogVisible = true"
+        >
+          帳號設定
+        </el-button>
         <el-button text @click="handleLogout">登出</el-button>
       </div>
     </div>
+
+    <AccountSettingsDialog
+      v-if="auth.isActuallyAdmin"
+      v-model="accountDialogVisible"
+    />
   </header>
 </template>
 
