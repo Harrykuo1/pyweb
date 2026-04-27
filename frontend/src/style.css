@@ -118,6 +118,20 @@ h4 {
   border-radius: var(--radius-sm);
 }
 
+/* Spinning icon for ElMessage(... customClass: 'message-uploading' ...).
+   ElMessage teleports into <body> so its custom-class styling has to
+   live in a non-scoped stylesheet. */
+.message-uploading .el-message__icon {
+  animation: pyweb-spin 1.1s linear infinite;
+  color: var(--brand-primary);
+}
+
+@keyframes pyweb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Phone-class breakpoint. Anything narrower than this gets the compact
    layout overrides defined alongside each component. */
 @media (max-width: 640px) {

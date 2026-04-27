@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { markRaw, ref } from 'vue'
 import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElUpload } from 'element-plus'
 import { Camera, Delete, Loading, UserFilled } from '@element-plus/icons-vue'
 
@@ -56,12 +56,24 @@ function handlePicked(uploadFile) {
 
 async function handleCropped(croppedFile) {
   uploading.value = true
+  // Persistent toast at the top so the user can see something is
+  // happening even if their viewport doesn't include the photo cell.
+  // The .message-uploading custom class spins the icon (defined in
+  // global style.css since ElMessage teleports out of the component).
+  const toast = ElMessage({
+    message: '上傳照片中…',
+    icon: markRaw(Loading),
+    duration: 0,
+    customClass: 'message-uploading',
+  })
   try {
     await membersApi.uploadPhoto(props.member.id, croppedFile)
     cacheBuster.value = Date.now()
+    toast.close()
     ElMessage.success('已上傳照片')
     emit('changed')
   } catch (err) {
+    toast.close()
     if (err?.response?.status === 413) ElMessage.error('檔案過大')
     else if (err?.response?.status === 415) ElMessage.error('格式不支援')
     else ElMessage.error('上傳失敗')

@@ -8,9 +8,17 @@ import MemberPhotoCell from './MemberPhotoCell.vue'
 
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
+  // The component now invokes ElMessage as a function for the persistent
+  // "上傳中…" toast; mirror Element Plus's real shape (callable, plus
+  // .success / .error / .info / .warning helpers).
+  const message = vi.fn(() => ({ close: vi.fn() }))
+  message.success = vi.fn()
+  message.error = vi.fn()
+  message.info = vi.fn()
+  message.warning = vi.fn()
   return {
     ...actual,
-    ElMessage: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+    ElMessage: message,
   }
 })
 

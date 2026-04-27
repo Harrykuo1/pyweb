@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, markRaw, ref, watch } from 'vue'
 import {
   ElButton,
   ElDialog,
@@ -8,7 +8,7 @@ import {
   ElSegmented,
   ElUpload,
 } from 'element-plus'
-import { Delete, Upload } from '@element-plus/icons-vue'
+import { Delete, Loading, Upload } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
@@ -77,13 +77,21 @@ async function handleUploadPdf(uploadFile) {
     return
   }
   uploadingPdf.value = true
+  const toast = ElMessage({
+    message: '上傳履歷 PDF 中…',
+    icon: markRaw(Loading),
+    duration: 0,
+    customClass: 'message-uploading',
+  })
   try {
     await membersApi.uploadResumePdf(props.member.id, file)
     cacheBuster.value = Date.now()
+    toast.close()
     ElMessage.success('已上傳履歷 PDF')
     tab.value = 'pdf'
     emit('changed')
   } catch (err) {
+    toast.close()
     if (err?.response?.status === 413) ElMessage.error('檔案過大')
     else if (err?.response?.status === 415) ElMessage.error('格式不支援')
     else ElMessage.error('上傳失敗')
