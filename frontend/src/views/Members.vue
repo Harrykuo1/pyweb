@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   ElButton,
   ElMessage,
@@ -8,7 +8,12 @@ import {
   ElTableColumn,
   ElTooltip,
 } from 'element-plus'
-import { Document, Plus, Refresh } from '@element-plus/icons-vue'
+import {
+  Document,
+  Plus,
+  Refresh,
+  UserFilled,
+} from '@element-plus/icons-vue'
 
 import MemberFormDialog from '../components/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/MemberPhotoCell.vue'
@@ -100,14 +105,24 @@ function formatDate(iso) {
   })
 }
 
+const memberCount = computed(() => members.value.length)
+
 onMounted(loadMembers)
 </script>
 
 <template>
   <div class="members-page">
     <header class="page-header">
-      <div>
-        <h1 class="title">成員介紹</h1>
+      <div class="header-text">
+        <div class="title-row">
+          <span class="title-icon" aria-hidden="true">
+            <el-icon :size="20"><UserFilled /></el-icon>
+          </span>
+          <h1 class="title">成員</h1>
+          <span class="count-chip" aria-label="成員人數">
+            {{ memberCount }} 位
+          </span>
+        </div>
         <p class="subtitle">點欄位標題可切換排序方向</p>
       </div>
       <div class="actions">
@@ -242,42 +257,85 @@ onMounted(loadMembers)
 .members-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--sp-lg);
 }
 
 .page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--sp-md);
   flex-wrap: wrap;
+}
+
+.header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.28);
 }
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink-900);
+}
+
+.count-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .subtitle {
-  margin: 4px 0 0;
-  color: #909399;
+  margin: 6px 0 0;
+  color: var(--ink-500);
   font-size: 13px;
 }
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-sm);
   flex-wrap: wrap;
 }
 
 .members-table {
   background: #ffffff;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 @media (max-width: 640px) {
   .title {
-    font-size: 18px;
+    font-size: 20px;
+  }
+
+  .title-icon {
+    width: 32px;
+    height: 32px;
   }
 
   /* Table columns sum to ~860 px which is wider than a phone viewport;
