@@ -5,9 +5,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
+from app.core.security import verify_password
 from app.database import get_db
-from app.models import Member
-from app.schemas import MemberCreate, MemberResponse, MemberUpdate
+from app.models import Member, User
+from app.schemas import (
+    MemberCreate,
+    MemberResponse,
+    MemberUpdate,
+    PasswordConfirmRequest,
+)
 
 router = APIRouter(prefix="/api/members", tags=["members"])
 
@@ -23,6 +29,15 @@ def _get_member_or_404(db: Session, member_id: int) -> Member:
     if member is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
     return member
+
+
+def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
+    """Re-authenticate the admin before a destructive action."""
+    if not verify_password(payload.password, admin.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password is incorrect",
+        )
 
 
 @router.get("", response_model=list[MemberResponse])
@@ -81,9 +96,11 @@ def update_member(
 @router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_member(
     member_id: int,
+    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
-    _: object = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ) -> None:
+    _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
     db.delete(member)
     db.commit()
@@ -137,9 +154,11 @@ async def upload_member_photo(
 @router.delete("/{member_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
 def delete_member_photo(
     member_id: int,
+    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
-    _: object = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ) -> None:
+    _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
     member.photo = None
     member.photo_content_type = None

@@ -226,23 +226,53 @@ def test_delete_member_admin(client_factory, db_session):
     _seed_members(db_session, count=1)
     login_as("admin")
 
-    r = client.delete("/api/members/1")
+    r = client.request(
+        "DELETE", "/api/members/1", json={"password": "admin-pw"},
+    )
     assert r.status_code == 204
 
     r2 = client.get("/api/members/1")
     assert r2.status_code == 404
 
 
+def test_delete_member_wrong_password_401(client_factory, db_session):
+    client, login_as = client_factory
+    _seed_members(db_session, count=1)
+    login_as("admin")
+
+    r = client.request(
+        "DELETE", "/api/members/1", json={"password": "not-the-admin-pw"},
+    )
+    assert r.status_code == 401
+
+    # Member must NOT be deleted when the password check fails.
+    r2 = client.get("/api/members/1")
+    assert r2.status_code == 200
+
+
+def test_delete_member_missing_password_422(client_factory, db_session):
+    client, login_as = client_factory
+    _seed_members(db_session, count=1)
+    login_as("admin")
+
+    r = client.delete("/api/members/1")
+    assert r.status_code == 422
+
+
 def test_delete_member_viewer_403(client_factory, db_session):
     client, login_as = client_factory
     _seed_members(db_session, count=1)
     login_as("viewer")
-    r = client.delete("/api/members/1")
+    r = client.request(
+        "DELETE", "/api/members/1", json={"password": "viewer-pw"},
+    )
     assert r.status_code == 403
 
 
 def test_delete_member_404(client_factory):
     client, login_as = client_factory
     login_as("admin")
-    r = client.delete("/api/members/9999")
+    r = client.request(
+        "DELETE", "/api/members/9999", json={"password": "admin-pw"},
+    )
     assert r.status_code == 404

@@ -24,3 +24,11 @@ class UpdatePasswordRequest(BaseModel):
     # forgotten unlocked session cannot silently rotate credentials.
     current_password: str = Field(min_length=1, max_length=255)
     new_password: str = Field(min_length=1, max_length=255)
+
+
+class PasswordConfirmRequest(BaseModel):
+    # Re-authenticates the admin in front of a destructive action (delete
+    # member, delete photo). Same shape as UpdatePasswordRequest's
+    # current_password but kept as its own schema so the field name reads
+    # right at the call site.
+    password: str = Field(min_length=1, max_length=255)
