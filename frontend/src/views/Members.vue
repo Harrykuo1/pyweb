@@ -5,7 +5,6 @@ import {
   ElIcon,
   ElInput,
   ElMessage,
-  ElPopconfirm,
   ElTable,
   ElTableColumn,
   ElTooltip,
@@ -24,6 +23,7 @@ import {
   UserFilled,
 } from '@element-plus/icons-vue'
 
+import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import MemberFormDialog from '../components/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/MemberPhotoCell.vue'
 import ResumeViewerDialog from '../components/ResumeViewerDialog.vue'
@@ -151,17 +151,36 @@ function openEdit(member) {
   dialogOpen.value = true
 }
 
-async function deleteMember(member) {
+// ---------- Delete with admin-password confirmation ----------
+const deleteDialogOpen = ref(false)
+const deleteTarget = ref(null)
+const deleteSubmitting = ref(false)
+const deleteError = ref('')
+
+function askDeleteMember(member) {
+  deleteTarget.value = member
+  deleteError.value = ''
+  deleteDialogOpen.value = true
+}
+
+async function handleDeleteConfirm(password) {
+  const target = deleteTarget.value
+  if (!target) return
+  deleteSubmitting.value = true
+  deleteError.value = ''
   try {
-    await membersApi.remove(member.id)
-    ElMessage.success(`已刪除「${member.real_name}」`)
+    await membersApi.remove(target.id, password)
+    ElMessage.success(`已刪除「${target.real_name}」`)
+    deleteDialogOpen.value = false
+    deleteTarget.value = null
     loadMembers()
   } catch (err) {
-    if (err?.response?.status === 403) {
-      ElMessage.error('權限不足')
-    } else {
-      ElMessage.error('刪除失敗，請稍後再試')
-    }
+    const status = err?.response?.status
+    if (status === 401) deleteError.value = '密碼錯誤'
+    else if (status === 403) deleteError.value = '權限不足'
+    else deleteError.value = '刪除失敗，請稍後再試'
+  } finally {
+    deleteSubmitting.value = false
   }
 }
 
@@ -377,26 +396,15 @@ onMounted(loadMembers)
                 >
                   編輯
                 </el-button>
-                <el-popconfirm
-                  :title="`確定要刪除「${m.real_name}」嗎？`"
-                  confirm-button-text="刪除"
-                  cancel-button-text="取消"
-                  confirm-button-type="danger"
-                  width="240"
-                  :teleported="false"
-                  @confirm="deleteMember(m)"
+                <el-button
+                  size="small"
+                  type="danger"
+                  plain
+                  data-test="delete-button"
+                  @click="askDeleteMember(m)"
                 >
-                  <template #reference>
-                    <el-button
-                      size="small"
-                      type="danger"
-                      plain
-                      data-test="delete-button"
-                    >
-                      刪除
-                    </el-button>
-                  </template>
-                </el-popconfirm>
+                  刪除
+                </el-button>
               </span>
             </div>
           </div>
@@ -550,28 +558,17 @@ onMounted(loadMembers)
               @click="openEdit(row)"
             />
           </el-tooltip>
-          <el-popconfirm
-            :title="`確定要刪除「${row.real_name}」嗎？`"
-            confirm-button-text="刪除"
-            cancel-button-text="取消"
-            confirm-button-type="danger"
-            width="240"
-            :teleported="false"
-            @confirm="deleteMember(row)"
-          >
-            <template #reference>
-              <el-button
-                size="small"
-                type="danger"
-                plain
-                circle
-                :icon="Delete"
-                data-test="delete-button"
-                aria-label="刪除"
-                title="刪除"
-              />
-            </template>
-          </el-popconfirm>
+          <el-button
+            size="small"
+            type="danger"
+            plain
+            circle
+            :icon="Delete"
+            data-test="delete-button"
+            aria-label="刪除"
+            title="刪除"
+            @click="askDeleteMember(row)"
+          />
         </template>
       </el-table-column>
     </el-table>
@@ -586,6 +583,16 @@ onMounted(loadMembers)
       v-model="resumeOpen"
       :member="resumeMember"
       @changed="reloadAndRebindResume"
+    />
+
+    <DeleteWithPasswordDialog
+      v-model="deleteDialogOpen"
+      title="刪除成員"
+      :item-name="deleteTarget?.real_name ?? ''"
+      warning="將永久刪除這位成員與其所有照片、履歷資料。此操作無法復原。"
+      :loading="deleteSubmitting"
+      :error-message="deleteError"
+      @confirm="handleDeleteConfirm"
     />
   </div>
 </template>

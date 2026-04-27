@@ -172,16 +172,51 @@ describe('MemberPhotoCell', () => {
     expect(wrapper.findComponent({ name: 'PhotoCropDialog' }).props('modelValue')).toBe(false)
   })
 
-  it('handleDelete (popconfirm @confirm target) calls deletePhoto and emits changed', async () => {
+  it('handleDelete calls deletePhoto with password and emits changed', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
     const del = vi.spyOn(membersApi, 'deletePhoto').mockResolvedValue()
 
     const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
-    await wrapper.vm.handleDelete()
+    await wrapper.vm.handleDelete('admin-pw')
     await flushPromises()
 
-    expect(del).toHaveBeenCalledWith(1)
+    expect(del).toHaveBeenCalledWith(1, 'admin-pw')
     expect(wrapper.emitted('changed')).toBeTruthy()
+  })
+
+  it('clicking delete-photo opens DeleteWithPasswordDialog with the member name', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+
+    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
+    expect(dialog.props('modelValue')).toBe(false)
+
+    await wrapper.find('[data-test="delete-photo"]').trigger('click')
+    await flushPromises()
+
+    expect(dialog.props('modelValue')).toBe(true)
+    expect(dialog.props('itemName')).toBe('Alice')
+  })
+
+  it('handleDelete on 401 surfaces 密碼錯誤 via the dialog and does not emit changed', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'deletePhoto').mockRejectedValue(
+      Object.assign(new Error('401'), { response: { status: 401 } }),
+    )
+
+    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+    // Open the dialog first so its props reflect the error after submit.
+    wrapper.vm.askDelete()
+    await flushPromises()
+    await wrapper.vm.handleDelete('wrong-pw')
+    await flushPromises()
+
+    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
+    expect(dialog.props('errorMessage')).toBe('密碼錯誤')
+    expect(dialog.props('modelValue')).toBe(true)
+    expect(wrapper.emitted('changed')).toBeFalsy()
   })
 })

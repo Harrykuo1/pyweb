@@ -1,8 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElPopconfirm, ElUpload } from 'element-plus'
+import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElUpload } from 'element-plus'
 import { Camera, Delete, UserFilled } from '@element-plus/icons-vue'
 
+import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
 import PhotoCropDialog from './PhotoCropDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
@@ -67,18 +68,36 @@ async function handleCropped(croppedFile) {
   }
 }
 
-async function handleDelete() {
+// ---------- Delete photo with admin-password confirmation ----------
+const deleteDialogOpen = ref(false)
+const deleteSubmitting = ref(false)
+const deleteError = ref('')
+
+function askDelete() {
+  deleteError.value = ''
+  deleteDialogOpen.value = true
+}
+
+async function handleDelete(password) {
+  deleteSubmitting.value = true
+  deleteError.value = ''
   try {
-    await membersApi.deletePhoto(props.member.id)
+    await membersApi.deletePhoto(props.member.id, password)
     cacheBuster.value = Date.now()
     ElMessage.success('已移除照片')
+    deleteDialogOpen.value = false
     emit('changed')
   } catch (err) {
-    ElMessage.error('移除失敗')
+    const status = err?.response?.status
+    if (status === 401) deleteError.value = '密碼錯誤'
+    else if (status === 403) deleteError.value = '權限不足'
+    else deleteError.value = '移除失敗，請稍後再試'
+  } finally {
+    deleteSubmitting.value = false
   }
 }
 
-defineExpose({ handleDelete, handlePicked, handleCropped })
+defineExpose({ askDelete, handleDelete, handlePicked, handleCropped })
 </script>
 
 <template>
@@ -116,25 +135,28 @@ defineExpose({ handleDelete, handlePicked, handleCropped })
           {{ member.has_photo ? '更換' : '上傳' }}
         </el-button>
       </el-upload>
-      <el-popconfirm
+      <el-button
         v-if="member.has_photo"
-        title="確定要移除這張照片嗎？"
-        confirm-button-text="移除"
-        cancel-button-text="取消"
-        confirm-button-type="danger"
-        @confirm="handleDelete"
-      >
-        <template #reference>
-          <el-button
-            size="small"
-            type="danger"
-            plain
-            :icon="Delete"
-            data-test="delete-photo"
-          />
-        </template>
-      </el-popconfirm>
+        size="small"
+        type="danger"
+        plain
+        :icon="Delete"
+        data-test="delete-photo"
+        aria-label="移除照片"
+        title="移除照片"
+        @click="askDelete"
+      />
     </div>
+
+    <DeleteWithPasswordDialog
+      v-model="deleteDialogOpen"
+      title="移除照片"
+      :item-name="member.real_name"
+      warning="將永久移除這位成員的照片。此操作無法復原。"
+      :loading="deleteSubmitting"
+      :error-message="deleteError"
+      @confirm="handleDelete"
+    />
 
     <PhotoCropDialog
       v-model="cropOpen"

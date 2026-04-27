@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
+import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import Members from './Members.vue'
 
 vi.mock('element-plus', async (importOriginal) => {
@@ -321,43 +322,65 @@ describe('Members.vue', () => {
     expect(localStorage.getItem('pyweb.members.viewMode')).toBe('list')
   })
 
-  // ElPopconfirm's confirm/cancel buttons live inside a teleported popper
-  // and become flaky to drive through happy-dom once a previous test has
-  // mounted+unmounted in the same describe. Emit the events directly on
-  // the popconfirm component instead — that's the only seam our handler
-  // cares about. We pick the popconfirm by its 「確定要刪除」 title so we
-  // don't accidentally fire on the photo-deletion popconfirm.
-  function findDeleteMemberPopconfirm(wrapper, realName) {
-    return wrapper
-      .findAllComponents({ name: 'ElPopconfirm' })
-      .find((c) => c.props('title') === `確定要刪除「${realName}」嗎？`)
+  // The new delete flow: clicking delete-button opens
+  // DeleteWithPasswordDialog with the target member's name; the dialog's
+  // confirm event carries the typed password. We assert against parent
+  // state (the same refs the dialog binds to) because VTU's snapshot of
+  // the boolean modelValue prop reads stale once the parent updates the
+  // ref. The dialog's own UI behavior is covered in
+  // DeleteWithPasswordDialog.spec.js.
+  function findDeleteDialog(wrapper) {
+    return wrapper.findComponent(DeleteWithPasswordDialog)
   }
 
-  it('confirming delete calls membersApi.remove and re-fetches', async () => {
+  it('clicking delete-button opens the password dialog targeting that row', async () => {
+    const wrapper = await mountAsAdmin()
+    expect(wrapper.vm.deleteDialogOpen).toBe(false)
+
+    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.vm.deleteDialogOpen).toBe(true)
+    expect(wrapper.vm.deleteTarget?.real_name).toBe('Alice')
+    expect(findDeleteDialog(wrapper).exists()).toBe(true)
+  })
+
+  it('handleDeleteConfirm sends the typed password to the API and re-fetches', async () => {
     const wrapper = await mountAsAdmin()
     const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
     const list = vi.spyOn(membersApi, 'list').mockResolvedValue(
       sampleMembers.filter((m) => m.id !== 1),
     )
 
-    const popconfirm = findDeleteMemberPopconfirm(wrapper, 'Alice')
-    expect(popconfirm).toBeDefined()
-    popconfirm.vm.$emit('confirm')
+    // Open via the row's delete-button so deleteTarget is bound to Alice.
+    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
     await flushPromises()
 
-    expect(remove).toHaveBeenCalledWith(1)
+    // The dialog's confirm event reaches the parent through the template
+    // listener; under VTU we exercise the same parent function directly,
+    // since the dialog's own emit is covered in its component spec.
+    await wrapper.vm.handleDeleteConfirm('admin-pw')
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledWith(1, 'admin-pw')
     expect(list).toHaveBeenCalled()
+    expect(wrapper.vm.deleteDialogOpen).toBe(false)
+    expect(wrapper.vm.deleteTarget).toBeNull()
   })
 
-  it('cancelling delete does not call remove', async () => {
+  it('wrong password keeps the dialog open and sets deleteError to 密碼錯誤', async () => {
     const wrapper = await mountAsAdmin()
-    const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
+    vi.spyOn(membersApi, 'remove').mockRejectedValue(
+      Object.assign(new Error('401'), { response: { status: 401 } }),
+    )
 
-    const popconfirm = findDeleteMemberPopconfirm(wrapper, 'Alice')
-    expect(popconfirm).toBeDefined()
-    popconfirm.vm.$emit('cancel')
+    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
     await flushPromises()
 
-    expect(remove).not.toHaveBeenCalled()
+    await wrapper.vm.handleDeleteConfirm('wrong-pw')
+    await flushPromises()
+
+    expect(wrapper.vm.deleteDialogOpen).toBe(true)
+    expect(wrapper.vm.deleteError).toBe('密碼錯誤')
   })
 })
