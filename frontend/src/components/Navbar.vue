@@ -103,10 +103,11 @@ async function handleLogout() {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px;
-  height: 56px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   gap: 32px;
+  flex-wrap: wrap;
 }
 
 .brand {
@@ -121,6 +122,30 @@ async function handleLogout() {
   display: flex;
   gap: 24px;
   flex: 1;
+}
+
+@media (max-width: 640px) {
+  .navbar-inner {
+    padding: 8px 12px;
+    gap: 12px;
+  }
+
+  /* Push nav-links and the right-side block to a second row, sharing it. */
+  .nav-links {
+    order: 3;
+    flex-basis: 100%;
+    gap: 16px;
+  }
+
+  .navbar-right {
+    margin-left: auto;
+    gap: 8px;
+  }
+
+  /* Hide the verbose label of the preview switch; the toggle itself stays. */
+  .preview-label {
+    display: none;
+  }
 }
 
 .nav-link {
