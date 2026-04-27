@@ -11,7 +11,9 @@ import {
 } from 'element-plus'
 import {
   Calendar,
+  Delete,
   Document,
+  Edit,
   Grid,
   Menu,
   Plus,
@@ -465,16 +467,19 @@ onMounted(loadMembers)
           </el-button>
         </template>
       </el-table-column>
-      <el-table-column v-if="auth.isAdmin" label="操作" width="200" align="center">
+      <el-table-column v-if="auth.isAdmin" label="操作" width="120" align="center">
         <template #default="{ row }">
-          <el-button
-            size="small"
-            plain
-            data-test="edit-button"
-            @click="openEdit(row)"
-          >
-            編輯
-          </el-button>
+          <el-tooltip content="編輯" placement="top">
+            <el-button
+              size="small"
+              plain
+              circle
+              :icon="Edit"
+              data-test="edit-button"
+              aria-label="編輯"
+              @click="openEdit(row)"
+            />
+          </el-tooltip>
           <el-popconfirm
             :title="`確定要刪除「${row.real_name}」嗎？`"
             confirm-button-text="刪除"
@@ -489,10 +494,12 @@ onMounted(loadMembers)
                 size="small"
                 type="danger"
                 plain
+                circle
+                :icon="Delete"
                 data-test="delete-button"
-              >
-                刪除
-              </el-button>
+                aria-label="刪除"
+                title="刪除"
+              />
             </template>
           </el-popconfirm>
         </template>
