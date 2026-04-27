@@ -59,8 +59,9 @@ async function handleLogout() {
             {{ auth.isAdmin ? '管理員' : '檢視者' }}
           </el-tag>
           <span
-            v-if="auth.isViewingAsViewer"
+            v-if="auth.isActuallyAdmin"
             class="preview-badge"
+            :class="{ 'is-invisible': !auth.isViewingAsViewer }"
             data-test="preview-badge"
           >
             預覽中
@@ -161,5 +162,11 @@ async function handleLogout() {
   background: #fdf6ec;
   color: #e6a23c;
   border: 1px solid #f5dab1;
+}
+
+/* Reserve the badge's footprint when not previewing, so toggling preview
+   mode does not shift the switcher's position. */
+.preview-badge.is-invisible {
+  visibility: hidden;
 }
 </style>

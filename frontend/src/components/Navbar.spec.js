@@ -97,13 +97,33 @@ describe('Navbar.vue', () => {
     expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(false)
   })
 
-  it('admin in preview mode shows 檢視者 tag and 預覽中 badge', async () => {
+  it('admin not previewing has badge slot reserved but invisible', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const badge = wrapper.find('[data-test="preview-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.classes()).toContain('is-invisible')
+  })
+
+  it('admin in preview mode shows 檢視者 tag and visible 預覽中 badge', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     auth.setViewAsViewer(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
-    expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(true)
+    const badge = wrapper.find('[data-test="preview-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.classes()).not.toContain('is-invisible')
+  })
+
+  it('viewer never sees the preview badge slot', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 2, username: 'bob', role: 'viewer' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(false)
   })
 })
