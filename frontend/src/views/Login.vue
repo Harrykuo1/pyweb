@@ -11,6 +11,7 @@ import {
 } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 
+import { settingImageUrl } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import loginBg from '../assets/login-bg.jpg'
 
@@ -22,6 +23,15 @@ const formRef = ref(null)
 const form = reactive({ password: '' })
 const submitting = ref(false)
 const errorMessage = ref('')
+
+// Show the admin-uploaded logo if it exists; on 404 the <img> onerror fires
+// and we fall back to the Lock icon. The query string is just a per-load
+// cache-buster so admins testing rapid edits see fresh bytes.
+const logoUrl = ref(settingImageUrl('login_logo', Date.now()))
+const logoFailed = ref(false)
+function onLogoError() {
+  logoFailed.value = true
+}
 
 const rules = {
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }],
@@ -55,8 +65,16 @@ async function handleSubmit() {
     <div class="login-overlay" />
     <el-card class="login-card" shadow="always">
       <div class="login-header">
-        <div class="logo-circle">
-          <el-icon :size="28"><Lock /></el-icon>
+        <div class="logo-circle" data-test="logo-circle">
+          <img
+            v-if="!logoFailed"
+            :src="logoUrl"
+            alt="site logo"
+            class="logo-image"
+            data-test="logo-image"
+            @error="onLogoError"
+          />
+          <el-icon v-else :size="28" data-test="logo-fallback"><Lock /></el-icon>
         </div>
         <h2 class="title">pyweb 社群</h2>
         <p class="subtitle">請輸入密碼以繼續</p>
@@ -152,6 +170,13 @@ async function handleSubmit() {
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  overflow: hidden;
+}
+
+.logo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .title {

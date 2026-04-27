@@ -95,4 +95,22 @@ describe('Login.vue', () => {
     expect(page.attributes('style') ?? '').toContain('background-image')
     expect(page.attributes('style') ?? '').toContain('/test-bg.jpg')
   })
+
+  it('renders an <img> for the login_logo by default; Lock icon hidden', () => {
+    const wrapper = mount(Login)
+    const img = wrapper.find('[data-test="logo-image"]')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toMatch(/^\/api\/settings\/login_logo\/image\?v=/)
+    expect(wrapper.find('[data-test="logo-fallback"]').exists()).toBe(false)
+  })
+
+  it('falls back to Lock icon when the logo image errors out (no logo set)', async () => {
+    const wrapper = mount(Login)
+    const img = wrapper.find('[data-test="logo-image"]')
+    expect(img.exists()).toBe(true)
+    await img.trigger('error')
+
+    expect(wrapper.find('[data-test="logo-image"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="logo-fallback"]').exists()).toBe(true)
+  })
 })
