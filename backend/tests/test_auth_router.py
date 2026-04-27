@@ -109,3 +109,185 @@ def test_full_session_lifecycle(client):
     assert logout.status_code == 204
 
     assert client.get("/api/auth/me").status_code == 401
+
+
+# ---------- admin account management ----------
+
+
+def _login_admin(client):
+    r = client.post("/api/auth/login", json={"password": "admin-pw"})
+    assert r.status_code == 200
+
+
+def _login_viewer(client):
+    r = client.post("/api/auth/login", json={"password": "viewer-pw"})
+    assert r.status_code == 200
+
+
+def test_list_users_requires_login(client):
+    r = client.get("/api/auth/users")
+    assert r.status_code == 401
+
+
+def test_list_users_forbidden_for_viewer(client):
+    _login_viewer(client)
+    r = client.get("/api/auth/users")
+    assert r.status_code == 403
+
+
+def test_list_users_returns_both_accounts_for_admin(client):
+    _login_admin(client)
+    r = client.get("/api/auth/users")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 2
+    roles = {u["role"] for u in body}
+    assert roles == {"admin", "viewer"}
+    for u in body:
+        assert "password_hash" not in u
+
+
+def test_update_viewer_username_succeeds(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": "watcher"},
+    )
+
+    assert r.status_code == 200
+    assert r.json()["username"] == "watcher"
+    assert r.json()["role"] == "viewer"
+
+
+def test_update_admin_username_succeeds_and_me_reflects_it(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/admin/username",
+        json={"username": "boss"},
+    )
+    assert r.status_code == 200
+
+    me = client.get("/api/auth/me")
+    assert me.json()["username"] == "boss"
+
+
+def test_update_username_rejects_collision(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": "admin"},
+    )
+    assert r.status_code == 409
+
+
+def test_update_username_allows_same_value(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/admin/username",
+        json={"username": "admin"},
+    )
+    assert r.status_code == 200
+
+
+def test_update_username_rejects_empty(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": ""},
+    )
+    assert r.status_code == 422
+
+
+def test_update_username_forbidden_for_viewer(client):
+    _login_viewer(client)
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": "watcher"},
+    )
+    assert r.status_code == 403
+
+
+def test_update_username_unauthenticated(client):
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": "watcher"},
+    )
+    assert r.status_code == 401
+
+
+def test_update_password_succeeds_and_new_password_logs_in(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": "fresh-pw"},
+    )
+    assert r.status_code == 204
+
+    client.post("/api/auth/logout")
+
+    bad = client.post("/api/auth/login", json={"password": "viewer-pw"})
+    assert bad.status_code == 401
+
+    ok = client.post("/api/auth/login", json={"password": "fresh-pw"})
+    assert ok.status_code == 200
+    assert ok.json()["role"] == "viewer"
+
+
+def test_update_admin_password_then_relogin(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/admin/password",
+        json={"current_password": "admin-pw", "new_password": "rotated-pw"},
+    )
+    assert r.status_code == 204
+
+    client.post("/api/auth/logout")
+
+    ok = client.post("/api/auth/login", json={"password": "rotated-pw"})
+    assert ok.status_code == 200
+    assert ok.json()["role"] == "admin"
+
+
+def test_update_password_wrong_current_password(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "WRONG", "new_password": "fresh-pw"},
+    )
+    assert r.status_code == 401
+
+
+def test_update_password_collision_with_other_account(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": "admin-pw"},
+    )
+    assert r.status_code == 409
+
+
+def test_update_password_forbidden_for_viewer(client):
+    _login_viewer(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "viewer-pw", "new_password": "x"},
+    )
+    assert r.status_code == 403
+
+
+def test_update_password_unauthenticated(client):
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": "x"},
+    )
+    assert r.status_code == 401
+
+
+def test_update_password_rejects_empty_new_password(client):
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": ""},
+    )
+    assert r.status_code == 422
