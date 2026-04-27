@@ -120,7 +120,6 @@ defineExpose({ handleConfirm })
     title="裁切照片（1:1）"
     width="640"
     :close-on-click-modal="false"
-    :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
     @closed="disposeCropper"
   >
