@@ -739,10 +739,63 @@ onMounted(loadMembers)
   font-size: 14px;
 }
 
-/* ---------- Table view (kept; commit 3 will restyle further) ---------- */
+/* ---------- Table view ---------- */
 .members-table {
   background: #ffffff;
   border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-sm);
+
+  /* Drive Element Plus's table tokens to our palette so header / hover /
+     borders read as part of the indigo system instead of EP defaults. */
+  --el-table-header-bg-color: var(--surface-1);
+  --el-table-header-text-color: var(--ink-700);
+  --el-table-row-hover-bg-color: rgba(99, 102, 241, 0.05);
+  --el-table-border-color: rgba(15, 23, 42, 0.06);
+  --el-table-text-color: var(--ink-900);
+  --el-table-tr-bg-color: #ffffff;
+}
+
+/* Header polish: stronger weight, tighter tracking, taller cells. */
+.members-table :deep(.el-table__header th.el-table__cell) {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-700);
+  height: 48px;
+  background: var(--surface-1);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+/* Body cells get a hair more vertical breathing room than EP's default. */
+.members-table :deep(.el-table__body td.el-table__cell) {
+  padding: 14px 0;
+  font-size: 13px;
+}
+
+/* Sort indicator caret turns indigo when its column is the active sort. */
+.members-table :deep(.el-table__header th .caret-wrapper .ascending),
+.members-table :deep(.el-table__header th .caret-wrapper .descending) {
+  border-bottom-color: var(--ink-300);
+  border-top-color: var(--ink-300);
+}
+.members-table :deep(.el-table__header th.ascending .caret-wrapper .ascending) {
+  border-bottom-color: var(--brand-primary);
+}
+.members-table :deep(.el-table__header th.descending .caret-wrapper .descending) {
+  border-top-color: var(--brand-primary);
+}
+
+/* Empty inner placeholder gets the same dashed-card treatment as the
+   grid empty state so toggling views feels consistent. */
+.members-table :deep(.el-table__empty-block) {
+  min-height: 180px;
+}
+
+.members-table :deep(.el-table__empty-text) {
+  color: var(--ink-500);
+  font-size: 14px;
 }
 
 @media (max-width: 640px) {
