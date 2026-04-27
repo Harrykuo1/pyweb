@@ -11,7 +11,7 @@ import {
   ElMessage,
   ElUpload,
 } from 'element-plus'
-import { Delete, Document, Upload } from '@element-plus/icons-vue'
+import { Document, Upload } from '@element-plus/icons-vue'
 
 import { membersApi } from '../api/members'
 
@@ -36,9 +36,10 @@ const form = reactive({
 })
 
 // PDF state lives outside the el-form because the upload is a separate
-// API call after the basic save returns.
-const pdfFile = ref(null)              // newly selected File, or null
-const pdfRemoveExisting = ref(false)   // edit-mode flag: drop the stored PDF on save
+// API call after the basic save returns. PDF *removal* is intentionally
+// not available from this form — it's a destructive admin action that
+// should go through the password-protected dialog in ResumeViewerDialog.
+const pdfFile = ref(null) // newly selected File, or null
 
 const rules = {
   graduation_year: [{ required: true, message: '請輸入畢業年份', trigger: 'blur' }],
@@ -48,16 +49,11 @@ const rules = {
 
 const pdfStatusText = computed(() => {
   if (pdfFile.value) return `已選擇：${pdfFile.value.name}`
-  if (isEdit.value && props.member?.has_resume_pdf && !pdfRemoveExisting.value) {
-    return '目前已有 PDF'
-  }
-  if (pdfRemoveExisting.value) return '將於儲存時移除現有 PDF'
+  if (isEdit.value && props.member?.has_resume_pdf) return '目前已有 PDF'
   return '尚未提供 PDF'
 })
 
-const pdfHasPendingChange = computed(
-  () => pdfFile.value !== null || pdfRemoveExisting.value,
-)
+const pdfHasPendingChange = computed(() => pdfFile.value !== null)
 
 const pdfUploadButtonText = computed(() => {
   if (pdfFile.value) return '更換選擇'
@@ -74,7 +70,6 @@ function resetForm(member) {
     joined_at: member?.joined_at ?? null,
   })
   pdfFile.value = null
-  pdfRemoveExisting.value = false
   formRef.value?.clearValidate()
 }
 
@@ -104,18 +99,10 @@ function handlePdfChange(uploadFile) {
     return
   }
   pdfFile.value = file
-  // Selecting a new file overrides any pending "remove" choice.
-  pdfRemoveExisting.value = false
-}
-
-function markPdfForRemoval() {
-  pdfRemoveExisting.value = true
-  pdfFile.value = null
 }
 
 function clearPdfChange() {
   pdfFile.value = null
-  pdfRemoveExisting.value = false
 }
 
 function buildPayload() {
@@ -135,8 +122,6 @@ function buildPayload() {
 async function applyPdfChanges(memberId) {
   if (pdfFile.value) {
     await membersApi.uploadResumePdf(memberId, pdfFile.value)
-  } else if (pdfRemoveExisting.value && isEdit.value) {
-    await membersApi.deleteResumePdf(memberId)
   }
 }
 
@@ -186,7 +171,7 @@ async function handleSubmit() {
   }
 }
 
-defineExpose({ handlePdfChange, markPdfForRemoval, clearPdfChange })
+defineExpose({ handlePdfChange, clearPdfChange })
 </script>
 
 <template>
@@ -247,17 +232,6 @@ defineExpose({ handlePdfChange, markPdfForRemoval, clearPdfChange })
                 {{ pdfUploadButtonText }}
               </el-button>
             </el-upload>
-            <el-button
-              v-if="isEdit && member?.has_resume_pdf && !pdfRemoveExisting && !pdfFile"
-              size="small"
-              type="danger"
-              plain
-              :icon="Delete"
-              data-test="mark-remove-pdf"
-              @click="markPdfForRemoval"
-            >
-              移除
-            </el-button>
             <el-button
               v-if="pdfHasPendingChange"
               size="small"

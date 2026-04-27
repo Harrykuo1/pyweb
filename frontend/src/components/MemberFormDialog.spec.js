@@ -201,10 +201,8 @@ describe('MemberFormDialog', () => {
     expect(upload).toHaveBeenCalledWith(7, file)
   })
 
-  it('edit with markPdfForRemoval calls deleteResumePdf after update', async () => {
+  it('edit form does not expose a PDF removal button (use the resume viewer instead)', async () => {
     vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
-    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
-    const upload = vi.spyOn(membersApi, 'uploadResumePdf')
 
     const wrapper = await mountDialog({
       member: {
@@ -217,13 +215,8 @@ describe('MemberFormDialog', () => {
         has_resume_pdf: true,
       },
     })
-    wrapper.vm.markPdfForRemoval()
 
-    await wrapper.find('[data-test="save-button"]').trigger('click')
-    await flushPromises()
-
-    expect(del).toHaveBeenCalledWith(7)
-    expect(upload).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test="mark-remove-pdf"]').exists()).toBe(false)
   })
 
   it('handlePdfChange rejects oversized files without setting state', async () => {
@@ -256,33 +249,6 @@ describe('MemberFormDialog', () => {
     await flushPromises()
 
     expect(upload).not.toHaveBeenCalled()
-  })
-
-  it('selecting a new file overrides a pending removal', async () => {
-    const upload = vi.spyOn(membersApi, 'uploadResumePdf').mockResolvedValue({})
-    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
-    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
-
-    const wrapper = await mountDialog({
-      member: {
-        id: 7,
-        graduation_year: 2020,
-        real_name: 'Old',
-        current_position: 'Old',
-        resume_md: null,
-        joined_at: null,
-        has_resume_pdf: true,
-      },
-    })
-    wrapper.vm.markPdfForRemoval()
-    const f = pdfFile()
-    await wrapper.vm.handlePdfChange({ raw: f, name: f.name, size: f.size })
-
-    await wrapper.find('[data-test="save-button"]').trigger('click')
-    await flushPromises()
-
-    expect(upload).toHaveBeenCalled()
-    expect(del).not.toHaveBeenCalled()
   })
 
   it('still emits saved and closes when basic save passes but PDF upload fails', async () => {
