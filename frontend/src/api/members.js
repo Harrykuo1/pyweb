@@ -17,8 +17,8 @@ export const membersApi = {
     const { data } = await client.put(`/members/${id}`, payload)
     return data
   },
-  async remove(id) {
-    await client.delete(`/members/${id}`)
+  async remove(id, password) {
+    await client.delete(`/members/${id}`, { data: { password } })
   },
 
   // ---- photo ----
@@ -37,8 +37,8 @@ export const membersApi = {
     })
     return data
   },
-  async deletePhoto(id) {
-    await client.delete(`/members/${id}/photo`)
+  async deletePhoto(id, password) {
+    await client.delete(`/members/${id}/photo`, { data: { password } })
   },
 
   // ---- resume pdf ----
