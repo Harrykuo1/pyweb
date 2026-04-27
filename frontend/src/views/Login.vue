@@ -85,7 +85,7 @@ async function handleSubmit() {
           </div>
           <h1 class="brand-name">pyweb 社群</h1>
           <p class="brand-tagline">
-            大家在哪做、履歷怎麼寫、面試考什麼 ——<br />
+            大家在哪工作、履歷怎麼寫、面試考什麼 ——<br />
             都記在這。
           </p>
         </div>
