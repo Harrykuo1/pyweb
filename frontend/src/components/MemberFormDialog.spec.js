@@ -9,7 +9,13 @@ vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    ElMessage: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+    // ElMessage is now invoked as a function for the persistent
+    // "儲存中…" toast; mirror Element Plus's real shape (callable +
+    // helpers).
+    ElMessage: Object.assign(
+      vi.fn(() => ({ close: vi.fn() })),
+      { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+    ),
   }
 })
 

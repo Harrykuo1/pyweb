@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, markRaw, reactive, ref, watch } from 'vue'
 import {
   ElButton,
   ElDatePicker,
@@ -11,7 +11,7 @@ import {
   ElMessage,
   ElUpload,
 } from 'element-plus'
-import { Delete, Document, Upload } from '@element-plus/icons-vue'
+import { Delete, Document, Loading, Upload } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
 
@@ -177,6 +177,15 @@ async function handleSubmit() {
   if (!valid) return
 
   submitting.value = true
+  // Persistent top toast — same pattern as the photo / PDF uploads —
+  // so the user sees something is happening even before the save
+  // button's loading spinner reaches their eye.
+  const toast = ElMessage({
+    message: isEdit.value ? '儲存中…' : '新增中…',
+    icon: markRaw(Loading),
+    duration: 0,
+    customClass: 'message-uploading',
+  })
   let basicSaveOk = false
   try {
     const payload = buildPayload()
@@ -192,10 +201,12 @@ async function handleSubmit() {
 
     await applyPdfChanges(memberId)
 
+    toast.close()
     ElMessage.success(isEdit.value ? '已更新成員' : '已新增成員')
     emit('saved')
     close()
   } catch (err) {
+    toast.close()
     const status = err?.response?.status
     if (basicSaveOk) {
       // Basic info already saved; only the PDF step failed. Refresh the
