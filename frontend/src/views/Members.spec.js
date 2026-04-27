@@ -58,12 +58,45 @@ async function mountAsAdmin(members = sampleMembers) {
 }
 
 describe('Members.vue', () => {
-  it('loads members on mount with default order=asc', async () => {
+  it('loads members on mount without a server-side order arg', async () => {
     const list = vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     mount(Members)
     await flushPromises()
 
-    expect(list).toHaveBeenCalledWith({ order: 'asc' })
+    // Sorting is now client-side via column headers, so the API wrapper is
+    // called with no override.
+    expect(list).toHaveBeenCalledWith()
+  })
+
+  it('configures default-sort to joined_at ascending', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    expect(table.props('defaultSort')).toEqual({
+      prop: 'joined_at',
+      order: 'ascending',
+    })
+  })
+
+  it('marks the four expected columns sortable with two-state cycle', async () => {
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members)
+    await flushPromises()
+
+    const cols = wrapper.findAllComponents({ name: 'ElTableColumn' })
+    const sortable = Object.fromEntries(
+      cols
+        .filter((c) => c.props('sortable'))
+        .map((c) => [c.props('prop'), c.props('sortOrders')]),
+    )
+    expect(Object.keys(sortable).sort()).toEqual(
+      ['current_position', 'graduation_year', 'joined_at', 'real_name'].sort(),
+    )
+    for (const orders of Object.values(sortable)) {
+      expect(orders).toEqual(['ascending', 'descending'])
+    }
   })
 
   it('renders rows for each member', async () => {
@@ -100,17 +133,17 @@ describe('Members.vue', () => {
     expect(wrapper.find('[data-test="add-member-button"]').exists()).toBe(false)
   })
 
-  it('toggle button flips order and re-fetches', async () => {
+  it('refresh button re-fetches the list', async () => {
     const list = vi.spyOn(membersApi, 'list').mockResolvedValue([])
     const wrapper = mount(Members)
     await flushPromises()
     list.mockClear()
 
-    // The first action button in the empty-list state is "切換排序".
+    // Action buttons in order: 重新整理, (新增成員 if admin). [0] is refresh.
     await wrapper.findAll('button')[0].trigger('click')
     await flushPromises()
 
-    expect(list).toHaveBeenCalledWith({ order: 'desc' })
+    expect(list).toHaveBeenCalled()
   })
 
   it('admin sees edit and delete buttons on each row', async () => {

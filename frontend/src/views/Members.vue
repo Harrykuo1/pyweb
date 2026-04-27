@@ -2,14 +2,13 @@
 import { onMounted, ref } from 'vue'
 import {
   ElButton,
-  ElIcon,
   ElMessage,
   ElPopconfirm,
   ElTable,
   ElTableColumn,
   ElTooltip,
 } from 'element-plus'
-import { Document, Plus, Refresh, Sort } from '@element-plus/icons-vue'
+import { Document, Plus, Refresh } from '@element-plus/icons-vue'
 
 import MemberFormDialog from '../components/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/MemberPhotoCell.vue'
@@ -21,7 +20,6 @@ const auth = useAuthStore()
 
 const members = ref([])
 const loading = ref(false)
-const order = ref('asc')
 
 const dialogOpen = ref(false)
 const editingMember = ref(null)
@@ -29,20 +27,24 @@ const editingMember = ref(null)
 const resumeOpen = ref(false)
 const resumeMember = ref(null)
 
+// Sort orders are restricted to two states so a click cycles asc → desc →
+// asc instead of the el-table default asc → desc → none.
+const SORT_ORDERS = ['ascending', 'descending']
+
+// Element Plus's default string sort uses < which is byte-wise; localeCompare
+// gives the right ordering for Chinese / mixed CJK strings.
+const stringSort = (key) => (a, b) =>
+  String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
+
 async function loadMembers() {
   loading.value = true
   try {
-    members.value = await membersApi.list({ order: order.value })
+    members.value = await membersApi.list()
   } catch (err) {
     ElMessage.error('載入成員清單失敗')
   } finally {
     loading.value = false
   }
-}
-
-function toggleOrder() {
-  order.value = order.value === 'asc' ? 'desc' : 'asc'
-  loadMembers()
 }
 
 function openCreate() {
@@ -106,10 +108,9 @@ onMounted(loadMembers)
     <header class="page-header">
       <div>
         <h1 class="title">成員介紹</h1>
-        <p class="subtitle">依入群時間排列（{{ order === 'asc' ? '舊 → 新' : '新 → 舊' }}）</p>
+        <p class="subtitle">點欄位標題可切換排序方向</p>
       </div>
       <div class="actions">
-        <el-button :icon="Sort" @click="toggleOrder">切換排序</el-button>
         <el-button :icon="Refresh" @click="loadMembers">重新整理</el-button>
         <el-button
           v-if="auth.isAdmin"
@@ -128,16 +129,43 @@ onMounted(loadMembers)
       :data="members"
       class="members-table"
       empty-text="尚無成員資料"
+      :default-sort="{ prop: 'joined_at', order: 'ascending' }"
     >
       <el-table-column label="照片" width="140">
         <template #default="{ row }">
           <MemberPhotoCell :member="row" @changed="loadMembers" />
         </template>
       </el-table-column>
-      <el-table-column prop="graduation_year" label="畢業年份" width="100" />
-      <el-table-column prop="real_name" label="本名" width="160" />
-      <el-table-column prop="current_position" label="目前就職／就讀" />
-      <el-table-column label="入群時間" width="140">
+      <el-table-column
+        prop="graduation_year"
+        label="畢業年份"
+        width="120"
+        sortable
+        :sort-orders="SORT_ORDERS"
+      />
+      <el-table-column
+        prop="real_name"
+        label="本名"
+        width="180"
+        sortable
+        :sort-method="stringSort('real_name')"
+        :sort-orders="SORT_ORDERS"
+      />
+      <el-table-column
+        prop="current_position"
+        label="目前就職／就讀"
+        sortable
+        :sort-method="stringSort('current_position')"
+        :sort-orders="SORT_ORDERS"
+        min-width="200"
+      />
+      <el-table-column
+        prop="joined_at"
+        label="入群時間"
+        width="160"
+        sortable
+        :sort-orders="SORT_ORDERS"
+      >
         <template #default="{ row }">{{ formatDate(row.joined_at) }}</template>
       </el-table-column>
       <el-table-column label="履歷" width="120" align="center">
