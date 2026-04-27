@@ -1116,25 +1116,21 @@ onMounted(loadMembers)
   font-size: 13px;
 }
 
-/* Sort caret behaviour:
-   - Unsorted sortable column: both up/down show faintly as a "sortable" hint.
-   - Sorted column: only the active direction is visible (in indigo); the
-     opposite caret is hidden so users see one arrow, not two stacked. */
+/* Sort caret: hide both triangles by default (the cursor:pointer on the
+   sortable header is enough of a "click me" hint). When the column
+   becomes the active sort, only the chosen direction's triangle becomes
+   visible — and it shows in indigo, not stacked above its opposite. */
 .members-table :deep(.el-table__header th.is-sortable .caret-wrapper .ascending),
 .members-table :deep(.el-table__header th.is-sortable .caret-wrapper .descending) {
-  border-bottom-color: rgba(15, 23, 42, 0.18);
-  border-top-color: rgba(15, 23, 42, 0.18);
-}
-
-.members-table :deep(.el-table__header th.ascending .caret-wrapper .descending),
-.members-table :deep(.el-table__header th.descending .caret-wrapper .ascending) {
   visibility: hidden;
 }
 
 .members-table :deep(.el-table__header th.ascending .caret-wrapper .ascending) {
+  visibility: visible;
   border-bottom-color: var(--brand-primary);
 }
 .members-table :deep(.el-table__header th.descending .caret-wrapper .descending) {
+  visibility: visible;
   border-top-color: var(--brand-primary);
 }
 
