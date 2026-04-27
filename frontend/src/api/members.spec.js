@@ -133,9 +133,9 @@ describe('membersApi.uploadResumePdf', () => {
 })
 
 describe('membersApi.deleteResumePdf', () => {
-  it('DELETEs /members/:id/resume.pdf', async () => {
+  it('DELETEs /members/:id/resume.pdf with the admin password in the request body', async () => {
     const del = vi.spyOn(client, 'delete').mockResolvedValue({})
-    await membersApi.deleteResumePdf(9)
-    expect(del).toHaveBeenCalledWith('/members/9/resume.pdf')
+    await membersApi.deleteResumePdf(9, 'pw-3')
+    expect(del).toHaveBeenCalledWith('/members/9/resume.pdf', { data: { password: 'pw-3' } })
   })
 })

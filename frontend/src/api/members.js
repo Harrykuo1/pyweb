@@ -54,7 +54,7 @@ export const membersApi = {
     })
     return data
   },
-  async deleteResumePdf(id) {
-    await client.delete(`/members/${id}/resume.pdf`)
+  async deleteResumePdf(id, password) {
+    await client.delete(`/members/${id}/resume.pdf`, { data: { password } })
   },
 }

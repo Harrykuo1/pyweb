@@ -5,7 +5,6 @@ import {
   ElDialog,
   ElEmpty,
   ElMessage,
-  ElPopconfirm,
   ElSegmented,
   ElUpload,
 } from 'element-plus'
@@ -13,6 +12,7 @@ import { Delete, Upload } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
+import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 
@@ -88,21 +88,39 @@ async function handleUploadPdf(uploadFile) {
   }
 }
 
-async function handleDeletePdf() {
+// ---------- Delete PDF with admin-password confirmation ----------
+const deletePdfDialogOpen = ref(false)
+const deletePdfSubmitting = ref(false)
+const deletePdfError = ref('')
+
+function askDeletePdf() {
+  deletePdfError.value = ''
+  deletePdfDialogOpen.value = true
+}
+
+async function handleDeletePdf(password) {
   if (!props.member) return
+  deletePdfSubmitting.value = true
+  deletePdfError.value = ''
   try {
-    await membersApi.deleteResumePdf(props.member.id)
+    await membersApi.deleteResumePdf(props.member.id, password)
     ElMessage.success('已刪除履歷 PDF')
+    deletePdfDialogOpen.value = false
     emit('changed')
     if (props.member.has_resume_md) {
       tab.value = 'md'
     }
   } catch (err) {
-    ElMessage.error('刪除失敗')
+    const status = err?.response?.status
+    if (status === 401) deletePdfError.value = '密碼錯誤'
+    else if (status === 403) deletePdfError.value = '權限不足'
+    else deletePdfError.value = '刪除失敗，請稍後再試'
+  } finally {
+    deletePdfSubmitting.value = false
   }
 }
 
-defineExpose({ handleUploadPdf, handleDeletePdf })
+defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
 </script>
 
 <template>
@@ -162,33 +180,33 @@ defineExpose({ handleUploadPdf, handleDeletePdf })
                 {{ member.has_resume_pdf ? '替換 PDF' : '上傳 PDF' }}
               </el-button>
             </el-upload>
-            <el-popconfirm
+            <el-button
               v-if="member.has_resume_pdf"
-              title="確定要刪除這份 PDF 履歷嗎？"
-              confirm-button-text="刪除"
-              cancel-button-text="取消"
-              confirm-button-type="danger"
-              :teleported="false"
-              @confirm="handleDeletePdf"
+              :icon="Delete"
+              size="small"
+              type="danger"
+              plain
+              data-test="delete-pdf"
+              @click="askDeletePdf"
             >
-              <template #reference>
-                <el-button
-                  :icon="Delete"
-                  size="small"
-                  type="danger"
-                  plain
-                  data-test="delete-pdf"
-                >
-                  刪除 PDF
-                </el-button>
-              </template>
-            </el-popconfirm>
+              刪除 PDF
+            </el-button>
           </template>
         </div>
         <el-button @click="close">關閉</el-button>
       </div>
     </template>
   </el-dialog>
+
+  <DeleteWithPasswordDialog
+    v-model="deletePdfDialogOpen"
+    title="刪除履歷 PDF"
+    :item-name="member?.real_name ?? ''"
+    warning="將永久刪除這位成員的 PDF 履歷檔。此操作無法復原。"
+    :loading="deletePdfSubmitting"
+    :error-message="deletePdfError"
+    @confirm="handleDeletePdf"
+  />
 </template>
 
 <style scoped>

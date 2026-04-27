@@ -162,16 +162,47 @@ describe('ResumeViewerDialog', () => {
     expect(upload).not.toHaveBeenCalled()
   })
 
-  it('handleDeletePdf calls api and emits changed', async () => {
+  it('handleDeletePdf passes password to deleteResumePdf and emits changed', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
     const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
 
     const wrapper = await open(memberPdfOnly)
-    await wrapper.vm.handleDeletePdf()
+    await wrapper.vm.handleDeletePdf('admin-pw')
     await flushPromises()
 
-    expect(del).toHaveBeenCalledWith(1)
+    expect(del).toHaveBeenCalledWith(1, 'admin-pw')
     expect(wrapper.emitted('changed')).toBeTruthy()
+  })
+
+  it('clicking delete-pdf opens the password dialog', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+
+    const wrapper = await open(memberPdfOnly)
+    expect(wrapper.vm.deletePdfDialogOpen).toBe(false)
+
+    await wrapper.find('[data-test="delete-pdf"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.vm.deletePdfDialogOpen).toBe(true)
+  })
+
+  it('handleDeletePdf on 401 surfaces 密碼錯誤 and does not emit changed', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'deleteResumePdf').mockRejectedValue(
+      Object.assign(new Error('401'), { response: { status: 401 } }),
+    )
+
+    const wrapper = await open(memberPdfOnly)
+    wrapper.vm.askDeletePdf()
+    await flushPromises()
+    await wrapper.vm.handleDeletePdf('wrong-pw')
+    await flushPromises()
+
+    expect(wrapper.vm.deletePdfError).toBe('密碼錯誤')
+    expect(wrapper.vm.deletePdfDialogOpen).toBe(true)
+    expect(wrapper.emitted('changed')).toBeFalsy()
   })
 })

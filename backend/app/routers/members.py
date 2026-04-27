@@ -215,9 +215,11 @@ async def upload_member_resume_pdf(
 @router.delete("/{member_id}/resume.pdf", status_code=status.HTTP_204_NO_CONTENT)
 def delete_member_resume_pdf(
     member_id: int,
+    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
-    _: object = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ) -> None:
+    _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
     member.resume_pdf = None
     db.commit()

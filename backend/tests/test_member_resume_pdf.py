@@ -152,15 +152,42 @@ def test_delete_pdf_admin(client_factory, db_session):
     db_session.commit()
     login_as("admin")
 
-    r = client.delete("/api/members/1/resume.pdf")
+    r = client.request(
+        "DELETE", "/api/members/1/resume.pdf", json={"password": "admin-pw"},
+    )
     assert r.status_code == 204
 
     db_session.refresh(member)
     assert member.resume_pdf is None
 
 
+def test_delete_pdf_wrong_password_401(client_factory, db_session):
+    client, login_as = client_factory
+    member = db_session.query(Member).filter_by(id=1).one()
+    member.resume_pdf = TINY_PDF
+    db_session.commit()
+    login_as("admin")
+
+    r = client.request(
+        "DELETE", "/api/members/1/resume.pdf", json={"password": "wrong-pw"},
+    )
+    assert r.status_code == 401
+
+    db_session.refresh(member)
+    assert member.resume_pdf == TINY_PDF
+
+
+def test_delete_pdf_missing_password_422(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.delete("/api/members/1/resume.pdf")
+    assert r.status_code == 422
+
+
 def test_delete_pdf_viewer_403(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.delete("/api/members/1/resume.pdf")
+    r = client.request(
+        "DELETE", "/api/members/1/resume.pdf", json={"password": "viewer-pw"},
+    )
     assert r.status_code == 403
