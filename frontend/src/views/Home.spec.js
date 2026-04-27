@@ -27,7 +27,7 @@ describe('Home.vue', () => {
 
     const wrapper = mount(Home)
 
-    expect(wrapper.text()).toContain('歡迎，alice')
+    expect(wrapper.text()).toContain('歡迎回來，alice')
   })
 
   it('shows admin-specific copy when role is admin', () => {
