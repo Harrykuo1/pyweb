@@ -431,6 +431,8 @@ async function submitPassword(role) {
 .form-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .input-wrap {
@@ -489,5 +491,13 @@ async function submitPassword(role) {
 
 .logo-actions {
   gap: 8px;
+}
+
+@media (max-width: 640px) {
+  /* Stack the current/pending logo previews vertically so they each get the
+     full dialog width to render in. */
+  .logo-row {
+    flex-direction: column;
+  }
 }
 </style>

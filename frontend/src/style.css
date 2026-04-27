@@ -44,4 +44,23 @@ h4 {
   :root {
     font-size: 13px;
   }
+
+  /* Element Plus dialogs default to fixed pixel widths via the `width`
+     prop (520 px / 700 px / etc). Cap them globally on phones so they
+     never overflow the viewport. The selectors live here (not scoped) so
+     they reach the dialog roots that ElDialog teleports to <body>. */
+  .el-overlay-dialog .el-dialog,
+  body > .el-overlay .el-dialog {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    margin-top: 5vh !important;
+  }
+
+  /* Make the dialog body scroll within itself instead of pushing the
+     footer off-screen on a tall form. */
+  .el-overlay-dialog .el-dialog__body,
+  body > .el-overlay .el-dialog__body {
+    max-height: calc(85vh - 110px);
+    overflow-y: auto;
+  }
 }
