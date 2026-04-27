@@ -12,7 +12,17 @@ import {
 } from 'element-plus'
 
 import { authApi } from '../api/auth'
+import { settingImageUrl, settingsApi } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
+
+const LOGO_KEY = 'login_logo'
+const LOGO_MAX_BYTES = 2 * 1024 * 1024
+const LOGO_ALLOWED_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/svg+xml',
+]
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -39,6 +49,102 @@ const passwordForm = reactive({
 const usernameSubmitting = reactive({ admin: false, viewer: false })
 const passwordSubmitting = reactive({ admin: false, viewer: false })
 
+// Logo tab state. cacheToken bumps on upload/delete so <img> reloads even
+// when the URL is otherwise identical and the browser would have cached.
+const logoCacheToken = ref(Date.now())
+const logoExists = ref(false)
+const logoFileInput = ref(null)
+const pendingLogoFile = ref(null)
+const pendingLogoPreviewUrl = ref('')
+const logoUploading = ref(false)
+const logoDeleting = ref(false)
+
+const currentLogoUrl = computed(() =>
+  logoExists.value ? settingImageUrl(LOGO_KEY, logoCacheToken.value) : '',
+)
+
+function probeLogo() {
+  // The cheapest way to learn whether the asset exists is to try loading it
+  // into a throwaway Image. Backend returns 404 when unset, which fires the
+  // onerror handler.
+  const img = new Image()
+  img.onload = () => {
+    logoExists.value = true
+  }
+  img.onerror = () => {
+    logoExists.value = false
+  }
+  img.src = settingImageUrl(LOGO_KEY, logoCacheToken.value)
+}
+
+function clearPendingLogo() {
+  if (pendingLogoPreviewUrl.value) {
+    URL.revokeObjectURL(pendingLogoPreviewUrl.value)
+  }
+  pendingLogoFile.value = null
+  pendingLogoPreviewUrl.value = ''
+  if (logoFileInput.value) logoFileInput.value.value = ''
+}
+
+function onLogoFileChange(event) {
+  const file = event.target?.files?.[0] ?? null
+  if (!file) {
+    clearPendingLogo()
+    return
+  }
+  if (!LOGO_ALLOWED_TYPES.includes(file.type)) {
+    ElMessage.error('僅支援 PNG / JPEG / WebP / SVG')
+    clearPendingLogo()
+    return
+  }
+  if (file.size > LOGO_MAX_BYTES) {
+    ElMessage.error('圖片不可超過 2 MB')
+    clearPendingLogo()
+    return
+  }
+  if (pendingLogoPreviewUrl.value) {
+    URL.revokeObjectURL(pendingLogoPreviewUrl.value)
+  }
+  pendingLogoFile.value = file
+  pendingLogoPreviewUrl.value = URL.createObjectURL(file)
+}
+
+async function uploadLogo() {
+  if (!pendingLogoFile.value) {
+    ElMessage.warning('請先選擇圖片')
+    return
+  }
+  logoUploading.value = true
+  try {
+    await settingsApi.uploadImage(LOGO_KEY, pendingLogoFile.value)
+    logoCacheToken.value = Date.now()
+    logoExists.value = true
+    clearPendingLogo()
+    ElMessage.success('登入頁 Logo 已更新')
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 413) ElMessage.error('圖片過大')
+    else if (status === 415) ElMessage.error('不支援的檔案格式')
+    else ElMessage.error(extractError(err, '上傳失敗'))
+  } finally {
+    logoUploading.value = false
+  }
+}
+
+async function deleteLogo() {
+  logoDeleting.value = true
+  try {
+    await settingsApi.deleteImage(LOGO_KEY)
+    logoExists.value = false
+    logoCacheToken.value = Date.now()
+    ElMessage.success('已恢復為預設圖示')
+  } catch (err) {
+    ElMessage.error(extractError(err, '刪除失敗'))
+  } finally {
+    logoDeleting.value = false
+  }
+}
+
 async function loadUsers() {
   loadingUsers.value = true
   try {
@@ -62,7 +168,10 @@ watch(
       activeTab.value = 'admin'
       passwordForm.admin = { current_password: '', new_password: '', confirm: '' }
       passwordForm.viewer = { current_password: '', new_password: '', confirm: '' }
+      clearPendingLogo()
+      logoCacheToken.value = Date.now()
       loadUsers()
+      probeLogo()
     }
   },
   { immediate: true },
@@ -226,6 +335,77 @@ async function submitPassword(role) {
           </div>
         </el-form>
       </el-tab-pane>
+
+      <el-tab-pane label="網站圖片" name="site">
+        <div class="section-title">登入頁 Logo</div>
+        <p class="hint">
+          上傳後會取代登入頁原本的鎖頭圖示。建議使用方形透明 PNG（格式：PNG / JPEG / WebP / SVG，上限 2 MB）。
+        </p>
+
+        <div class="logo-row">
+          <div class="logo-current">
+            <div class="logo-row-label">目前</div>
+            <div class="logo-preview" data-test="logo-current-slot">
+              <img
+                v-if="logoExists"
+                :src="currentLogoUrl"
+                alt="login logo"
+                data-test="logo-current-img"
+              />
+              <span v-else class="placeholder">尚未設定（預設鎖頭圖示）</span>
+            </div>
+          </div>
+
+          <div class="logo-current">
+            <div class="logo-row-label">即將上傳</div>
+            <div class="logo-preview">
+              <img
+                v-if="pendingLogoPreviewUrl"
+                :src="pendingLogoPreviewUrl"
+                alt="pending logo"
+                data-test="logo-pending-img"
+              />
+              <span v-else class="placeholder">尚未選擇檔案</span>
+            </div>
+          </div>
+        </div>
+
+        <input
+          ref="logoFileInput"
+          type="file"
+          class="hidden-file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          data-test="logo-file-input"
+          @change="onLogoFileChange"
+        />
+
+        <div class="form-actions logo-actions">
+          <el-button
+            data-test="logo-pick"
+            @click="logoFileInput?.click()"
+          >
+            選擇圖片…
+          </el-button>
+          <el-button
+            type="primary"
+            :disabled="!pendingLogoFile"
+            :loading="logoUploading"
+            data-test="logo-upload"
+            @click="uploadLogo"
+          >
+            上傳
+          </el-button>
+          <el-button
+            v-if="logoExists"
+            type="danger"
+            :loading="logoDeleting"
+            data-test="logo-delete"
+            @click="deleteLogo"
+          >
+            恢復預設
+          </el-button>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <template #footer>
@@ -255,5 +435,59 @@ async function submitPassword(role) {
 
 .input-wrap {
   width: 100%;
+}
+
+.hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #909399;
+  line-height: 1.5;
+}
+
+.logo-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.logo-current {
+  flex: 1;
+  min-width: 0;
+}
+
+.logo-row-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.logo-preview {
+  height: 120px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.logo-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.logo-preview .placeholder {
+  font-size: 12px;
+  color: #c0c4cc;
+}
+
+.hidden-file {
+  display: none;
+}
+
+.logo-actions {
+  gap: 8px;
 }
 </style>

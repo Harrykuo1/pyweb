@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { authApi } from '../api/auth'
+import { settingsApi } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import AccountSettingsDialog from './AccountSettingsDialog.vue'
 
@@ -182,5 +183,181 @@ describe('AccountSettingsDialog', () => {
     expect(ElMessage.error).toHaveBeenCalledWith(
       '新密碼與另一個帳號相同，請改用其他密碼',
     )
+  })
+
+  // ---------- site / login_logo tab ----------
+
+  async function openSiteTab(wrapper) {
+    wrapper.vm.activeTab = 'site'
+    await flushPromises()
+  }
+
+  function makeFile(name, type, size = 16) {
+    const buf = new Uint8Array(size)
+    return new File([buf], name, { type })
+  }
+
+  it('site tab shows placeholder when no logo is set', async () => {
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+    // logoExists starts false; probeLogo's onerror fires async — by default
+    // happy-dom can't load the URL, so the placeholder stays visible.
+    expect(
+      document.querySelector('[data-test="logo-current-img"]'),
+    ).toBeNull()
+    expect(
+      document.querySelector('[data-test="logo-delete"]'),
+    ).toBeNull()
+  })
+
+  it('selecting an unsupported file type shows error and clears preview', async () => {
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('evil.exe', 'application/octet-stream')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith('僅支援 PNG / JPEG / WebP / SVG')
+    expect(
+      document.querySelector('[data-test="logo-pending-img"]'),
+    ).toBeNull()
+  })
+
+  it('selecting an oversized file shows error', async () => {
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('big.png', 'image/png', 2 * 1024 * 1024 + 1)
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith('圖片不可超過 2 MB')
+  })
+
+  it('selecting a valid file shows pending preview and enables upload', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('logo.png', 'image/png')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const preview = document.querySelector('[data-test="logo-pending-img"]')
+    expect(preview).not.toBeNull()
+    expect(preview.getAttribute('src')).toBe('blob:fake')
+
+    const uploadBtn = document.querySelector('[data-test="logo-upload"]')
+    expect(uploadBtn.disabled).toBe(false)
+  })
+
+  it('upload calls settingsApi.uploadImage and marks logoExists', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const upload = vi
+      .spyOn(settingsApi, 'uploadImage')
+      .mockResolvedValue({ key: 'login_logo', size: 16, content_type: 'image/png' })
+
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('logo.png', 'image/png')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    document.querySelector('[data-test="logo-upload"]').click()
+    await flushPromises()
+
+    expect(upload).toHaveBeenCalledWith('login_logo', file)
+    expect(ElMessage.success).toHaveBeenCalledWith('登入頁 Logo 已更新')
+    // after upload, pending preview is cleared and logoExists -> true so the
+    // 恢復預設 button now renders.
+    expect(
+      document.querySelector('[data-test="logo-pending-img"]'),
+    ).toBeNull()
+    expect(
+      document.querySelector('[data-test="logo-delete"]'),
+    ).not.toBeNull()
+  })
+
+  it('upload error 415 shows specific message', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    vi.spyOn(settingsApi, 'uploadImage').mockRejectedValue(
+      Object.assign(new Error('415'), { response: { status: 415 } }),
+    )
+
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    const file = makeFile('logo.png', 'image/png')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    document.querySelector('[data-test="logo-upload"]').click()
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith('不支援的檔案格式')
+  })
+
+  it('delete calls settingsApi.deleteImage and hides current logo', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    vi.spyOn(settingsApi, 'uploadImage').mockResolvedValue({
+      key: 'login_logo',
+      size: 16,
+      content_type: 'image/png',
+    })
+    const del = vi.spyOn(settingsApi, 'deleteImage').mockResolvedValue()
+
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    // Upload first so the delete button is rendered.
+    const input = document.querySelector('[data-test="logo-file-input"]')
+    Object.defineProperty(input, 'files', {
+      value: [makeFile('logo.png', 'image/png')],
+      configurable: true,
+    })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    document.querySelector('[data-test="logo-upload"]').click()
+    await flushPromises()
+
+    document.querySelector('[data-test="logo-delete"]').click()
+    await flushPromises()
+
+    expect(del).toHaveBeenCalledWith('login_logo')
+    expect(ElMessage.success).toHaveBeenCalledWith('已恢復為預設圖示')
+    expect(
+      document.querySelector('[data-test="logo-current-img"]'),
+    ).toBeNull()
+    expect(
+      document.querySelector('[data-test="logo-delete"]'),
+    ).toBeNull()
+  })
+
+  it('upload without selecting a file warns and does not call api', async () => {
+    const upload = vi.spyOn(settingsApi, 'uploadImage')
+    const wrapper = await mountDialog()
+    await openSiteTab(wrapper)
+
+    const btn = document.querySelector('[data-test="logo-upload"]')
+    expect(btn.disabled).toBe(true)
+    // Force the action even though disabled, to exercise the guard:
+    wrapper.vm.uploadLogo()
+    await flushPromises()
+
+    expect(upload).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('請先選擇圖片')
   })
 })
