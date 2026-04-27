@@ -662,6 +662,13 @@ onMounted(loadMembers)
   flex-wrap: wrap;
 }
 
+/* Element Plus injects margin-left:12px between adjacent el-buttons,
+   which made the gap between 重新整理 and 新增成員 wider than the rest
+   of the row. Reset it so the flex gap is the only spacing source. */
+.actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 /* ---------- View toggle (segmented) ---------- */
 .view-toggle {
   display: inline-flex;
