@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/noto-sans-tc": "^5.2.9",
     "axios": "^1.15.2",
     "cropperjs": "^2.1.1",
     "dompurify": "^3.4.1",
