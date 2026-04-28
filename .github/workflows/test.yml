@@ -66,38 +66,34 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
-  deploy:
-    name: deploy to server
-    # Gate behind both test jobs so a red bar can't slip through to prod.
-    needs: [backend, frontend]
-    # Don't deploy on PR runs or feature-branch pushes — main only.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    # Serialize deploys: a second push that lands while one is in flight
-    # waits its turn instead of racing it.
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: false
-    steps:
-      - name: Pull and rebuild on the server
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # Stop on the first non-zero so a failed step doesn't pretend
-          # the deploy worked.
-          script_stop: true
-          script: |
-            set -e
-            cd /home/pyparty/code/pyweb
-            git fetch --prune origin
-            git pull --ff-only origin main
-            # Build first so a broken Dockerfile / dependency error fails
-            # before we touch the running containers. If this step exits
-            # non-zero, the next `up -d` never runs and the old service
-            # keeps serving traffic.
-            docker compose build
-            docker compose up -d
-            docker compose ps
+  # Auto-deploy is disabled until the server-side firewall situation is
+  # sorted out — GitHub Actions runner IPs can't currently reach the
+  # server's SSH port, so the job hangs forever instead of deploying.
+  # Re-enable once the firewall is opened (or once we move to a
+  # self-hosted runner). See conversation history for the diagnosis.
+  #
+  # deploy:
+  #   name: deploy to server
+  #   needs: [backend, frontend]
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   concurrency:
+  #     group: deploy-prod
+  #     cancel-in-progress: false
+  #   steps:
+  #     - name: Pull and rebuild on the server
+  #       uses: appleboy/ssh-action@v1.2.0
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USER }}
+  #         port: ${{ secrets.SSH_PORT }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script_stop: true
+  #         script: |
+  #           set -e
+  #           cd /home/pyparty/code/pyweb
+  #           git fetch --prune origin
+  #           git pull --ff-only origin main
+  #           docker compose build
+  #           docker compose up -d
+  #           docker compose ps
