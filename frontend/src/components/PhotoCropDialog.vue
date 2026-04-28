@@ -33,9 +33,12 @@ const submitting = ref(false)
 // cropperjs 2.x is web-component based. We pass a custom template so we can
 // pin aspect-ratio="1" on the <cropper-selection> directly; default
 // template would let users free-form crop.
+// initial-center-size="contain" makes the loaded image fully fit the
+// canvas (with letterboxing) instead of overflowing past the canvas at
+// natural size — so users always see the full photo to crop against.
 const CROPPER_TEMPLATE = `
   <cropper-canvas background>
-    <cropper-image rotatable scalable skewable translatable></cropper-image>
+    <cropper-image initial-center-size="contain" rotatable scalable skewable translatable></cropper-image>
     <cropper-shade hidden></cropper-shade>
     <cropper-handle action="select" plain></cropper-handle>
     <cropper-selection initial-coverage="0.7" aspect-ratio="1" movable resizable>
@@ -65,6 +68,35 @@ function disposeCropper() {
   }
 }
 
+// Reject any selection change that would push the crop box outside the
+// image's currently rendered bounds. Cropperjs computes new (x, y, w, h)
+// in canvas-pixel coordinates; we compare against the image element's
+// DOM rect translated into the same coordinate space. preventDefault on
+// the change event makes the box stop at the edge instead of bouncing
+// or freezing the rest of the interaction.
+function clampSelectionToImage(event) {
+  if (!cropperInstance) return
+  const image = cropperInstance.getCropperImage()
+  const canvas = cropperInstance.getCropperCanvas()
+  if (!image || !canvas) return
+  const canvasRect = canvas.getBoundingClientRect()
+  const imageRect = image.getBoundingClientRect()
+  const ix = imageRect.left - canvasRect.left
+  const iy = imageRect.top - canvasRect.top
+  const iw = imageRect.width
+  const ih = imageRect.height
+  const { x, y, width, height } = event.detail
+  if (
+    x < ix - 0.5 ||
+    y < iy - 0.5 ||
+    x + width > ix + iw + 0.5 ||
+    y + height > iy + ih + 0.5
+  ) {
+    event.preventDefault()
+  }
+}
+
+
 async function setupCropper() {
   if (!props.sourceFile) return
   if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
@@ -77,6 +109,35 @@ async function setupCropper() {
   await nextTick()
   if (cropperInstance) cropperInstance.destroy()
   cropperInstance = new Cropper(imgRef.value, { template: CROPPER_TEMPLATE })
+
+  // Wait for the image to actually load so getBoundingClientRect on it
+  // returns the real rendered size; without this the rect is 0×0 and
+  // the initial-fit math produces nonsense.
+  const image = cropperInstance.getCropperImage()
+  if (image && typeof image.$ready === 'function') {
+    try { await image.$ready() } catch { /* image failed to load */ }
+  }
+
+  // For portrait / landscape photos contained in our 4:3 canvas, the
+  // default initial-coverage selection can be larger than the image's
+  // shorter side and end up partly outside the image. Re-center and
+  // shrink the selection so it always fits comfortably inside the
+  // image bounds before the clamp listener starts blocking changes.
+  const selection = cropperInstance.getCropperSelection()
+  const canvas = cropperInstance.getCropperCanvas()
+  if (selection && image && canvas) {
+    const canvasRect = canvas.getBoundingClientRect()
+    const imageRect = image.getBoundingClientRect()
+    if (imageRect.width > 0 && imageRect.height > 0) {
+      const ix = imageRect.left - canvasRect.left
+      const iy = imageRect.top - canvasRect.top
+      const size = Math.min(imageRect.width, imageRect.height) * 0.8
+      const x = ix + (imageRect.width - size) / 2
+      const y = iy + (imageRect.height - size) / 2
+      selection.$change(x, y, size, size, 1, true)
+    }
+    selection.addEventListener('change', clampSelectionToImage)
+  }
 }
 
 watch(
@@ -145,7 +206,7 @@ defineExpose({ handleConfirm })
     <div class="cropper-wrap">
       <img ref="imgRef" alt="待裁切照片" />
     </div>
-    <p class="hint">拖曳選框調整位置；四角拖把控制大小（強制 1:1）。</p>
+    <p class="hint">拖曳選框調整位置、四角拖把控制大小（強制 1:1）；選框碰到照片邊界會自動停下。</p>
 
     <template #footer>
       <el-button @click="close">取消</el-button>
@@ -164,7 +225,11 @@ defineExpose({ handleConfirm })
 <style scoped>
 .cropper-wrap {
   width: 100%;
-  height: 420px;
+  /* Square-ish canvas so portrait, landscape and 1:1 photos all get a
+     fair amount of working room. Capped via vh so very tall viewports
+     don't blow up the dialog. */
+  aspect-ratio: 4 / 3;
+  max-height: 60vh;
   background: #f5f7fa;
   border-radius: 8px;
   overflow: hidden;
@@ -183,6 +248,17 @@ defineExpose({ handleConfirm })
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* The default ~7px square handles are hard to grab, especially on
+   touch. Beef up the resize corner / edge handles so they're visible
+   and easy to drag without pushing them off the image. */
+.cropper-wrap :deep(cropper-handle[action$="-resize"]) {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
 }
 
 .hint {

@@ -7,15 +7,28 @@ import PhotoCropDialog from './PhotoCropDialog.vue'
 // vi.mock is hoisted above imports — Cropper is the mocked default.
 vi.mock('cropperjs', () => {
   const fakeSelection = {
+    $change: vi.fn(),
     $toCanvas: vi.fn(async () => ({
       toBlob(cb) {
         cb(new Blob(['cropped'], { type: 'image/jpeg' }))
       },
     })),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }
+  const zeroRect = { left: 0, top: 0, width: 0, height: 0 }
+  const fakeImage = {
+    getBoundingClientRect: () => zeroRect,
+    $ready: vi.fn(async () => undefined),
+  }
+  const fakeCanvas = {
+    getBoundingClientRect: () => zeroRect,
   }
   const fakeInstance = {
     destroy: vi.fn(),
     getCropperSelection: vi.fn(() => fakeSelection),
+    getCropperImage: vi.fn(() => fakeImage),
+    getCropperCanvas: vi.fn(() => fakeCanvas),
   }
   // `new Cropper(...)` is invoked with `new`; an arrow function cannot
   // be used as a constructor, so use a regular function expression.
