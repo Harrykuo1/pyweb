@@ -1,13 +1,22 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElButton, ElIcon, ElMessage } from 'element-plus'
+import {
+  ElAutocomplete,
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElMessage,
+  ElOption,
+  ElSelect,
+} from 'element-plus'
 import {
   Briefcase,
   Calendar,
   OfficeBuilding,
   Refresh,
   School,
+  Search,
   User,
 } from '@element-plus/icons-vue'
 
@@ -31,15 +40,46 @@ const KIND_META = {
   fulltime: { label: '正職' },
 }
 
+const KIND_FILTER_OPTIONS = [
+  { label: '全部', value: '' },
+  { label: '實習', value: 'internship' },
+  { label: '正職', value: 'fulltime' },
+]
+const ALLOWED_KIND_FILTERS = KIND_FILTER_OPTIONS.map((o) => o.value)
+
+const CURRENT_YEAR = new Date().getFullYear()
+const MIN_JOB_YEAR = 2000
+const YEAR_OPTIONS = (() => {
+  const out = []
+  for (let y = CURRENT_YEAR + 1; y >= MIN_JOB_YEAR; y--) out.push(y)
+  return out
+})()
+
+const SEARCH_DEBOUNCE_MS = 300
+
 function _safeSort(v) {
   return ALLOWED_SORTS.includes(v) ? v : 'created_at'
 }
 function _safeOrder(v) {
   return ALLOWED_ORDERS.includes(v) ? v : 'desc'
 }
+function _safeKind(v) {
+  return ALLOWED_KIND_FILTERS.includes(v) ? v : ''
+}
+function _safeYear(v) {
+  if (v === undefined || v === null || v === '') return null
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  if (n < MIN_JOB_YEAR || n > CURRENT_YEAR + 1) return null
+  return n
+}
 
 const sortKey = ref(_safeSort(route.query.sort))
 const sortOrder = ref(_safeOrder(route.query.order))
+const year = ref(_safeYear(route.query.year))
+const company = ref(typeof route.query.company === 'string' ? route.query.company : '')
+const kind = ref(_safeKind(route.query.kind))
+const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
 
 const items = ref([])
 const total = ref(0)
@@ -51,6 +91,10 @@ async function loadItems() {
     const data = await jobsApi.list({
       sort: sortKey.value,
       order: sortOrder.value,
+      year: year.value ?? undefined,
+      company: company.value || undefined,
+      kind: kind.value || undefined,
+      q: q.value || undefined,
     })
     items.value = data.items
     total.value = data.total
@@ -70,18 +114,46 @@ function toggleSort(key) {
   }
 }
 
-// Mirror sort/order into the URL so refreshing or copy-pasting the URL
-// preserves the user's view. Defaults are stripped to keep the URL
-// uncluttered when nothing has been overridden.
-watch([sortKey, sortOrder], () => {
-  const query = { ...route.query }
-  if (sortKey.value === 'created_at') delete query.sort
-  else query.sort = sortKey.value
-  if (sortOrder.value === 'desc') delete query.order
-  else query.order = sortOrder.value
+function syncUrl() {
+  const query = {}
+  if (sortKey.value !== 'created_at') query.sort = sortKey.value
+  if (sortOrder.value !== 'desc') query.order = sortOrder.value
+  if (year.value) query.year = String(year.value)
+  if (company.value) query.company = company.value
+  if (kind.value) query.kind = kind.value
+  if (q.value) query.q = q.value
   router.replace({ query })
+}
+
+// Sort/year/company/kind changes are immediate. Search input is debounced
+// so a user typing doesn't fire a request per keystroke.
+watch([sortKey, sortOrder, year, company, kind], () => {
+  syncUrl()
   loadItems()
 })
+
+let qTimer = null
+watch(q, () => {
+  if (qTimer !== null) clearTimeout(qTimer)
+  qTimer = setTimeout(() => {
+    qTimer = null
+    syncUrl()
+    loadItems()
+  }, SEARCH_DEBOUNCE_MS)
+})
+
+onUnmounted(() => {
+  if (qTimer !== null) clearTimeout(qTimer)
+})
+
+async function fetchCompanySuggestions(queryString, cb) {
+  try {
+    const list = await jobsApi.listCompanies(queryString || undefined)
+    cb(list.map((c) => ({ value: c })))
+  } catch {
+    cb([])
+  }
+}
 
 function realNameOrAnonymous(item) {
   return item.real_name || '匿名'
@@ -121,6 +193,61 @@ onMounted(loadItems)
         </el-button>
       </div>
     </header>
+
+    <div class="filter-bar">
+      <div class="kind-chips" role="tablist" aria-label="類型篩選">
+        <button
+          v-for="opt in KIND_FILTER_OPTIONS"
+          :key="opt.value || 'all'"
+          type="button"
+          role="tab"
+          :aria-selected="kind === opt.value"
+          :class="[
+            'kind-chip',
+            `kind-chip--${opt.value || 'all'}`,
+            { 'is-active': kind === opt.value },
+          ]"
+          :data-test="`filter-kind-${opt.value || 'all'}`"
+          @click="kind = opt.value"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+
+      <el-select
+        v-model="year"
+        placeholder="年份"
+        clearable
+        data-test="filter-year"
+        class="filter-year"
+      >
+        <el-option
+          v-for="y in YEAR_OPTIONS"
+          :key="y"
+          :label="`${y} 年`"
+          :value="y"
+        />
+      </el-select>
+
+      <el-autocomplete
+        v-model="company"
+        :fetch-suggestions="fetchCompanySuggestions"
+        placeholder="公司"
+        clearable
+        :trigger-on-focus="true"
+        data-test="filter-company"
+        class="filter-company"
+      />
+
+      <el-input
+        v-model="q"
+        placeholder="搜尋公司、姓名、心得"
+        :prefix-icon="Search"
+        clearable
+        data-test="filter-search"
+        class="filter-search"
+      />
+    </div>
 
     <div class="sort-row">
       <span class="sort-label">排序</span>
@@ -199,7 +326,7 @@ onMounted(loadItems)
       <div class="empty-icon" aria-hidden="true">
         <el-icon :size="32"><Briefcase /></el-icon>
       </div>
-      <p class="empty-text">尚無求職紀錄</p>
+      <p class="empty-text">尚無符合條件的紀錄</p>
     </div>
   </div>
 </template>
@@ -278,6 +405,95 @@ onMounted(loadItems)
 }
 
 /* ============================================================
+   Filter bar
+   ============================================================ */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+/* ----- Kind segmented chips ----- */
+.kind-chips {
+  display: inline-flex;
+  background: var(--surface-2, #f1f5f9);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.kind-chip {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-500);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.kind-chip:hover {
+  color: var(--ink-700);
+}
+
+.kind-chip.is-active {
+  background: #ffffff;
+  color: var(--ink-900);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.kind-chip--internship.is-active {
+  color: #4f46e5;
+}
+
+.kind-chip--fulltime.is-active {
+  color: #047857;
+}
+
+.filter-year {
+  width: 130px;
+}
+
+.filter-company {
+  width: 200px;
+}
+
+.filter-search {
+  min-width: 220px;
+  flex: 1;
+  max-width: 360px;
+}
+
+/* Element Plus inputs all share these radii / shadows so the filter
+   bar reads as one cohesive surface instead of a row of mismatched
+   widgets. */
+.filter-bar :deep(.el-input__wrapper),
+.filter-bar :deep(.el-select__wrapper) {
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06) inset;
+  transition: box-shadow var(--dur) var(--ease);
+}
+
+.filter-bar :deep(.el-input__wrapper):hover,
+.filter-bar :deep(.el-select__wrapper):hover {
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.32) inset;
+}
+
+.filter-bar :deep(.el-input__wrapper.is-focus),
+.filter-bar :deep(.el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1.5px #7c3aed inset;
+}
+
+/* ============================================================
    Sort pills
    ============================================================ */
 .sort-row {
@@ -348,7 +564,7 @@ onMounted(loadItems)
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
-  padding: 20px 20px 18px 26px; /* extra left padding makes room for the stripe */
+  padding: 20px 20px 18px 26px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -371,8 +587,6 @@ onMounted(loadItems)
   --card-accent-ink: #047857;
 }
 
-/* Soft halo behind the card on hover, themed by kind. -10px insets so
-   the glow leaks slightly past the card border for a lifted feel. */
 .record-card::before {
   content: '';
   position: absolute;
@@ -399,7 +613,6 @@ onMounted(loadItems)
   opacity: 0.18;
 }
 
-/* Side stripe — vertical kind-themed gradient on the card's left edge. */
 .card-stripe {
   position: absolute;
   left: 0;
@@ -415,8 +628,6 @@ onMounted(loadItems)
   width: 6px;
 }
 
-/* Subtle radial glow on the bottom-right of the card so the surface
-   isn't a flat white plane. Adds depth without taking attention. */
 .card-glow {
   position: absolute;
   right: -20px;
@@ -434,7 +645,6 @@ onMounted(loadItems)
   opacity: 1;
 }
 
-/* ----- Kind badge ----- */
 .kind-badge {
   align-self: flex-start;
   display: inline-flex;
@@ -458,7 +668,6 @@ onMounted(loadItems)
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
-/* ----- Company hero ----- */
 .card-company {
   margin: 0;
   font-size: 19px;
@@ -491,7 +700,6 @@ onMounted(loadItems)
   text-overflow: ellipsis;
 }
 
-/* ----- Real name / anonymous ----- */
 .card-name {
   margin: 0;
   font-size: 13px;
@@ -506,7 +714,6 @@ onMounted(loadItems)
   font-style: italic;
 }
 
-/* ----- Meta row ----- */
 .card-meta {
   display: flex;
   flex-wrap: wrap;
@@ -531,7 +738,7 @@ onMounted(loadItems)
 }
 
 /* ============================================================
-   Skeleton (initial-fetch placeholder)
+   Skeleton
    ============================================================ */
 .record-card--skeleton {
   pointer-events: none;
@@ -660,6 +867,21 @@ onMounted(loadItems)
   .title-icon {
     width: 32px;
     height: 32px;
+  }
+
+  .filter-bar {
+    padding: 8px;
+  }
+
+  .filter-year,
+  .filter-company {
+    width: 100%;
+  }
+
+  .filter-search {
+    width: 100%;
+    min-width: 0;
+    flex: none;
   }
 
   .card-grid {

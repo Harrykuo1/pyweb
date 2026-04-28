@@ -61,6 +61,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 async function mountPage(items = sample, total = items.length) {
@@ -78,6 +79,10 @@ describe('Jobs.vue — initial load', () => {
     expect(listSpy).toHaveBeenCalledWith({
       sort: 'created_at',
       order: 'desc',
+      year: undefined,
+      company: undefined,
+      kind: undefined,
+      q: undefined,
     })
   })
 
@@ -107,16 +112,17 @@ describe('Jobs.vue — empty state', () => {
   it('renders the empty placeholder when no items come back', async () => {
     const { wrapper } = await mountPage([], 0)
     expect(wrapper.find('[data-test="empty-state"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('尚無求職紀錄')
+    expect(wrapper.text()).toContain('尚無符合條件的紀錄')
   })
 })
 
-describe('Jobs.vue — URL-driven sort/order on first paint', () => {
-  it('reads sort and order from route.query and uses them for the first fetch', async () => {
+describe('Jobs.vue — URL-driven state on first paint', () => {
+  it('reads sort/order from route.query and uses them for the first fetch', async () => {
     routeQuery.value = { sort: 'company', order: 'asc' }
     const { listSpy, wrapper } = await mountPage()
-    expect(listSpy).toHaveBeenCalledWith({ sort: 'company', order: 'asc' })
-    // Active pill is the URL-driven one, not the default created_at.
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'company', order: 'asc' }),
+    )
     const activePill = wrapper.find('[data-test="sort-company"]')
     expect(activePill.classes()).toContain('is-active')
   })
@@ -124,10 +130,38 @@ describe('Jobs.vue — URL-driven sort/order on first paint', () => {
   it('falls back to defaults when query carries an unknown sort key', async () => {
     routeQuery.value = { sort: 'garbage', order: 'sideways' }
     const { listSpy } = await mountPage()
-    expect(listSpy).toHaveBeenCalledWith({
-      sort: 'created_at',
-      order: 'desc',
-    })
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'created_at', order: 'desc' }),
+    )
+  })
+
+  it('reads year, company, kind and q from route.query', async () => {
+    routeQuery.value = {
+      year: '2024',
+      company: 'Acme',
+      kind: 'internship',
+      q: 'system',
+    }
+    const { listSpy, wrapper } = await mountPage()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        year: 2024,
+        company: 'Acme',
+        kind: 'internship',
+        q: 'system',
+      }),
+    )
+    expect(
+      wrapper.find('[data-test="filter-kind-internship"]').classes(),
+    ).toContain('is-active')
+  })
+
+  it('drops year out of range or non-numeric on first paint', async () => {
+    routeQuery.value = { year: '1999' }
+    const { listSpy } = await mountPage()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ year: undefined }),
+    )
   })
 })
 
@@ -139,7 +173,9 @@ describe('Jobs.vue — toggleSort', () => {
     await wrapper.find('[data-test="sort-company"]').trigger('click')
     await flushPromises()
 
-    expect(listSpy).toHaveBeenCalledWith({ sort: 'company', order: 'asc' })
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'company', order: 'asc' }),
+    )
     expect(wrapper.find('[data-test="sort-company"]').classes()).toContain(
       'is-active',
     )
@@ -147,37 +183,98 @@ describe('Jobs.vue — toggleSort', () => {
 
   it('clicking the active pill flips order from asc to desc', async () => {
     const { wrapper, listSpy } = await mountPage()
-    // First click: switch to company (asc)
     await wrapper.find('[data-test="sort-company"]').trigger('click')
     await flushPromises()
     listSpy.mockClear()
-    // Second click on the same pill: flip to desc
     await wrapper.find('[data-test="sort-company"]').trigger('click')
     await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith({ sort: 'company', order: 'desc' })
-  })
-
-  it('clicking the kind pill cycles internship sort axis', async () => {
-    const { wrapper, listSpy } = await mountPage()
-    listSpy.mockClear()
-    await wrapper.find('[data-test="sort-kind"]').trigger('click')
-    await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith({ sort: 'kind', order: 'asc' })
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'company', order: 'desc' }),
+    )
   })
 })
 
-describe('Jobs.vue — URL sync on sort changes', () => {
-  it('writes non-default sort/order to the URL via router.replace', async () => {
+describe('Jobs.vue — kind filter chips', () => {
+  it('clicking 實習 calls the API with kind=internship', async () => {
+    const { wrapper, listSpy } = await mountPage()
+    listSpy.mockClear()
+    await wrapper.find('[data-test="filter-kind-internship"]').trigger('click')
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'internship' }),
+    )
+    expect(
+      wrapper.find('[data-test="filter-kind-internship"]').classes(),
+    ).toContain('is-active')
+  })
+
+  it('clicking 正職 then 全部 clears the kind filter', async () => {
+    const { wrapper, listSpy } = await mountPage()
+    await wrapper.find('[data-test="filter-kind-fulltime"]').trigger('click')
+    await flushPromises()
+    listSpy.mockClear()
+    await wrapper.find('[data-test="filter-kind-all"]').trigger('click')
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: undefined }),
+    )
+  })
+})
+
+describe('Jobs.vue — search debounce', () => {
+  it('does not fire a request until the debounce window elapses', async () => {
+    vi.useFakeTimers()
+    const { wrapper, listSpy } = await mountPage()
+    listSpy.mockClear()
+
+    const input = wrapper.find('.filter-search input')
+    await input.setValue('a')
+    await input.setValue('ab')
+    await input.setValue('abc')
+    // Three keystrokes — none should have fired yet.
+    expect(listSpy).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(300)
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledTimes(1)
+    expect(listSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'abc' }),
+    )
+  })
+})
+
+describe('Jobs.vue — URL sync on filter/sort changes', () => {
+  it('writes non-default sort to the URL via router.replace', async () => {
     const { wrapper } = await mountPage()
     replaceMock.mockClear()
 
     await wrapper.find('[data-test="sort-company"]').trigger('click')
     await flushPromises()
 
-    expect(replaceMock).toHaveBeenCalledTimes(1)
-    expect(replaceMock).toHaveBeenCalledWith({
+    expect(replaceMock).toHaveBeenLastCalledWith({
       query: { sort: 'company', order: 'asc' },
     })
+  })
+
+  it('writes the kind filter into the URL', async () => {
+    const { wrapper } = await mountPage()
+    replaceMock.mockClear()
+    await wrapper.find('[data-test="filter-kind-fulltime"]').trigger('click')
+    await flushPromises()
+    expect(replaceMock).toHaveBeenLastCalledWith({
+      query: { kind: 'fulltime' },
+    })
+  })
+
+  it('writes a debounced search term into the URL', async () => {
+    vi.useFakeTimers()
+    const { wrapper } = await mountPage()
+    replaceMock.mockClear()
+    const input = wrapper.find('.filter-search input')
+    await input.setValue('hello')
+    vi.advanceTimersByTime(300)
+    await flushPromises()
+    expect(replaceMock).toHaveBeenLastCalledWith({ query: { q: 'hello' } })
   })
 
   it('strips defaults from the URL so a clean URL stays clean', async () => {
@@ -185,19 +282,38 @@ describe('Jobs.vue — URL sync on sort changes', () => {
     const { wrapper } = await mountPage()
     replaceMock.mockClear()
 
-    // Click company twice: first flips to desc, second back to asc — neither
-    // matches the (created_at, desc) default. Then click the default pill:
-    // should clear both query keys.
     await wrapper.find('[data-test="sort-created_at"]').trigger('click')
     await flushPromises()
-    // sort=created_at + order=asc still has order!=default; one key gone.
     expect(replaceMock).toHaveBeenLastCalledWith({ query: { order: 'asc' } })
 
-    // Click again: order flips to desc — now both default. Both stripped.
     replaceMock.mockClear()
     await wrapper.find('[data-test="sort-created_at"]').trigger('click')
     await flushPromises()
     expect(replaceMock).toHaveBeenLastCalledWith({ query: {} })
+  })
+})
+
+describe('Jobs.vue — company autocomplete', () => {
+  it('wires the autocomplete fetcher to jobsApi.listCompanies', async () => {
+    const { wrapper } = await mountPage()
+    const autocomplete = wrapper.findComponent({ name: 'ElAutocomplete' })
+    expect(autocomplete.exists()).toBe(true)
+
+    const listSpy = vi
+      .spyOn(jobsApi, 'listCompanies')
+      .mockResolvedValue(['Acme', 'AcmeInc'])
+
+    // Drive the prop directly: el-autocomplete's internal debounce only
+    // runs in response to real user input, but the prop itself is the
+    // contract our component owns and the only thing worth pinning down.
+    const fetchSuggestions = autocomplete.props('fetchSuggestions')
+    expect(typeof fetchSuggestions).toBe('function')
+
+    const suggestions = await new Promise((resolve) =>
+      fetchSuggestions('ac', resolve),
+    )
+    expect(listSpy).toHaveBeenCalledWith('ac')
+    expect(suggestions).toEqual([{ value: 'Acme' }, { value: 'AcmeInc' }])
   })
 })
 
