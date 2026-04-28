@@ -31,6 +31,7 @@ A community member management website that records member profiles and internshi
 - Format: `<type>(<scope>): <subject>`
 - Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`
 - **Small-step commits**: each logical unit = one commit. Never bundle unrelated changes.
+- **English-only message body.** Don't quote Chinese UI strings inside commit messages — describe by route, component, field, or behavior instead. Chinese is only acceptable for irreducible proper nouns (e.g. real names in test data).
 - Examples:
   - `feat(auth): add JWT token generation in login endpoint`
   - `feat(member): create member list table component`
