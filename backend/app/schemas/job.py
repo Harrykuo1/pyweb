@@ -22,6 +22,7 @@ def _validate_job_year(value: int) -> int:
 
 class JobCreate(BaseModel):
     job_year: int
+    job_month: int = Field(ge=1, le=12)
     company: str = Field(min_length=1, max_length=128)
     kind: JobKindLiteral
     experience_md: str = Field(min_length=1)
@@ -36,6 +37,7 @@ class JobCreate(BaseModel):
 
 class JobUpdate(BaseModel):
     job_year: int | None = None
+    job_month: int | None = Field(default=None, ge=1, le=12)
     company: str | None = Field(default=None, min_length=1, max_length=128)
     kind: JobKindLiteral | None = None
     experience_md: str | None = Field(default=None, min_length=1)
@@ -53,6 +55,7 @@ class JobUpdate(BaseModel):
 class JobResponse(BaseModel):
     id: int
     job_year: int
+    job_month: int
     company: str
     kind: JobKindLiteral
     experience_md: str

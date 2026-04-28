@@ -42,6 +42,7 @@ def _seed(db_session, rows):
         db_session.add(
             Job(
                 job_year=row.get("job_year", 2025),
+                job_month=row.get("job_month", 6),
                 company=row["company"],
                 kind=row.get("kind", JobKind.INTERNSHIP),
                 experience_md=row.get("experience_md", "x"),
@@ -322,6 +323,7 @@ def test_create_internship_job_admin_succeeds(client_factory):
     login_as("admin")
     payload = {
         "job_year": 2025,
+        "job_month": 6,
         "company": "Acme",
         "kind": "internship",
         "experience_md": "## interview",
@@ -332,6 +334,7 @@ def test_create_internship_job_admin_succeeds(client_factory):
     body = r.json()
     assert body["company"] == "Acme"
     assert body["kind"] == "internship"
+    assert body["job_month"] == 6
     assert body["created_at"] is not None
 
 
@@ -340,6 +343,7 @@ def test_create_fulltime_job_admin_succeeds(client_factory):
     login_as("admin")
     payload = {
         "job_year": 2025,
+        "job_month": 11,
         "company": "Globex",
         "kind": "fulltime",
         "experience_md": "## offer",

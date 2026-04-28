@@ -19,6 +19,7 @@ def _current_max_year() -> int:
 def _payload(**overrides):
     base = {
         "job_year": 2025,
+        "job_month": 6,
         "company": "Acme",
         "kind": "internship",
         "experience_md": "x",
@@ -95,14 +96,39 @@ def test_job_create_accepts_year_at_min_boundary():
     JobCreate(**_payload(job_year=2000))
 
 
+def test_job_create_rejects_missing_month():
+    payload = _payload()
+    del payload["job_month"]
+    with pytest.raises(ValidationError):
+        JobCreate(**payload)
+
+
+@pytest.mark.parametrize("bad", [0, 13, -1, 100])
+def test_job_create_rejects_out_of_range_month(bad):
+    with pytest.raises(ValidationError):
+        JobCreate(**_payload(job_month=bad))
+
+
+@pytest.mark.parametrize("good", [1, 6, 12])
+def test_job_create_accepts_month_at_boundaries(good):
+    payload = JobCreate(**_payload(job_month=good))
+    assert payload.job_month == good
+
+
 def test_job_update_all_fields_optional():
     upd = JobUpdate()
     assert upd.job_year is None
+    assert upd.job_month is None
     assert upd.company is None
     assert upd.kind is None
     assert upd.experience_md is None
     assert upd.real_name is None
     assert upd.timeline_md is None
+
+
+def test_job_update_rejects_out_of_range_month_when_provided():
+    with pytest.raises(ValidationError):
+        JobUpdate(job_month=13)
 
 
 def test_job_update_partial_payload_excludes_unset():
@@ -130,6 +156,7 @@ def test_job_response_from_orm_object():
     j = Job(
         id=1,
         job_year=2025,
+        job_month=6,
         company="Acme",
         kind=JobKind.INTERNSHIP,
         experience_md="# hi",
@@ -139,6 +166,7 @@ def test_job_response_from_orm_object():
     )
     resp = JobResponse.model_validate(j)
     assert resp.id == 1
+    assert resp.job_month == 6
     assert resp.kind == "internship"
     assert resp.real_name is None
 
@@ -148,6 +176,7 @@ def test_job_response_from_fulltime_orm_object():
     j = Job(
         id=2,
         job_year=2024,
+        job_month=11,
         company="Globex",
         kind=JobKind.FULLTIME,
         experience_md="x",
@@ -162,6 +191,7 @@ def test_list_response_carries_items_and_total():
     item = JobResponse(
         id=1,
         job_year=2025,
+        job_month=3,
         company="Acme",
         kind="internship",
         experience_md="x",

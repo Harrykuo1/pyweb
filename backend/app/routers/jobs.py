@@ -98,6 +98,12 @@ def list_jobs(
     elif sort == "created_at":
         column = _SORT_COLUMNS[sort]
         order_by = [column.asc() if order == "asc" else column.desc()]
+    elif sort == "job_year":
+        # Year+month chronological — month is the secondary key so a
+        # 2024-12 record sits ahead of 2024-01 in descending order.
+        year_col = Job.job_year.asc() if order == "asc" else Job.job_year.desc()
+        month_col = Job.job_month.asc() if order == "asc" else Job.job_month.desc()
+        order_by = [year_col, month_col, Job.created_at.desc()]
     else:
         column = _SORT_COLUMNS[sort]
         primary = column.asc() if order == "asc" else column.desc()
@@ -148,6 +154,7 @@ def create_job(
 ) -> Job:
     obj = Job(
         job_year=payload.job_year,
+        job_month=payload.job_month,
         company=payload.company,
         kind=JobKind(payload.kind),
         experience_md=payload.experience_md,
