@@ -7,44 +7,44 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_admin
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Internship, JobKind, User
+from app.models import Job, JobKind, User
 from app.schemas import (
-    InternshipCreate,
-    InternshipResponse,
-    InternshipUpdate,
+    JobCreate,
+    JobResponse,
+    JobUpdate,
     ListResponse,
     PasswordConfirmRequest,
 )
-from app.schemas.internship import JobKindLiteral
+from app.schemas.job import JobKindLiteral
 
-router = APIRouter(prefix="/api/internships", tags=["internships"])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 SortField = Literal["created_at", "job_year", "company", "real_name", "kind"]
 SortOrder = Literal["asc", "desc"]
 
 _SORT_COLUMNS = {
-    "created_at": Internship.created_at,
-    "job_year": Internship.job_year,
-    "company": Internship.company,
-    "real_name": Internship.real_name,
+    "created_at": Job.created_at,
+    "job_year": Job.job_year,
+    "company": Job.company,
+    "real_name": Job.real_name,
 }
 
 # Internship sorts before fulltime in ascending order — matches the app's
 # original framing where internship records came first.
 _KIND_PRIORITY = case(
-    (Internship.kind == JobKind.INTERNSHIP, 0),
+    (Job.kind == JobKind.INTERNSHIP, 0),
     else_=1,
 )
 
 COMPANIES_AUTOCOMPLETE_LIMIT = 20
 
 
-def _get_or_404(db: Session, internship_id: int) -> Internship:
-    obj = db.query(Internship).filter_by(id=internship_id).one_or_none()
+def _get_or_404(db: Session, job_id: int) -> Job:
+    obj = db.query(Job).filter_by(id=job_id).one_or_none()
     if obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Internship not found",
+            detail="Job not found",
         )
     return obj
 
@@ -57,8 +57,8 @@ def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> Non
         )
 
 
-@router.get("", response_model=ListResponse[InternshipResponse])
-def list_internships(
+@router.get("", response_model=ListResponse[JobResponse])
+def list_jobs(
     sort: SortField = "created_at",
     order: SortOrder = "desc",
     year: int | None = None,
@@ -67,45 +67,45 @@ def list_internships(
     q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
-) -> ListResponse[InternshipResponse]:
-    query = db.query(Internship)
+) -> ListResponse[JobResponse]:
+    query = db.query(Job)
 
     if year is not None:
-        query = query.filter(Internship.job_year == year)
+        query = query.filter(Job.job_year == year)
     if company:
-        query = query.filter(Internship.company == company)
+        query = query.filter(Job.company == company)
     if kind is not None:
-        query = query.filter(Internship.kind == kind)
+        query = query.filter(Job.kind == kind)
     if q:
         pattern = f"%{q}%"
         query = query.filter(
             or_(
-                Internship.company.ilike(pattern),
-                Internship.real_name.ilike(pattern),
-                Internship.experience_md.ilike(pattern),
+                Job.company.ilike(pattern),
+                Job.real_name.ilike(pattern),
+                Job.experience_md.ilike(pattern),
             )
         )
 
     if sort == "kind":
         primary = _KIND_PRIORITY.asc() if order == "asc" else _KIND_PRIORITY.desc()
         # Group same-kind rows together and order within by recency.
-        order_by = [primary, Internship.created_at.desc()]
+        order_by = [primary, Job.created_at.desc()]
     elif sort == "real_name":
         column = _SORT_COLUMNS[sort]
         primary = column.asc() if order == "asc" else column.desc()
         # Anonymous rows always sink to the bottom regardless of asc/desc.
-        order_by = [Internship.real_name.is_(None), primary, Internship.created_at.desc()]
+        order_by = [Job.real_name.is_(None), primary, Job.created_at.desc()]
     elif sort == "created_at":
         column = _SORT_COLUMNS[sort]
         order_by = [column.asc() if order == "asc" else column.desc()]
     else:
         column = _SORT_COLUMNS[sort]
         primary = column.asc() if order == "asc" else column.desc()
-        order_by = [primary, Internship.created_at.desc()]
+        order_by = [primary, Job.created_at.desc()]
 
     items = query.order_by(*order_by).all()
-    return ListResponse[InternshipResponse](
-        items=[InternshipResponse.model_validate(i) for i in items],
+    return ListResponse[JobResponse](
+        items=[JobResponse.model_validate(i) for i in items],
         total=len(items),
     )
 
@@ -116,37 +116,37 @@ def list_companies(
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
 ) -> list[str]:
-    query = db.query(Internship.company).distinct()
+    query = db.query(Job.company).distinct()
     if prefix:
-        query = query.filter(Internship.company.ilike(f"{prefix}%"))
+        query = query.filter(Job.company.ilike(f"{prefix}%"))
     rows = (
-        query.order_by(Internship.company)
+        query.order_by(Job.company)
         .limit(COMPANIES_AUTOCOMPLETE_LIMIT)
         .all()
     )
     return [row[0] for row in rows]
 
 
-@router.get("/{internship_id}", response_model=InternshipResponse)
-def get_internship(
-    internship_id: int,
+@router.get("/{job_id}", response_model=JobResponse)
+def get_job(
+    job_id: int,
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
-) -> Internship:
-    return _get_or_404(db, internship_id)
+) -> Job:
+    return _get_or_404(db, job_id)
 
 
 @router.post(
     "",
-    response_model=InternshipResponse,
+    response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_internship(
-    payload: InternshipCreate,
+def create_job(
+    payload: JobCreate,
     db: Session = Depends(get_db),
     _: object = Depends(require_admin),
-) -> Internship:
-    obj = Internship(
+) -> Job:
+    obj = Job(
         job_year=payload.job_year,
         company=payload.company,
         kind=JobKind(payload.kind),
@@ -160,14 +160,14 @@ def create_internship(
     return obj
 
 
-@router.put("/{internship_id}", response_model=InternshipResponse)
-def update_internship(
-    internship_id: int,
-    payload: InternshipUpdate,
+@router.put("/{job_id}", response_model=JobResponse)
+def update_job(
+    job_id: int,
+    payload: JobUpdate,
     db: Session = Depends(get_db),
     _: object = Depends(require_admin),
-) -> Internship:
-    obj = _get_or_404(db, internship_id)
+) -> Job:
+    obj = _get_or_404(db, job_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         if field == "kind" and value is not None:
             value = JobKind(value)
@@ -177,14 +177,14 @@ def update_internship(
     return obj
 
 
-@router.delete("/{internship_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_internship(
-    internship_id: int,
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job(
+    job_id: int,
     payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ) -> None:
     _require_admin_password(payload, admin)
-    obj = _get_or_404(db, internship_id)
+    obj = _get_or_404(db, job_id)
     db.delete(obj)
     db.commit()

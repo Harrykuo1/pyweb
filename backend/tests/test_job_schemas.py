@@ -3,11 +3,11 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.models import Internship, JobKind
+from app.models import Job, JobKind
 from app.schemas import (
-    InternshipCreate,
-    InternshipResponse,
-    InternshipUpdate,
+    JobCreate,
+    JobResponse,
+    JobUpdate,
     ListResponse,
 )
 
@@ -27,20 +27,20 @@ def _payload(**overrides):
     return base
 
 
-def test_internship_create_with_required_fields():
-    payload = InternshipCreate(**_payload(experience_md="## interview\n- foo"))
+def test_job_create_with_required_fields():
+    payload = JobCreate(**_payload(experience_md="## interview\n- foo"))
     assert payload.kind == "internship"
     assert payload.real_name is None
     assert payload.timeline_md is None
 
 
-def test_internship_create_accepts_fulltime_kind():
-    payload = InternshipCreate(**_payload(kind="fulltime"))
+def test_job_create_accepts_fulltime_kind():
+    payload = JobCreate(**_payload(kind="fulltime"))
     assert payload.kind == "fulltime"
 
 
-def test_internship_create_accepts_optional_fields():
-    payload = InternshipCreate(
+def test_job_create_accepts_optional_fields():
+    payload = JobCreate(
         **_payload(real_name="Carol", timeline_md="| d | e |\n|---|---|"),
     )
     assert payload.real_name == "Carol"
@@ -57,46 +57,46 @@ def test_internship_create_accepts_optional_fields():
         ("real_name", "x" * 65),
     ],
 )
-def test_internship_create_field_constraints(field, bad):
+def test_job_create_field_constraints(field, bad):
     payload = _payload()
     payload[field] = bad
     with pytest.raises(ValidationError):
-        InternshipCreate(**payload)
+        JobCreate(**payload)
 
 
-def test_internship_create_rejects_missing_kind():
+def test_job_create_rejects_missing_kind():
     payload = _payload()
     del payload["kind"]
     with pytest.raises(ValidationError):
-        InternshipCreate(**payload)
+        JobCreate(**payload)
 
 
 @pytest.mark.parametrize("bad", ["", "part-time", "INTERNSHIP", "intern"])
-def test_internship_create_rejects_invalid_kind(bad):
+def test_job_create_rejects_invalid_kind(bad):
     with pytest.raises(ValidationError):
-        InternshipCreate(**_payload(kind=bad))
+        JobCreate(**_payload(kind=bad))
 
 
-def test_internship_create_rejects_year_below_min():
+def test_job_create_rejects_year_below_min():
     with pytest.raises(ValidationError):
-        InternshipCreate(**_payload(job_year=1999))
+        JobCreate(**_payload(job_year=1999))
 
 
-def test_internship_create_rejects_year_above_max():
+def test_job_create_rejects_year_above_max():
     with pytest.raises(ValidationError):
-        InternshipCreate(**_payload(job_year=_current_max_year() + 1))
+        JobCreate(**_payload(job_year=_current_max_year() + 1))
 
 
-def test_internship_create_accepts_year_at_max_boundary():
-    InternshipCreate(**_payload(job_year=_current_max_year()))
+def test_job_create_accepts_year_at_max_boundary():
+    JobCreate(**_payload(job_year=_current_max_year()))
 
 
-def test_internship_create_accepts_year_at_min_boundary():
-    InternshipCreate(**_payload(job_year=2000))
+def test_job_create_accepts_year_at_min_boundary():
+    JobCreate(**_payload(job_year=2000))
 
 
-def test_internship_update_all_fields_optional():
-    upd = InternshipUpdate()
+def test_job_update_all_fields_optional():
+    upd = JobUpdate()
     assert upd.job_year is None
     assert upd.company is None
     assert upd.kind is None
@@ -105,29 +105,29 @@ def test_internship_update_all_fields_optional():
     assert upd.timeline_md is None
 
 
-def test_internship_update_partial_payload_excludes_unset():
-    upd = InternshipUpdate(company="New Co")
+def test_job_update_partial_payload_excludes_unset():
+    upd = JobUpdate(company="New Co")
     assert upd.model_dump(exclude_unset=True) == {"company": "New Co"}
 
 
-def test_internship_update_validates_year_when_provided():
+def test_job_update_validates_year_when_provided():
     with pytest.raises(ValidationError):
-        InternshipUpdate(job_year=1500)
+        JobUpdate(job_year=1500)
 
 
-def test_internship_update_rejects_empty_company_when_provided():
+def test_job_update_rejects_empty_company_when_provided():
     with pytest.raises(ValidationError):
-        InternshipUpdate(company="")
+        JobUpdate(company="")
 
 
-def test_internship_update_rejects_invalid_kind_when_provided():
+def test_job_update_rejects_invalid_kind_when_provided():
     with pytest.raises(ValidationError):
-        InternshipUpdate(kind="freelance")
+        JobUpdate(kind="freelance")
 
 
-def test_internship_response_from_orm_object():
+def test_job_response_from_orm_object():
     now = datetime.now(timezone.utc)
-    i = Internship(
+    j = Job(
         id=1,
         job_year=2025,
         company="Acme",
@@ -137,15 +137,15 @@ def test_internship_response_from_orm_object():
         timeline_md=None,
         created_at=now,
     )
-    resp = InternshipResponse.model_validate(i)
+    resp = JobResponse.model_validate(j)
     assert resp.id == 1
     assert resp.kind == "internship"
     assert resp.real_name is None
 
 
-def test_internship_response_from_fulltime_orm_object():
+def test_job_response_from_fulltime_orm_object():
     now = datetime.now(timezone.utc)
-    i = Internship(
+    j = Job(
         id=2,
         job_year=2024,
         company="Globex",
@@ -153,13 +153,13 @@ def test_internship_response_from_fulltime_orm_object():
         experience_md="x",
         created_at=now,
     )
-    resp = InternshipResponse.model_validate(i)
+    resp = JobResponse.model_validate(j)
     assert resp.kind == "fulltime"
 
 
 def test_list_response_carries_items_and_total():
     now = datetime.now(timezone.utc)
-    item = InternshipResponse(
+    item = JobResponse(
         id=1,
         job_year=2025,
         company="Acme",
@@ -169,6 +169,6 @@ def test_list_response_carries_items_and_total():
         timeline_md=None,
         created_at=now,
     )
-    page = ListResponse[InternshipResponse](items=[item], total=1)
+    page = ListResponse[JobResponse](items=[item], total=1)
     assert page.total == 1
     assert page.items[0].kind == "internship"

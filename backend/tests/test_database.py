@@ -13,7 +13,7 @@ def test_metadata_registers_all_app_tables(db_engine):
     assert "users" in tables
     assert "members" in tables
     assert "site_settings" in tables
-    assert "internships" in tables
+    assert "jobs" in tables
 
 
 def test_sqlite_pragma_listener_enables_wal_on_file_db():

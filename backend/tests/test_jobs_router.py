@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import Internship, JobKind, User, UserRole
+from app.models import Job, JobKind, User, UserRole
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def _seed(db_session, rows):
     base = datetime(2025, 1, 1, tzinfo=timezone.utc)
     for idx, row in enumerate(rows):
         db_session.add(
-            Internship(
+            Job(
                 job_year=row.get("job_year", 2025),
                 company=row["company"],
                 kind=row.get("kind", JobKind.INTERNSHIP),
@@ -57,7 +57,7 @@ def _seed(db_session, rows):
 
 def test_list_requires_auth(client_factory):
     client, _ = client_factory
-    r = client.get("/api/internships")
+    r = client.get("/api/jobs")
     assert r.status_code == 401
 
 
@@ -70,7 +70,7 @@ def test_list_default_sort_created_at_desc(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships")
+    r = client.get("/api/jobs")
     assert r.status_code == 200
     body = r.json()
     assert body["total"] == 3
@@ -86,7 +86,7 @@ def test_list_sort_company_asc(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?sort=company&order=asc")
+    r = client.get("/api/jobs?sort=company&order=asc")
     assert [x["company"] for x in r.json()["items"]] == ["Acme", "Globex", "Initech"]
 
 
@@ -99,7 +99,7 @@ def test_list_sort_job_year_desc(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?sort=job_year&order=desc")
+    r = client.get("/api/jobs?sort=job_year&order=desc")
     years = [x["job_year"] for x in r.json()["items"]]
     assert years == [2025, 2024, 2023]
 
@@ -114,12 +114,12 @@ def test_list_sort_real_name_anonymous_sinks(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r_asc = client.get("/api/internships?sort=real_name&order=asc")
+    r_asc = client.get("/api/jobs?sort=real_name&order=asc")
     names_asc = [x["real_name"] for x in r_asc.json()["items"]]
     assert names_asc[:2] == ["Alice", "Bob"]
     assert names_asc[2:] == [None, None]
 
-    r_desc = client.get("/api/internships?sort=real_name&order=desc")
+    r_desc = client.get("/api/jobs?sort=real_name&order=desc")
     names_desc = [x["real_name"] for x in r_desc.json()["items"]]
     assert names_desc[:2] == ["Bob", "Alice"]
     assert names_desc[2:] == [None, None]
@@ -136,7 +136,7 @@ def test_list_sort_kind_asc_groups_internships_first(client_factory, db_session)
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?sort=kind&order=asc")
+    r = client.get("/api/jobs?sort=kind&order=asc")
     items = r.json()["items"]
     # Internships first; within each kind, newest-first by created_at.
     assert [(x["kind"], x["company"]) for x in items] == [
@@ -155,7 +155,7 @@ def test_list_sort_kind_desc_groups_fulltime_first(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?sort=kind&order=desc")
+    r = client.get("/api/jobs?sort=kind&order=desc")
     items = r.json()["items"]
     assert [x["kind"] for x in items] == ["fulltime", "internship"]
 
@@ -169,7 +169,7 @@ def test_list_filter_by_year(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?year=2024")
+    r = client.get("/api/jobs?year=2024")
     assert r.json()["total"] == 2
 
 
@@ -182,7 +182,7 @@ def test_list_filter_by_company_exact_match(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?company=Acme")
+    r = client.get("/api/jobs?company=Acme")
     items = r.json()["items"]
     assert len(items) == 1
     assert items[0]["company"] == "Acme"
@@ -197,7 +197,7 @@ def test_list_filter_by_kind_internship(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?kind=internship")
+    r = client.get("/api/jobs?kind=internship")
     body = r.json()
     assert body["total"] == 2
     assert all(x["kind"] == "internship" for x in body["items"])
@@ -211,7 +211,7 @@ def test_list_filter_by_kind_fulltime(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?kind=fulltime")
+    r = client.get("/api/jobs?kind=fulltime")
     body = r.json()
     assert body["total"] == 1
     assert body["items"][0]["kind"] == "fulltime"
@@ -220,7 +220,7 @@ def test_list_filter_by_kind_fulltime(client_factory, db_session):
 def test_list_filter_kind_rejects_invalid_value(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.get("/api/internships?kind=part-time")
+    r = client.get("/api/jobs?kind=part-time")
     assert r.status_code == 422
 
 
@@ -233,7 +233,7 @@ def test_list_search_q_matches_company_name_and_experience(client_factory, db_se
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?q=interview")
+    r = client.get("/api/jobs?q=interview")
     companies = sorted(x["company"] for x in r.json()["items"])
     assert companies == ["Acme", "Globex"]
 
@@ -247,7 +247,7 @@ def test_list_combined_filter_and_search(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships?company=Acme&year=2024&q=interview&kind=internship")
+    r = client.get("/api/jobs?company=Acme&year=2024&q=interview&kind=internship")
     body = r.json()
     assert body["total"] == 1
 
@@ -255,7 +255,7 @@ def test_list_combined_filter_and_search(client_factory, db_session):
 def test_list_rejects_invalid_sort(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.get("/api/internships?sort=garbage")
+    r = client.get("/api/jobs?sort=garbage")
     assert r.status_code == 422
 
 
@@ -270,7 +270,7 @@ def test_companies_autocomplete_distinct(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships/companies")
+    r = client.get("/api/jobs/companies")
     assert r.status_code == 200
     assert r.json() == ["Acme", "Globex"]
 
@@ -284,31 +284,31 @@ def test_companies_autocomplete_prefix(client_factory, db_session):
     ])
     login_as("viewer")
 
-    r = client.get("/api/internships/companies?prefix=ac")
+    r = client.get("/api/jobs/companies?prefix=ac")
     assert r.json() == ["Acme", "Acme Inc"]
 
 
 def test_companies_autocomplete_requires_auth(client_factory):
     client, _ = client_factory
-    r = client.get("/api/internships/companies")
+    r = client.get("/api/jobs/companies")
     assert r.status_code == 401
 
 
 # ---------- detail ----------
 
-def test_get_internship_404(client_factory):
+def test_get_job_404(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.get("/api/internships/9999")
+    r = client.get("/api/jobs/9999")
     assert r.status_code == 404
 
 
-def test_get_internship_returns_full_markdown(client_factory, db_session):
+def test_get_job_returns_full_markdown(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [{"company": "Acme", "experience_md": "## interview"}])
     login_as("viewer")
 
-    r = client.get("/api/internships/1")
+    r = client.get("/api/jobs/1")
     assert r.status_code == 200
     body = r.json()
     assert body["experience_md"] == "## interview"
@@ -317,7 +317,7 @@ def test_get_internship_returns_full_markdown(client_factory, db_session):
 
 # ---------- create ----------
 
-def test_create_internship_admin_succeeds(client_factory):
+def test_create_internship_job_admin_succeeds(client_factory):
     client, login_as = client_factory
     login_as("admin")
     payload = {
@@ -327,7 +327,7 @@ def test_create_internship_admin_succeeds(client_factory):
         "experience_md": "## interview",
         "real_name": "Carol",
     }
-    r = client.post("/api/internships", json=payload)
+    r = client.post("/api/jobs", json=payload)
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["company"] == "Acme"
@@ -335,7 +335,7 @@ def test_create_internship_admin_succeeds(client_factory):
     assert body["created_at"] is not None
 
 
-def test_create_fulltime_admin_succeeds(client_factory):
+def test_create_fulltime_job_admin_succeeds(client_factory):
     client, login_as = client_factory
     login_as("admin")
     payload = {
@@ -344,7 +344,7 @@ def test_create_fulltime_admin_succeeds(client_factory):
         "kind": "fulltime",
         "experience_md": "## offer",
     }
-    r = client.post("/api/internships", json=payload)
+    r = client.post("/api/jobs", json=payload)
     assert r.status_code == 201, r.text
     assert r.json()["kind"] == "fulltime"
 
@@ -353,7 +353,7 @@ def test_create_rejects_missing_kind(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.post(
-        "/api/internships",
+        "/api/jobs",
         json={"job_year": 2025, "company": "Acme", "experience_md": "x"},
     )
     assert r.status_code == 422
@@ -363,7 +363,7 @@ def test_create_rejects_invalid_kind(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.post(
-        "/api/internships",
+        "/api/jobs",
         json={
             "job_year": 2025,
             "company": "Acme",
@@ -378,7 +378,7 @@ def test_create_viewer_403(client_factory):
     client, login_as = client_factory
     login_as("viewer")
     r = client.post(
-        "/api/internships",
+        "/api/jobs",
         json={"job_year": 2025, "company": "Acme", "kind": "internship", "experience_md": "x"},
     )
     assert r.status_code == 403
@@ -387,7 +387,7 @@ def test_create_viewer_403(client_factory):
 def test_create_unauth_401(client_factory):
     client, _ = client_factory
     r = client.post(
-        "/api/internships",
+        "/api/jobs",
         json={"job_year": 2025, "company": "Acme", "kind": "internship", "experience_md": "x"},
     )
     assert r.status_code == 401
@@ -397,7 +397,7 @@ def test_create_rejects_year_below_min(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.post(
-        "/api/internships",
+        "/api/jobs",
         json={"job_year": 1999, "company": "Acme", "kind": "internship", "experience_md": "x"},
     )
     assert r.status_code == 422
@@ -408,7 +408,7 @@ def test_create_rejects_year_above_max(client_factory):
     login_as("admin")
     far_future = datetime.now(timezone.utc).year + 5
     r = client.post(
-        "/api/internships",
+        "/api/jobs",
         json={
             "job_year": far_future,
             "company": "Acme",
@@ -426,7 +426,7 @@ def test_update_admin_partial(client_factory, db_session):
     _seed(db_session, [{"company": "Old", "experience_md": "x"}])
     login_as("admin")
 
-    r = client.put("/api/internships/1", json={"company": "New"})
+    r = client.put("/api/jobs/1", json={"company": "New"})
     assert r.status_code == 200
     body = r.json()
     assert body["company"] == "New"
@@ -438,7 +438,7 @@ def test_update_kind_admin_promotes_internship_to_fulltime(client_factory, db_se
     _seed(db_session, [{"company": "Acme", "kind": JobKind.INTERNSHIP}])
     login_as("admin")
 
-    r = client.put("/api/internships/1", json={"kind": "fulltime"})
+    r = client.put("/api/jobs/1", json={"kind": "fulltime"})
     assert r.status_code == 200
     assert r.json()["kind"] == "fulltime"
 
@@ -448,7 +448,7 @@ def test_update_kind_rejects_invalid_value(client_factory, db_session):
     _seed(db_session, [{"company": "Acme"}])
     login_as("admin")
 
-    r = client.put("/api/internships/1", json={"kind": "freelance"})
+    r = client.put("/api/jobs/1", json={"kind": "freelance"})
     assert r.status_code == 422
 
 
@@ -456,14 +456,14 @@ def test_update_viewer_403(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [{"company": "Acme"}])
     login_as("viewer")
-    r = client.put("/api/internships/1", json={"company": "Hack"})
+    r = client.put("/api/jobs/1", json={"company": "Hack"})
     assert r.status_code == 403
 
 
 def test_update_404(client_factory):
     client, login_as = client_factory
     login_as("admin")
-    r = client.put("/api/internships/9999", json={"company": "X"})
+    r = client.put("/api/jobs/9999", json={"company": "X"})
     assert r.status_code == 404
 
 
@@ -475,10 +475,10 @@ def test_delete_admin_with_correct_password(client_factory, db_session):
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/internships/1", json={"password": "admin-pw"},
+        "DELETE", "/api/jobs/1", json={"password": "admin-pw"},
     )
     assert r.status_code == 204
-    assert client.get("/api/internships/1").status_code == 404
+    assert client.get("/api/jobs/1").status_code == 404
 
 
 def test_delete_wrong_password_401(client_factory, db_session):
@@ -487,17 +487,17 @@ def test_delete_wrong_password_401(client_factory, db_session):
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/internships/1", json={"password": "nope"},
+        "DELETE", "/api/jobs/1", json={"password": "nope"},
     )
     assert r.status_code == 401
-    assert client.get("/api/internships/1").status_code == 200
+    assert client.get("/api/jobs/1").status_code == 200
 
 
 def test_delete_missing_password_422(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [{"company": "Acme"}])
     login_as("admin")
-    r = client.delete("/api/internships/1")
+    r = client.delete("/api/jobs/1")
     assert r.status_code == 422
 
 
@@ -506,7 +506,7 @@ def test_delete_viewer_403(client_factory, db_session):
     _seed(db_session, [{"company": "Acme"}])
     login_as("viewer")
     r = client.request(
-        "DELETE", "/api/internships/1", json={"password": "viewer-pw"},
+        "DELETE", "/api/jobs/1", json={"password": "viewer-pw"},
     )
     assert r.status_code == 403
 
@@ -515,6 +515,6 @@ def test_delete_404(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.request(
-        "DELETE", "/api/internships/9999", json={"password": "admin-pw"},
+        "DELETE", "/api/jobs/9999", json={"password": "admin-pw"},
     )
     assert r.status_code == 404

@@ -5,18 +5,18 @@ from app.schemas.auth import (
     UpdateUsernameRequest,
     UserResponse,
 )
-from app.schemas.internship import (
-    InternshipCreate,
-    InternshipResponse,
-    InternshipUpdate,
+from app.schemas.job import (
+    JobCreate,
+    JobResponse,
+    JobUpdate,
     ListResponse,
 )
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
 
 __all__ = [
-    "InternshipCreate",
-    "InternshipResponse",
-    "InternshipUpdate",
+    "JobCreate",
+    "JobResponse",
+    "JobUpdate",
     "ListResponse",
     "LoginRequest",
     "MemberCreate",

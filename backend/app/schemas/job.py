@@ -20,7 +20,7 @@ def _validate_job_year(value: int) -> int:
     return value
 
 
-class InternshipCreate(BaseModel):
+class JobCreate(BaseModel):
     job_year: int
     company: str = Field(min_length=1, max_length=128)
     kind: JobKindLiteral
@@ -34,7 +34,7 @@ class InternshipCreate(BaseModel):
         return _validate_job_year(v)
 
 
-class InternshipUpdate(BaseModel):
+class JobUpdate(BaseModel):
     job_year: int | None = None
     company: str | None = Field(default=None, min_length=1, max_length=128)
     kind: JobKindLiteral | None = None
@@ -50,7 +50,7 @@ class InternshipUpdate(BaseModel):
         return _validate_job_year(v)
 
 
-class InternshipResponse(BaseModel):
+class JobResponse(BaseModel):
     id: int
     job_year: int
     company: str

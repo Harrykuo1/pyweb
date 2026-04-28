@@ -12,8 +12,8 @@ class JobKind(str, enum.Enum):
     FULLTIME = "fulltime"
 
 
-class Internship(Base):
-    __tablename__ = "internships"
+class Job(Base):
+    __tablename__ = "jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     job_year: Mapped[int] = mapped_column(Integer, nullable=False)
