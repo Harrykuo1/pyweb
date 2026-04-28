@@ -272,6 +272,22 @@ function formatJobYearMonth(j) {
   padding: 0;
 }
 
+/* md-editor-v3's default heading rhythm (margin: 1.4em 0 .8em) leaves
+   a visually disconnected gap between an h1 and the paragraph below.
+   Tighten it so the section header feels attached to its content. */
+.md-frame :deep(.md-editor-preview h1),
+.md-frame :deep(.md-editor-preview h2),
+.md-frame :deep(.md-editor-preview h3),
+.md-frame :deep(.md-editor-preview h4),
+.md-frame :deep(.md-editor-preview h5),
+.md-frame :deep(.md-editor-preview h6) {
+  margin: 0.7em 0 0.35em;
+}
+
+.md-frame :deep(.md-editor-preview > :first-child) {
+  margin-top: 0;
+}
+
 /* ---------- Footer ---------- */
 .footer-row {
   display: flex;
