@@ -13,12 +13,10 @@ describe('jobsApi.list', () => {
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
     await jobsApi.list()
-    expect(get).toHaveBeenCalledWith('/jobs', {
-      params: { sort: 'created_at', order: 'desc' },
-    })
+    expect(get).toHaveBeenCalledWith('/jobs?sort=created_at&order=desc')
   })
 
-  it('passes sort/order/year/company/kind/q through', async () => {
+  it('passes sort/order/year/company/kind/q through with company as repeated params', async () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
@@ -26,30 +24,31 @@ describe('jobsApi.list', () => {
       sort: 'company',
       order: 'asc',
       year: 2024,
-      company: 'Acme',
+      company: ['Acme', 'Globex'],
       kind: 'fulltime',
       q: 'interview',
     })
-    expect(get).toHaveBeenCalledWith('/jobs', {
-      params: {
-        sort: 'company',
-        order: 'asc',
-        year: 2024,
-        company: 'Acme',
-        kind: 'fulltime',
-        q: 'interview',
-      },
-    })
+    expect(get).toHaveBeenCalledWith(
+      '/jobs?sort=company&order=asc&year=2024&company=Acme&company=Globex&kind=fulltime&q=interview',
+    )
+  })
+
+  it('accepts a bare string company for backwards compatibility', async () => {
+    const get = vi
+      .spyOn(client, 'get')
+      .mockResolvedValue({ data: { items: [], total: 0 } })
+    await jobsApi.list({ company: 'Acme' })
+    expect(get).toHaveBeenCalledWith(
+      '/jobs?sort=created_at&order=desc&company=Acme',
+    )
   })
 
   it('omits empty filter params from the request', async () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
-    await jobsApi.list({ year: '', company: '', kind: '', q: '' })
-    expect(get).toHaveBeenCalledWith('/jobs', {
-      params: { sort: 'created_at', order: 'desc' },
-    })
+    await jobsApi.list({ year: '', company: [], kind: '', q: '' })
+    expect(get).toHaveBeenCalledWith('/jobs?sort=created_at&order=desc')
   })
 
   it('returns the {items, total} envelope unchanged', async () => {

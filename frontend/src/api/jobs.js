@@ -9,12 +9,24 @@ export const jobsApi = {
     kind,
     q,
   } = {}) {
-    const params = { sort, order }
-    if (year !== undefined && year !== null && year !== '') params.year = year
-    if (company) params.company = company
-    if (kind) params.kind = kind
-    if (q) params.q = q
-    const { data } = await client.get('/jobs', { params })
+    // Build the query string by hand so company=[A,B] serializes as
+    // ?company=A&company=B (FastAPI repeated-param style) instead of
+    // axios's default ?company[]=A&company[]=B which would not match
+    // FastAPI's Query(default_factory=list).
+    const search = new URLSearchParams()
+    search.set('sort', sort)
+    search.set('order', order)
+    if (year !== undefined && year !== null && year !== '') {
+      search.set('year', year)
+    }
+    if (Array.isArray(company)) {
+      for (const c of company) if (c) search.append('company', c)
+    } else if (company) {
+      search.append('company', company)
+    }
+    if (kind) search.set('kind', kind)
+    if (q) search.set('q', q)
+    const { data } = await client.get(`/jobs?${search.toString()}`)
     return data
   },
   async get(id) {

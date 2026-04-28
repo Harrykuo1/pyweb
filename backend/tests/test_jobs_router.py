@@ -189,6 +189,22 @@ def test_list_filter_by_company_exact_match(client_factory, db_session):
     assert items[0]["company"] == "Acme"
 
 
+def test_list_filter_by_company_multi_or(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "Acme"},
+        {"company": "Globex"},
+        {"company": "Initech"},
+        {"company": "Other"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?company=Acme&company=Globex")
+    body = r.json()
+    assert body["total"] == 2
+    assert sorted(x["company"] for x in body["items"]) == ["Acme", "Globex"]
+
+
 def test_list_filter_by_kind_internship(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [
@@ -225,7 +241,7 @@ def test_list_filter_kind_rejects_invalid_value(client_factory):
     assert r.status_code == 422
 
 
-def test_list_search_q_matches_company_name_and_experience(client_factory, db_session):
+def test_list_search_q_matches_real_name_and_experience(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [
         {"company": "Acme", "experience_md": "interview was tough"},
@@ -237,6 +253,19 @@ def test_list_search_q_matches_company_name_and_experience(client_factory, db_se
     r = client.get("/api/jobs?q=interview")
     companies = sorted(x["company"] for x in r.json()["items"])
     assert companies == ["Acme", "Globex"]
+
+
+def test_list_search_q_does_not_match_company_name(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "Acme", "real_name": "alice", "experience_md": "fine"},
+        {"company": "Other", "real_name": "Acme person", "experience_md": "x"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=Acme")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["Other"]
 
 
 def test_list_combined_filter_and_search(client_factory, db_session):

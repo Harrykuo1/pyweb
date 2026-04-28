@@ -85,7 +85,7 @@ describe('Jobs.vue — initial load', () => {
       sort: 'created_at',
       order: 'desc',
       year: undefined,
-      company: undefined,
+      company: [],
       kind: undefined,
       q: undefined,
     })
@@ -151,7 +151,7 @@ describe('Jobs.vue — URL-driven state on first paint', () => {
     expect(listSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         year: 2024,
-        company: 'Acme',
+        company: ['Acme'],
         kind: 'internship',
         q: 'system',
       }),
@@ -159,6 +159,14 @@ describe('Jobs.vue — URL-driven state on first paint', () => {
     expect(
       wrapper.find('[data-test="filter-kind-internship"]').classes(),
     ).toContain('is-active')
+  })
+
+  it('reads multiple company values from a repeated query param', async () => {
+    routeQuery.value = { company: ['Acme', 'Globex'] }
+    const { listSpy } = await mountPage()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ company: ['Acme', 'Globex'] }),
+    )
   })
 
   it('drops year out of range or non-numeric on first paint', async () => {
@@ -298,27 +306,30 @@ describe('Jobs.vue — URL sync on filter/sort changes', () => {
   })
 })
 
-describe('Jobs.vue — company autocomplete', () => {
-  it('wires the autocomplete fetcher to jobsApi.listCompanies', async () => {
+describe('Jobs.vue — company multi-select', () => {
+  it('wires the remote-method to jobsApi.listCompanies and merges results into options', async () => {
     const { wrapper } = await mountPage()
-    const autocomplete = wrapper.findComponent({ name: 'ElAutocomplete' })
-    expect(autocomplete.exists()).toBe(true)
+    const select = wrapper.find('[data-test="filter-company"]')
+      .findComponent({ name: 'ElSelect' })
+    expect(select.exists()).toBe(true)
+    expect(select.props('multiple')).toBe(true)
+    expect(select.props('remote')).toBe(true)
 
     const listSpy = vi
       .spyOn(jobsApi, 'listCompanies')
       .mockResolvedValue(['Acme', 'AcmeInc'])
 
-    // Drive the prop directly: el-autocomplete's internal debounce only
-    // runs in response to real user input, but the prop itself is the
-    // contract our component owns and the only thing worth pinning down.
-    const fetchSuggestions = autocomplete.props('fetchSuggestions')
-    expect(typeof fetchSuggestions).toBe('function')
+    const remoteMethod = select.props('remoteMethod')
+    expect(typeof remoteMethod).toBe('function')
 
-    const suggestions = await new Promise((resolve) =>
-      fetchSuggestions('ac', resolve),
-    )
+    await remoteMethod('ac')
+    await flushPromises()
     expect(listSpy).toHaveBeenCalledWith('ac')
-    expect(suggestions).toEqual([{ value: 'Acme' }, { value: 'AcmeInc' }])
+
+    // Options should now include both fetched suggestions.
+    const optionLabels = select.findAllComponents({ name: 'ElOption' })
+      .map((o) => o.props('label'))
+    expect(optionLabels).toEqual(expect.arrayContaining(['Acme', 'AcmeInc']))
   })
 })
 

@@ -62,7 +62,9 @@ def list_jobs(
     sort: SortField = "created_at",
     order: SortOrder = "desc",
     year: int | None = None,
-    company: str | None = None,
+    # Repeatable: ?company=A&company=B → OR-matched against Job.company.
+    # Capped server-side so a malicious caller can't blow up the IN clause.
+    company: list[str] = Query(default_factory=list, max_length=10),
     kind: JobKindLiteral | None = None,
     q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
@@ -73,14 +75,15 @@ def list_jobs(
     if year is not None:
         query = query.filter(Job.job_year == year)
     if company:
-        query = query.filter(Job.company == company)
+        query = query.filter(Job.company.in_(company))
     if kind is not None:
         query = query.filter(Job.kind == kind)
     if q:
+        # Company is filtered separately via the multi-select tag picker,
+        # so keep q focused on free-form text fields.
         pattern = f"%{q}%"
         query = query.filter(
             or_(
-                Job.company.ilike(pattern),
                 Job.real_name.ilike(pattern),
                 Job.experience_md.ilike(pattern),
             )

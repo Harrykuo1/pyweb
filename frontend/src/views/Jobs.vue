@@ -1,8 +1,7 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ElAutocomplete,
   ElButton,
   ElIcon,
   ElInput,
@@ -83,10 +82,30 @@ function _safeYear(v) {
   return n
 }
 
+const COMPANY_FILTER_LIMIT = 10
+
+// route.query.company is `string | string[] | undefined` depending on
+// how many `company=` params the URL carries. Normalize to a deduped
+// array of trimmed strings so the select's v-model has a stable shape.
+function _safeCompanyList(v) {
+  const raw = v === undefined || v === null
+    ? []
+    : Array.isArray(v) ? v : [v]
+  const out = []
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const trimmed = item.trim()
+    if (!trimmed) continue
+    if (!out.includes(trimmed)) out.push(trimmed)
+    if (out.length >= COMPANY_FILTER_LIMIT) break
+  }
+  return out
+}
+
 const sortKey = ref(_safeSort(route.query.sort))
 const sortOrder = ref(_safeOrder(route.query.order))
 const year = ref(_safeYear(route.query.year))
-const company = ref(typeof route.query.company === 'string' ? route.query.company : '')
+const company = ref(_safeCompanyList(route.query.company))
 const kind = ref(_safeKind(route.query.kind))
 const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
 
@@ -167,7 +186,7 @@ async function loadItems() {
       sort: sortKey.value,
       order: sortOrder.value,
       year: year.value ?? undefined,
-      company: company.value || undefined,
+      company: company.value,
       kind: kind.value || undefined,
       q: q.value || undefined,
     })
@@ -194,7 +213,7 @@ function syncUrl() {
   if (sortKey.value !== 'created_at') query.sort = sortKey.value
   if (sortOrder.value !== 'desc') query.order = sortOrder.value
   if (year.value) query.year = String(year.value)
-  if (company.value) query.company = company.value
+  if (company.value.length > 0) query.company = [...company.value]
   if (kind.value) query.kind = kind.value
   if (q.value) query.q = q.value
   router.replace({ query })
@@ -202,10 +221,14 @@ function syncUrl() {
 
 // Sort/year/company/kind changes are immediate. Search input is debounced
 // so a user typing doesn't fire a request per keystroke.
-watch([sortKey, sortOrder, year, company, kind], () => {
-  syncUrl()
-  loadItems()
-})
+watch(
+  [sortKey, sortOrder, year, company, kind],
+  () => {
+    syncUrl()
+    loadItems()
+  },
+  { deep: true },
+)
 
 let qTimer = null
 watch(q, () => {
@@ -221,14 +244,49 @@ onUnmounted(() => {
   if (qTimer !== null) clearTimeout(qTimer)
 })
 
-async function fetchCompanySuggestions(queryString, cb) {
+// el-select with `remote` calls this on every keystroke. The dropdown
+// shows only what the API returned for the current keyword — chips
+// already in `company` render straight from their string value, so we
+// don't inject them into options (that would surface unrelated chips
+// during a fresh keyword search).
+const companySuggestions = ref([])
+
+async function fetchCompanySuggestions(queryString) {
   try {
-    const list = await jobsApi.listCompanies(queryString || undefined)
-    cb(list.map((c) => ({ value: c })))
+    companySuggestions.value = await jobsApi.listCompanies(queryString || undefined)
   } catch {
-    cb([])
+    companySuggestions.value = []
   }
 }
+
+// Block auto-repeat Backspace when the inline editor is empty so a
+// held key can't rapid-fire delete every selected chip. The first
+// press still removes one chip; the user has to release and press
+// again to delete the next one.
+function onCompanyFilterKeydown(event) {
+  if (
+    event.key === 'Backspace' &&
+    event.repeat &&
+    event.target instanceof HTMLInputElement &&
+    event.target.value === ''
+  ) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+}
+
+// Push already-selected matches to the bottom so the user always sees
+// new options first; each group keeps the API's alphabetical order.
+const displayedCompanySuggestions = computed(() => {
+  const selected = new Set(company.value)
+  const fresh = []
+  const stale = []
+  for (const c of companySuggestions.value) {
+    if (selected.has(c)) stale.push(c)
+    else fresh.push(c)
+  }
+  return [...fresh, ...stale]
+})
 
 function realNameOrAnonymous(item) {
   return item.real_name || '匿名'
@@ -323,21 +381,35 @@ onMounted(loadItems)
           />
         </el-select>
 
-        <el-autocomplete
+        <el-select
           v-model="company"
-          :fetch-suggestions="fetchCompanySuggestions"
-          placeholder="公司"
-          :prefix-icon="OfficeBuilding"
+          multiple
+          filterable
+          remote
+          :remote-method="fetchCompanySuggestions"
+          :reserve-keyword="false"
+          :multiple-limit="10"
+          placeholder="公司（可多選）"
           clearable
-          :trigger-on-focus="true"
           data-test="filter-company"
           class="filter-company"
-        />
+          @keydown.capture="onCompanyFilterKeydown"
+        >
+          <template #prefix>
+            <el-icon><OfficeBuilding /></el-icon>
+          </template>
+          <el-option
+            v-for="c in displayedCompanySuggestions"
+            :key="c"
+            :label="c"
+            :value="c"
+          />
+        </el-select>
       </div>
 
       <el-input
         v-model="q"
-        placeholder="搜尋公司、姓名、心得"
+        placeholder="搜尋姓名、心得"
         :prefix-icon="Search"
         clearable
         data-test="filter-search"
@@ -640,7 +712,19 @@ onMounted(loadItems)
 }
 
 .filter-company {
-  width: 200px;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Suppress the nested border that would otherwise appear around the
+   chips' inline editor — el-select renders an internal input wrapper
+   when filterable+multiple, and our generic .filter-bar input shadow
+   leaks into it. We want only the outer wrapper to show a border. */
+.filter-company :deep(.el-select__input),
+.filter-company :deep(.el-select__selection) input {
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
 }
 
 /* Row 2 — search takes the full width of the filter bar so users can
