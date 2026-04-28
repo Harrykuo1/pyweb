@@ -35,6 +35,7 @@ const sample = [
   {
     id: 1,
     job_year: 2024,
+    job_month: 5,
     company: 'Acme',
     kind: 'internship',
     real_name: 'Alice',
@@ -45,6 +46,7 @@ const sample = [
   {
     id: 2,
     job_year: 2025,
+    job_month: 3,
     company: 'Globex',
     kind: 'fulltime',
     real_name: null,

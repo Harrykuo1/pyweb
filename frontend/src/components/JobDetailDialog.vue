@@ -51,6 +51,12 @@ function formatDate(iso) {
     day: '2-digit',
   })
 }
+
+function formatJobYearMonth(j) {
+  if (!j?.job_year) return '-'
+  const m = j.job_month
+  return m ? `${j.job_year}/${String(m).padStart(2, '0')}` : `${j.job_year}`
+}
 </script>
 
 <template>
@@ -85,7 +91,7 @@ function formatDate(iso) {
           </span>
           <span class="meta-year">
             <el-icon :size="13"><School /></el-icon>
-            {{ job.job_year }} 求職
+            {{ formatJobYearMonth(job) }} 求職
           </span>
           <span class="meta-date">
             <el-icon :size="13"><Calendar /></el-icon>

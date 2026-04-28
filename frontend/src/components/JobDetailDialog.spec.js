@@ -17,6 +17,7 @@ vi.mock('md-editor-v3/lib/preview.css', () => ({}))
 const sample = {
   id: 1,
   job_year: 2025,
+  job_month: 4,
   company: 'Acme',
   kind: 'internship',
   real_name: 'Alice',
@@ -53,7 +54,7 @@ describe('JobDetailDialog — header', () => {
       .toContain('Acme')
     expect(wrapper.find('[data-test="detail-real-name"]').text())
       .toContain('Alice')
-    expect(wrapper.text()).toContain('2025 求職')
+    expect(wrapper.text()).toContain('2025/04 求職')
   })
 
   it('shows 匿名 styling when real_name is null', async () => {

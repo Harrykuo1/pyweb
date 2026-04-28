@@ -106,6 +106,7 @@ describe('JobFormDialog — edit mode', () => {
         id: 7,
         kind: 'fulltime',
         job_year: 2023,
+        job_month: 8,
         company: 'Acme',
         real_name: 'Alice',
         experience_md: '## interview',
@@ -151,6 +152,9 @@ describe('JobFormDialog — submit', () => {
       timeline_md: null,
     })
     expect(typeof payload.job_year).toBe('number')
+    expect(typeof payload.job_month).toBe('number')
+    expect(payload.job_month).toBeGreaterThanOrEqual(1)
+    expect(payload.job_month).toBeLessThanOrEqual(12)
   })
 
   it('PUTs to jobsApi.update on save in edit mode', async () => {
@@ -162,6 +166,7 @@ describe('JobFormDialog — submit', () => {
         id: 7,
         kind: 'internship',
         job_year: 2024,
+        job_month: 5,
         company: 'Acme',
         real_name: 'Alice',
         experience_md: '## interview',

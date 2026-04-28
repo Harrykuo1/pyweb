@@ -12,11 +12,11 @@ import {
 import {
   ElAutocomplete,
   ElButton,
+  ElDatePicker,
   ElDialog,
   ElForm,
   ElFormItem,
   ElInput,
-  ElInputNumber,
   ElMessage,
   ElTabPane,
   ElTabs,
@@ -43,8 +43,28 @@ const KIND_OPTIONS = [
 ]
 
 const CURRENT_YEAR = new Date().getFullYear()
+const CURRENT_MONTH = new Date().getMonth() + 1
 const MIN_JOB_YEAR = 2000
 const MAX_JOB_YEAR = CURRENT_YEAR + 1
+
+// el-date-picker month-mode hands us a Date; the API only takes
+// (year, month) integers, so adapt at the form-state boundary.
+function _ymToDate(year, month) {
+  if (!year || !month) return null
+  return new Date(year, month - 1, 1)
+}
+
+// el-date-picker disabledDate prop callback — block months outside the
+// allowed range so users can only pick valid year-month combos.
+function isJobYearMonthDisabled(date) {
+  const y = date.getFullYear()
+  if (y < MIN_JOB_YEAR) return true
+  if (y > MAX_JOB_YEAR) return true
+  // The latest allowed month is December of (current year + 1) — no
+  // need for a finer cap because the year guard already covers the
+  // upper bound.
+  return false
+}
 
 const formRef = ref(null)
 const experienceEditorRef = ref(null)
@@ -181,15 +201,35 @@ async function wireAllPreviewSync() {
 const form = reactive({
   kind: 'internship',
   job_year: CURRENT_YEAR,
+  job_month: CURRENT_MONTH,
   company: '',
   real_name: '',
   experience_md: '',
   timeline_md: '',
 })
 
+// Two-way bridge between the el-date-picker (Date) and the form's
+// integer (year, month) pair. Using a writable computed keeps the form
+// payload simple while letting users pick year-month with the native
+// month picker UI.
+const jobYearMonth = computed({
+  get() {
+    return _ymToDate(form.job_year, form.job_month)
+  },
+  set(value) {
+    if (!value) {
+      form.job_year = null
+      form.job_month = null
+      return
+    }
+    form.job_year = value.getFullYear()
+    form.job_month = value.getMonth() + 1
+  },
+})
+
 const rules = {
   kind: [{ required: true, message: '請選擇類型', trigger: 'change' }],
-  job_year: [{ required: true, message: '請輸入求職年份', trigger: 'blur' }],
+  job_year: [{ required: true, message: '請選擇求職年月', trigger: 'blur' }],
   company: [{ required: true, message: '請輸入公司名稱', trigger: 'blur' }],
   experience_md: [
     { required: true, message: '請填寫心得內容', trigger: 'blur' },
@@ -200,6 +240,7 @@ function resetForm(job) {
   Object.assign(form, {
     kind: job?.kind ?? 'internship',
     job_year: job?.job_year ?? CURRENT_YEAR,
+    job_month: job?.job_month ?? CURRENT_MONTH,
     company: job?.company ?? '',
     real_name: job?.real_name ?? '',
     experience_md: job?.experience_md ?? '',
@@ -241,6 +282,7 @@ function buildPayload() {
   return {
     kind: form.kind,
     job_year: form.job_year,
+    job_month: form.job_month,
     company: form.company.trim(),
     experience_md: form.experience_md.trim(),
     real_name: trimmedRealName === '' ? null : trimmedRealName,
@@ -251,11 +293,17 @@ function buildPayload() {
 async function handleSubmit() {
   if (!formRef.value) return
 
-  // Guard the required text fields manually. el-form-item's validate()
-  // is unreliable for the autocomplete-bound company input and the
-  // MdEditor-bound experience field, since neither triggers the
-  // form-item event hooks the way a plain el-input does.
-  if (!form.company.trim() || !form.experience_md.trim()) {
+  // Guard the required text / picker fields manually. el-form-item's
+  // validate() is unreliable for the autocomplete-bound company input,
+  // the MdEditor-bound experience field, and the date-picker-bound
+  // year-month — none of them trigger the form-item event hooks the
+  // way a plain el-input does.
+  if (
+    !form.company.trim() ||
+    !form.experience_md.trim() ||
+    !form.job_year ||
+    !form.job_month
+  ) {
     if (!form.experience_md.trim()) activeTab.value = 'experience'
     formRef.value.validate().catch(() => {})
     return
@@ -315,40 +363,38 @@ async function handleSubmit() {
       label-position="top"
       class="job-form"
     >
-      <div class="row-2">
-        <el-form-item label="類型" prop="kind" class="form-kind">
-          <div class="kind-picker" role="radiogroup" aria-label="類型">
-            <button
-              v-for="opt in KIND_OPTIONS"
-              :key="opt.value"
-              type="button"
-              role="radio"
-              :aria-checked="form.kind === opt.value"
-              :class="[
-                'kind-option',
-                `kind-option--${opt.value}`,
-                { 'is-active': form.kind === opt.value },
-              ]"
-              :data-test="`kind-option-${opt.value}`"
-              @click="form.kind = opt.value"
-            >
-              {{ opt.label }}
-            </button>
-          </div>
-        </el-form-item>
+      <el-form-item label="類型" prop="kind">
+        <div class="kind-picker" role="radiogroup" aria-label="類型">
+          <button
+            v-for="opt in KIND_OPTIONS"
+            :key="opt.value"
+            type="button"
+            role="radio"
+            :aria-checked="form.kind === opt.value"
+            :class="[
+              'kind-option',
+              `kind-option--${opt.value}`,
+              { 'is-active': form.kind === opt.value },
+            ]"
+            :data-test="`kind-option-${opt.value}`"
+            @click="form.kind = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </el-form-item>
 
-        <el-form-item label="求職年份" prop="job_year" class="form-year">
-          <el-input-number
-            v-model="form.job_year"
-            :min="MIN_JOB_YEAR"
-            :max="MAX_JOB_YEAR"
-            :step="1"
-            :precision="0"
-            controls-position="right"
-            data-test="form-year"
-          />
-        </el-form-item>
-      </div>
+      <el-form-item label="求職年月" prop="job_year">
+        <el-date-picker
+          v-model="jobYearMonth"
+          type="month"
+          format="YYYY / MM"
+          placeholder="選擇年月"
+          :disabled-date="isJobYearMonthDisabled"
+          data-test="form-job-year-month"
+          class="form-year-month"
+        />
+      </el-form-item>
 
       <el-form-item label="公司" prop="company">
         <el-autocomplete
@@ -455,19 +501,12 @@ async function handleSubmit() {
   overflow-x: hidden;
 }
 
-.row-2 {
-  display: grid;
-  grid-template-columns: 1fr 200px;
-  gap: var(--sp-md);
-}
-
-.form-kind :deep(.el-form-item__content),
-.form-year :deep(.el-form-item__content) {
-  width: 100%;
-}
-
 .form-company {
   width: 100%;
+}
+
+.form-year-month {
+  width: 220px;
 }
 
 /* ---------- Kind picker (radio styled as segmented chips) ---------- */

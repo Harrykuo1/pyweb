@@ -36,7 +36,7 @@ const router = useRouter()
 
 const SORT_OPTIONS = [
   { key: 'created_at', label: '發布日期' },
-  { key: 'job_year', label: '求職年份' },
+  { key: 'job_year', label: '求職年月' },
   { key: 'company', label: '公司' },
   { key: 'real_name', label: '名字' },
   { key: 'kind', label: '類型' },
@@ -60,7 +60,7 @@ const CURRENT_YEAR = new Date().getFullYear()
 const MIN_JOB_YEAR = 2000
 const YEAR_OPTIONS = (() => {
   const out = []
-  for (let y = CURRENT_YEAR + 1; y >= MIN_JOB_YEAR; y--) out.push(y)
+  for (let y = CURRENT_YEAR; y >= MIN_JOB_YEAR; y--) out.push(y)
   return out
 })()
 
@@ -79,7 +79,7 @@ function _safeYear(v) {
   if (v === undefined || v === null || v === '') return null
   const n = Number(v)
   if (!Number.isFinite(n)) return null
-  if (n < MIN_JOB_YEAR || n > CURRENT_YEAR + 1) return null
+  if (n < MIN_JOB_YEAR || n > CURRENT_YEAR) return null
   return n
 }
 
@@ -234,6 +234,12 @@ function realNameOrAnonymous(item) {
   return item.real_name || '匿名'
 }
 
+function formatJobYearMonth(item) {
+  if (!item?.job_year) return '-'
+  const m = item.job_month
+  return m ? `${item.job_year}/${String(m).padStart(2, '0')}` : `${item.job_year}`
+}
+
 function formatDate(iso) {
   if (!iso) return '-'
   return new Date(iso).toLocaleDateString('zh-TW', {
@@ -279,49 +285,55 @@ onMounted(loadItems)
     </header>
 
     <div class="filter-bar">
-      <div class="kind-chips" role="tablist" aria-label="類型篩選">
-        <button
-          v-for="opt in KIND_FILTER_OPTIONS"
-          :key="opt.value || 'all'"
-          type="button"
-          role="tab"
-          :aria-selected="kind === opt.value"
-          :class="[
-            'kind-chip',
-            `kind-chip--${opt.value || 'all'}`,
-            { 'is-active': kind === opt.value },
-          ]"
-          :data-test="`filter-kind-${opt.value || 'all'}`"
-          @click="kind = opt.value"
+      <div class="filter-row filter-row--meta">
+        <div class="kind-chips" role="tablist" aria-label="類型篩選">
+          <button
+            v-for="opt in KIND_FILTER_OPTIONS"
+            :key="opt.value || 'all'"
+            type="button"
+            role="tab"
+            :aria-selected="kind === opt.value"
+            :class="[
+              'kind-chip',
+              `kind-chip--${opt.value || 'all'}`,
+              { 'is-active': kind === opt.value },
+            ]"
+            :data-test="`filter-kind-${opt.value || 'all'}`"
+            @click="kind = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+
+        <el-select
+          v-model="year"
+          placeholder="年份"
+          clearable
+          data-test="filter-year"
+          class="filter-year"
         >
-          {{ opt.label }}
-        </button>
-      </div>
+          <template #prefix>
+            <el-icon><Calendar /></el-icon>
+          </template>
+          <el-option
+            v-for="y in YEAR_OPTIONS"
+            :key="y"
+            :label="`${y} 年`"
+            :value="y"
+          />
+        </el-select>
 
-      <el-select
-        v-model="year"
-        placeholder="年份"
-        clearable
-        data-test="filter-year"
-        class="filter-year"
-      >
-        <el-option
-          v-for="y in YEAR_OPTIONS"
-          :key="y"
-          :label="`${y} 年`"
-          :value="y"
+        <el-autocomplete
+          v-model="company"
+          :fetch-suggestions="fetchCompanySuggestions"
+          placeholder="公司"
+          :prefix-icon="OfficeBuilding"
+          clearable
+          :trigger-on-focus="true"
+          data-test="filter-company"
+          class="filter-company"
         />
-      </el-select>
-
-      <el-autocomplete
-        v-model="company"
-        :fetch-suggestions="fetchCompanySuggestions"
-        placeholder="公司"
-        clearable
-        :trigger-on-focus="true"
-        data-test="filter-company"
-        class="filter-company"
-      />
+      </div>
 
       <el-input
         v-model="q"
@@ -401,11 +413,11 @@ onMounted(loadItems)
         <div class="card-meta">
           <span class="meta-year">
             <el-icon :size="12"><School /></el-icon>
-            {{ i.job_year }} 求職
+            {{ formatJobYearMonth(i) }} 求職
           </span>
           <span class="meta-date">
             <el-icon :size="12"><Calendar /></el-icon>
-            {{ formatDate(i.created_at) }}
+            {{ formatDate(i.created_at) }} 發佈
           </span>
         </div>
 
@@ -564,14 +576,23 @@ onMounted(loadItems)
    ============================================================ */
 .filter-bar {
   display: flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  flex-wrap: wrap;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+/* Row 1 — narrow widgets (kind chips, year, company autocomplete) so
+   the row stays compact and the search input can take a full-width
+   line of its own below. */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-wrap: wrap;
 }
 
 /* ----- Kind segmented chips ----- */
@@ -622,10 +643,10 @@ onMounted(loadItems)
   width: 200px;
 }
 
+/* Row 2 — search takes the full width of the filter bar so users can
+   read most of what they're typing without truncation. */
 .filter-search {
-  min-width: 220px;
-  flex: 1;
-  max-width: 360px;
+  width: 100%;
 }
 
 /* Element Plus inputs all share these radii / shadows so the filter
@@ -901,6 +922,10 @@ onMounted(loadItems)
   font-weight: 600;
 }
 
+.meta-date {
+  margin-left: auto;
+}
+
 /* ----- Admin actions on card (hover-revealed) ----- */
 .card-admin-actions {
   position: absolute;
@@ -1083,15 +1108,16 @@ onMounted(loadItems)
     padding: 8px;
   }
 
+  .filter-row {
+    /* Each control on phones gets its own line so the labels and clear
+       buttons aren't cramped against each other. */
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .filter-year,
   .filter-company {
     width: 100%;
-  }
-
-  .filter-search {
-    width: 100%;
-    min-width: 0;
-    flex: none;
   }
 
   .card-grid {
