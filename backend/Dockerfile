@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
 
 # SQLite file lives on a Compose-managed volume so it survives container
 # restarts. The path is also reflected in DATABASE_URL below.
