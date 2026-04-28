@@ -56,7 +56,7 @@ describe('Home.vue', () => {
     const wrapper = mount(Home)
 
     expect(wrapper.text()).toContain('成員介紹')
-    expect(wrapper.text()).toContain('實習工作紀錄')
+    expect(wrapper.text()).toContain('求職紀錄')
     expect(wrapper.text()).toContain('活動紀錄')
   })
 
@@ -68,6 +68,16 @@ describe('Home.vue', () => {
     await wrapper.find('[data-test="card-members"]').trigger('click')
 
     expect(pushMock).toHaveBeenCalledWith('/members')
+  })
+
+  it('clicking the internships card navigates to /internships', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'alice', role: 'admin' }
+
+    const wrapper = mount(Home)
+    await wrapper.find('[data-test="card-internships"]').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith('/internships')
   })
 
   it('renders without throwing when user is not yet populated', () => {

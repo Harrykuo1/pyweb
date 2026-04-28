@@ -13,9 +13,6 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 
-function notReady() {
-  alert('此功能即將推出')
-}
 </script>
 
 <template>
@@ -34,7 +31,7 @@ function notReady() {
         </h1>
         <p class="hero-sub">
           這是 pyweb 社群的成員管理平台。
-          <span v-if="auth.isAdmin">您可以新增、編輯、刪除成員與實習紀錄。</span>
+          <span v-if="auth.isAdmin">您可以新增、編輯、刪除成員與求職紀錄。</span>
           <span v-else>您目前以檢視者身份登入，可瀏覽全部資料。</span>
         </p>
         <div class="hero-actions">
@@ -71,15 +68,17 @@ function notReady() {
       <article
         class="feature-card"
         data-test="card-internships"
-        @click="notReady"
+        @click="router.push('/internships')"
       >
         <span class="feature-accent feature-accent-violet"></span>
         <div class="feature-icon-wrap feature-icon-violet">
           <el-icon :size="22"><OfficeBuilding /></el-icon>
         </div>
-        <h3 class="feature-title">實習工作紀錄</h3>
-        <p class="feature-desc">分享求職心得、面試經驗與時程表，給學弟妹參考。</p>
-        <span class="feature-status feature-status-soon">即將推出</span>
+        <h3 class="feature-title">求職紀錄</h3>
+        <p class="feature-desc">分享實習與正職的求職心得、面試經驗與時程表。</p>
+        <span class="feature-cta">
+          查看清單 <span aria-hidden="true">→</span>
+        </span>
       </article>
 
       <article class="feature-card is-disabled">
