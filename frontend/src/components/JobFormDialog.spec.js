@@ -11,8 +11,16 @@ import JobFormDialog from './JobFormDialog.vue'
 vi.mock('md-editor-v3', () => ({
   MdEditor: {
     name: 'MdEditor',
-    props: ['modelValue'],
+    props: ['modelValue', 'preview'],
     emits: ['update:modelValue'],
+    // Methods so the dialog's preview-sync wiring (ed.on / ed.togglePreview)
+    // can call into the stub without crashing the test.
+    methods: {
+      on() {},
+      togglePreview() {},
+      togglePageFullscreen() {},
+      toggleFullscreen() {},
+    },
     template:
       '<textarea class="md-editor-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },

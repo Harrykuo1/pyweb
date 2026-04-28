@@ -1,5 +1,14 @@
 <script setup>
-import { computed, markRaw, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue'
 import {
   ElAutocomplete,
   ElButton,
@@ -12,7 +21,7 @@ import {
   ElTabPane,
   ElTabs,
 } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { FullScreen, Loading } from '@element-plus/icons-vue'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
@@ -38,8 +47,136 @@ const MIN_JOB_YEAR = 2000
 const MAX_JOB_YEAR = CURRENT_YEAR + 1
 
 const formRef = ref(null)
+const experienceEditorRef = ref(null)
+const timelineEditorRef = ref(null)
 const submitting = ref(false)
 const activeTab = ref('experience')
+
+// Desktop toolbar — full set, single row (no '=' divider so the lib
+// won't hide the right section on narrow viewports).
+const DESKTOP_TOOLBARS = [
+  'bold',
+  'underline',
+  'italic',
+  'strikeThrough',
+  '-',
+  'title',
+  'quote',
+  '-',
+  'unorderedList',
+  'orderedList',
+  'task',
+  '-',
+  'codeRow',
+  'code',
+  'link',
+  'image',
+  'table',
+  '-',
+  'revoke',
+  'next',
+  '-',
+  'pageFullscreen',
+  'fullscreen',
+  'preview',
+  'previewOnly',
+]
+
+// Phones: only the formatting users actually reach for. Rich-text bits
+// (image, table, sub/sup, code-block, task) stay desktop-only — they're
+// painful to use on a touch keyboard. pageFullscreen has to be in the
+// toolbar so users can exit fullscreen mode by tapping the same icon,
+// since the dedicated expand button is hidden while the editor covers
+// the page.
+const MOBILE_TOOLBARS = [
+  'bold',
+  'title',
+  '-',
+  'unorderedList',
+  'orderedList',
+  '-',
+  'link',
+  'pageFullscreen',
+]
+
+const MOBILE_BREAKPOINT = 768
+
+// md-editor-v3's `on(...)` is additive, so wire each instance's
+// fullscreen subscription only once across reopens.
+const wiredEditors = new WeakSet()
+
+// Reactive viewport gate so the toolbar config and the dedicated
+// "expand" button can both adapt without a page reload.
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const isMobileWidth = computed(() => viewportWidth.value < MOBILE_BREAKPOINT)
+
+function _onViewportResize() {
+  viewportWidth.value = window.innerWidth
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', _onViewportResize)
+  }
+})
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', _onViewportResize)
+  }
+})
+
+const editorToolbars = computed(() =>
+  isMobileWidth.value ? MOBILE_TOOLBARS : DESKTOP_TOOLBARS,
+)
+
+// Phones get the editor in a 95 vw dialog; a half-half preview split
+// would leave both panes too narrow to read. Cap auto-preview to
+// tablets and up so phone users entering fullscreen still see a wide
+// editor and can manually toggle preview from the toolbar or the
+// dedicated expand button.
+function shouldAutoSplitPreview() {
+  return !isMobileWidth.value
+}
+
+function expandEditor(which) {
+  const ed =
+    which === 'experience' ? experienceEditorRef.value : timelineEditorRef.value
+  ed?.togglePageFullscreen?.()
+}
+
+// Tracks per-editor pageFullscreen state so we can hide the dedicated
+// "expand" button while the editor is already covering the dialog —
+// the custom button would be unreachable behind the overlay anyway.
+const isExperienceFullscreen = ref(false)
+const isTimelineFullscreen = ref(false)
+
+function _fullscreenStateRef(ed) {
+  if (ed === experienceEditorRef.value) return isExperienceFullscreen
+  if (ed === timelineEditorRef.value) return isTimelineFullscreen
+  return null
+}
+
+function wirePreviewSync(ed) {
+  if (!ed || wiredEditors.has(ed)) return
+  // Editor-only by default; on tablet+ widths, expand the split preview
+  // pane the moment the user fullscreens (browser fullscreen or
+  // in-page fullscreen). Collapsing restores editor-only.
+  ed.on('fullscreen', (on) => {
+    if (shouldAutoSplitPreview()) ed.togglePreview(on)
+  })
+  ed.on('pageFullscreen', (on) => {
+    if (shouldAutoSplitPreview()) ed.togglePreview(on)
+    const stateRef = _fullscreenStateRef(ed)
+    if (stateRef) stateRef.value = on
+  })
+  wiredEditors.add(ed)
+}
+
+async function wireAllPreviewSync() {
+  await nextTick()
+  wirePreviewSync(experienceEditorRef.value)
+  wirePreviewSync(timelineEditorRef.value)
+}
 
 const form = reactive({
   kind: 'internship',
@@ -69,13 +206,18 @@ function resetForm(job) {
     timeline_md: job?.timeline_md ?? '',
   })
   activeTab.value = 'experience'
+  isExperienceFullscreen.value = false
+  isTimelineFullscreen.value = false
   formRef.value?.clearValidate()
 }
 
 watch(
   () => [props.modelValue, props.job],
   ([open]) => {
-    if (open) resetForm(props.job)
+    if (open) {
+      resetForm(props.job)
+      wireAllPreviewSync()
+    }
   },
   { immediate: true },
 )
@@ -160,7 +302,7 @@ async function handleSubmit() {
   <el-dialog
     :model-value="modelValue"
     :title="title"
-    width="720"
+    width="960"
     top="6vh"
     :close-on-click-modal="false"
     :teleported="false"
@@ -234,12 +376,23 @@ async function handleSubmit() {
       <el-form-item prop="experience_md" :show-message="false">
         <el-tabs v-model="activeTab" class="md-tabs">
           <el-tab-pane label="心得" name="experience">
+            <button
+              v-if="isMobileWidth && !isExperienceFullscreen"
+              type="button"
+              class="md-expand-btn"
+              data-test="expand-experience-button"
+              @click="expandEditor('experience')"
+            >
+              <el-icon :size="14"><FullScreen /></el-icon>
+              展開編輯
+            </button>
             <MdEditor
+              ref="experienceEditorRef"
               v-model="form.experience_md"
               theme="light"
               language="zh-TW"
               :preview="false"
-              :toolbars-exclude="['github', 'save', 'mermaid', 'katex']"
+              :toolbars="editorToolbars"
               data-test="form-experience-md"
             />
             <p
@@ -250,12 +403,23 @@ async function handleSubmit() {
             </p>
           </el-tab-pane>
           <el-tab-pane label="時程表（選填）" name="timeline">
+            <button
+              v-if="isMobileWidth && !isTimelineFullscreen"
+              type="button"
+              class="md-expand-btn"
+              data-test="expand-timeline-button"
+              @click="expandEditor('timeline')"
+            >
+              <el-icon :size="14"><FullScreen /></el-icon>
+              展開編輯
+            </button>
             <MdEditor
+              ref="timelineEditorRef"
               v-model="form.timeline_md"
               theme="light"
               language="zh-TW"
               :preview="false"
-              :toolbars-exclude="['github', 'save', 'mermaid', 'katex']"
+              :toolbars="editorToolbars"
               data-test="form-timeline-md"
             />
           </el-tab-pane>
@@ -281,10 +445,14 @@ async function handleSubmit() {
 .job-form {
   /* Make sure the form's vertical rhythm is comfortable inside the
      dialog — defaults bunch the items too tight when md editors take
-     up most of the height. */
+     up most of the height. overflow-x clamps so the markdown editor's
+     wide toolbar can never push the dialog wider than its declared
+     width. */
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .row-2 {
@@ -343,6 +511,16 @@ async function handleSubmit() {
 }
 
 /* ---------- Markdown editor tabs ---------- */
+
+/* el-tabs / el-tab-pane / el-form-item__content all need to be flex
+   children that stretch — otherwise the editor sits at its content's
+   natural width and leaves dead space on the right of the dialog. */
+.md-tabs,
+.md-tabs :deep(.el-tabs__content),
+.md-tabs :deep(.el-tab-pane) {
+  width: 100%;
+}
+
 .md-tabs :deep(.el-tabs__nav-wrap)::after {
   height: 1px;
   background: rgba(15, 23, 42, 0.06);
@@ -361,9 +539,60 @@ async function handleSubmit() {
 }
 
 /* Cap editor height so the dialog stays scroll-friendly even with long
-   markdown — the editor itself scrolls internally past the cap. */
+   markdown — the editor itself scrolls internally past the cap. The
+   width clamps stop the toolbar's natural width from expanding the
+   dialog past its declared width, and !important is needed because
+   md-editor's own stylesheet sets a default width that wins on
+   specificity. */
 :deep(.md-editor) {
-  height: 320px;
+  width: 100% !important;
+  min-width: 0;
+  max-width: 100%;
+  height: 360px;
+}
+
+/* Toolbar can have ~20 icons; let it scroll horizontally inside the
+   editor instead of pushing the editor (and the dialog) wider. */
+:deep(.md-editor-toolbar-wrapper) {
+  overflow-x: auto;
+}
+
+/* CodeMirror by default uses `white-space: pre`, which sends long
+   typed lines past the editor's right edge instead of wrapping. Force
+   wrapping so users can always see what they're typing without having
+   to scroll the editor sideways. */
+:deep(.cm-editor .cm-content),
+:deep(.cm-editor .cm-line) {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+}
+
+:deep(.cm-editor .cm-scroller) {
+  overflow-x: hidden;
+}
+
+/* Mobile-only "expand to fullscreen" affordance. md-editor-v3's own
+   toolbar is too cramped on phones to discover the fullscreen icon
+   reliably, so we hoist a finger-friendly button just above the
+   editor for the same action. */
+.md-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgba(124, 58, 237, 0.32);
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.08);
+  color: #7c3aed;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur) var(--ease);
+}
+
+.md-expand-btn:active {
+  background: rgba(124, 58, 237, 0.16);
 }
 
 .md-required-hint {
@@ -378,7 +607,13 @@ async function handleSubmit() {
   }
 
   :deep(.md-editor) {
-    height: 260px;
+    height: 280px;
+  }
+
+  /* Beef up touch targets on phones so toolbar buttons are easier
+     to hit between thumbs. */
+  :deep(.md-editor-toolbar-item) {
+    padding: 8px 10px !important;
   }
 }
 </style>

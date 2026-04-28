@@ -144,6 +144,43 @@ h4 {
   }
 }
 
+/* ============================================================
+   Element Plus dialog responsive caps — applied to every viewport
+   ============================================================
+   ElDialog defaults to fixed pixel widths via the `width` prop
+   (540 / 720 / 960 etc). Without a viewport cap those overflow the
+   right edge on tablet / narrow-laptop sizes between 641 px and
+   the dialog's declared width. The two selectors below catch
+   dialogs whether they're teleported to <body> or rendered inline
+   (teleported="false"). */
+.el-overlay-dialog .el-dialog,
+body > .el-overlay .el-dialog {
+  max-width: 95vw;
+}
+
+/* Slim, low-contrast scrollbar so when a dialog body does need to
+   scroll (mobile / very tall content) the bar doesn't fight the
+   reading line. The default 16 px chrome scrollbar sits right where
+   the eye lands on a wide editor and reads as visual noise. */
+.el-overlay-dialog .el-dialog__body::-webkit-scrollbar,
+body > .el-overlay .el-dialog__body::-webkit-scrollbar {
+  width: 6px;
+}
+.el-overlay-dialog .el-dialog__body::-webkit-scrollbar-thumb,
+body > .el-overlay .el-dialog__body::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 999px;
+}
+.el-overlay-dialog .el-dialog__body::-webkit-scrollbar-track,
+body > .el-overlay .el-dialog__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.el-overlay-dialog .el-dialog__body,
+body > .el-overlay .el-dialog__body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 23, 42, 0.15) transparent;
+}
+
 /* Phone-class breakpoint. Anything narrower than this gets the compact
    layout overrides defined alongside each component. */
 @media (max-width: 640px) {
@@ -151,19 +188,18 @@ h4 {
     font-size: 13px;
   }
 
-  /* Element Plus dialogs default to fixed pixel widths via the `width`
-     prop (520 px / 700 px / etc). Cap them globally on phones so they
-     never overflow the viewport. The selectors live here (not scoped) so
-     they reach the dialog roots that ElDialog teleports to <body>. */
+  /* Force the full 95 vw width on phones (instead of just capping at
+     it) so a small declared width like 540 px still uses the screen. */
   .el-overlay-dialog .el-dialog,
   body > .el-overlay .el-dialog {
     width: 95vw !important;
-    max-width: 95vw !important;
     margin-top: 5vh !important;
   }
 
-  /* Make the dialog body scroll within itself instead of pushing the
-     footer off-screen on a tall form. */
+  /* Cap the body height on phones so a long form's footer stays in
+     reach above the keyboard / address bar. Desktops let the whole
+     dialog scroll within the overlay instead — much less visual
+     noise than an internal scrollbar on a wide editor. */
   .el-overlay-dialog .el-dialog__body,
   body > .el-overlay .el-dialog__body {
     max-height: calc(85vh - 110px);
