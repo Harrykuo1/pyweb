@@ -70,14 +70,14 @@ describe('Home.vue', () => {
     expect(pushMock).toHaveBeenCalledWith('/members')
   })
 
-  it('clicking the internships card navigates to /internships', async () => {
+  it('clicking the jobs card navigates to /jobs', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
 
     const wrapper = mount(Home)
-    await wrapper.find('[data-test="card-internships"]').trigger('click')
+    await wrapper.find('[data-test="card-jobs"]').trigger('click')
 
-    expect(pushMock).toHaveBeenCalledWith('/internships')
+    expect(pushMock).toHaveBeenCalledWith('/jobs')
   })
 
   it('renders without throwing when user is not yet populated', () => {

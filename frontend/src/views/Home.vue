@@ -67,8 +67,8 @@ const router = useRouter()
 
       <article
         class="feature-card"
-        data-test="card-internships"
-        @click="router.push('/internships')"
+        data-test="card-jobs"
+        @click="router.push('/jobs')"
       >
         <span class="feature-accent feature-accent-violet"></span>
         <div class="feature-icon-wrap feature-icon-violet">

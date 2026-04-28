@@ -56,14 +56,14 @@ describe('Navbar.vue', () => {
     expect(wrapper.text()).toContain('求職')
   })
 
-  it('has a nav link pointing at /internships', () => {
+  it('has a nav link pointing at /jobs', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
     const links = wrapper.findAll('.nav-link')
     const targets = links.map((l) => l.attributes('href'))
-    expect(targets).toContain('/internships')
+    expect(targets).toContain('/jobs')
   })
 
   it('shows username and 管理員 role tag for admin', () => {

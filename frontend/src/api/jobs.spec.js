@@ -1,19 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import client from './client'
-import { internshipsApi } from './internships'
+import { jobsApi } from './jobs'
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('internshipsApi.list', () => {
-  it('GETs /internships with default sort=created_at, order=desc', async () => {
+describe('jobsApi.list', () => {
+  it('GETs /jobs with default sort=created_at, order=desc', async () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
-    await internshipsApi.list()
-    expect(get).toHaveBeenCalledWith('/internships', {
+    await jobsApi.list()
+    expect(get).toHaveBeenCalledWith('/jobs', {
       params: { sort: 'created_at', order: 'desc' },
     })
   })
@@ -22,7 +22,7 @@ describe('internshipsApi.list', () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
-    await internshipsApi.list({
+    await jobsApi.list({
       sort: 'company',
       order: 'asc',
       year: 2024,
@@ -30,7 +30,7 @@ describe('internshipsApi.list', () => {
       kind: 'fulltime',
       q: 'interview',
     })
-    expect(get).toHaveBeenCalledWith('/internships', {
+    expect(get).toHaveBeenCalledWith('/jobs', {
       params: {
         sort: 'company',
         order: 'asc',
@@ -46,8 +46,8 @@ describe('internshipsApi.list', () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
-    await internshipsApi.list({ year: '', company: '', kind: '', q: '' })
-    expect(get).toHaveBeenCalledWith('/internships', {
+    await jobsApi.list({ year: '', company: '', kind: '', q: '' })
+    expect(get).toHaveBeenCalledWith('/jobs', {
       params: { sort: 'created_at', order: 'desc' },
     })
   })
@@ -58,22 +58,22 @@ describe('internshipsApi.list', () => {
       total: 1,
     }
     vi.spyOn(client, 'get').mockResolvedValue({ data: fake })
-    const result = await internshipsApi.list()
+    const result = await jobsApi.list()
     expect(result).toEqual(fake)
   })
 })
 
-describe('internshipsApi.get', () => {
-  it('GETs /internships/:id', async () => {
+describe('jobsApi.get', () => {
+  it('GETs /jobs/:id', async () => {
     const get = vi.spyOn(client, 'get').mockResolvedValue({ data: { id: 7 } })
-    const result = await internshipsApi.get(7)
-    expect(get).toHaveBeenCalledWith('/internships/7')
+    const result = await jobsApi.get(7)
+    expect(get).toHaveBeenCalledWith('/jobs/7')
     expect(result).toEqual({ id: 7 })
   })
 })
 
-describe('internshipsApi.create / update', () => {
-  it('POSTs to /internships', async () => {
+describe('jobsApi.create / update', () => {
+  it('POSTs to /jobs', async () => {
     const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 1 } })
     const payload = {
       job_year: 2025,
@@ -81,43 +81,43 @@ describe('internshipsApi.create / update', () => {
       kind: 'internship',
       experience_md: 'x',
     }
-    const result = await internshipsApi.create(payload)
-    expect(post).toHaveBeenCalledWith('/internships', payload)
+    const result = await jobsApi.create(payload)
+    expect(post).toHaveBeenCalledWith('/jobs', payload)
     expect(result).toEqual({ id: 1 })
   })
 
-  it('PUTs partial payload to /internships/:id', async () => {
+  it('PUTs partial payload to /jobs/:id', async () => {
     const put = vi
       .spyOn(client, 'put')
       .mockResolvedValue({ data: { id: 5, kind: 'fulltime' } })
-    const result = await internshipsApi.update(5, { kind: 'fulltime' })
-    expect(put).toHaveBeenCalledWith('/internships/5', { kind: 'fulltime' })
+    const result = await jobsApi.update(5, { kind: 'fulltime' })
+    expect(put).toHaveBeenCalledWith('/jobs/5', { kind: 'fulltime' })
     expect(result.kind).toBe('fulltime')
   })
 })
 
-describe('internshipsApi.remove', () => {
+describe('jobsApi.remove', () => {
   it('DELETEs with the admin password in the body', async () => {
     const del = vi.spyOn(client, 'delete').mockResolvedValue({})
-    await internshipsApi.remove(9, 'pw')
-    expect(del).toHaveBeenCalledWith('/internships/9', {
+    await jobsApi.remove(9, 'pw')
+    expect(del).toHaveBeenCalledWith('/jobs/9', {
       data: { password: 'pw' },
     })
   })
 })
 
-describe('internshipsApi.listCompanies', () => {
-  it('GETs /internships/companies with no prefix by default', async () => {
+describe('jobsApi.listCompanies', () => {
+  it('GETs /jobs/companies with no prefix by default', async () => {
     const get = vi.spyOn(client, 'get').mockResolvedValue({ data: ['Acme'] })
-    const result = await internshipsApi.listCompanies()
-    expect(get).toHaveBeenCalledWith('/internships/companies', { params: {} })
+    const result = await jobsApi.listCompanies()
+    expect(get).toHaveBeenCalledWith('/jobs/companies', { params: {} })
     expect(result).toEqual(['Acme'])
   })
 
   it('passes prefix when provided', async () => {
     const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
-    await internshipsApi.listCompanies('ac')
-    expect(get).toHaveBeenCalledWith('/internships/companies', {
+    await jobsApi.listCompanies('ac')
+    expect(get).toHaveBeenCalledWith('/jobs/companies', {
       params: { prefix: 'ac' },
     })
   })

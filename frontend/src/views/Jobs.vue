@@ -4,7 +4,7 @@
 </script>
 
 <template>
-  <div class="internships-page" data-test="internships-page">
+  <div class="jobs-page" data-test="jobs-page">
     <h1>求職紀錄</h1>
   </div>
 </template>
