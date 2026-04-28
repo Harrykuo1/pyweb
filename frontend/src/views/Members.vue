@@ -987,6 +987,10 @@ onMounted(loadMembers)
   font-weight: 500;
 }
 
+.card-join {
+  margin-left: auto;
+}
+
 .card-actions {
   display: flex;
   flex-wrap: wrap;
