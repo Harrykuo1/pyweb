@@ -22,6 +22,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 
+import JobDetailDialog from '../components/JobDetailDialog.vue'
 import JobFormDialog from '../components/JobFormDialog.vue'
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
@@ -94,6 +95,9 @@ const loading = ref(false)
 const formOpen = ref(false)
 const editingJob = ref(null)
 
+const detailOpen = ref(false)
+const detailJob = ref(null)
+
 function openCreate() {
   editingJob.value = null
   formOpen.value = true
@@ -102,6 +106,19 @@ function openCreate() {
 function openEdit(job) {
   editingJob.value = { ...job }
   formOpen.value = true
+}
+
+function openDetail(job) {
+  detailJob.value = job
+  detailOpen.value = true
+}
+
+function onDetailEdit(job) {
+  // Close detail dialog (handled by detail itself) and open the form
+  // for the same record. The detail dialog closes synchronously via
+  // its own close emit, so opening the form on the next tick keeps
+  // the el-overlay z-index stack tidy.
+  setTimeout(() => openEdit(job), 0)
 }
 
 async function loadItems() {
@@ -315,6 +332,11 @@ onMounted(loadItems)
         :key="i.id"
         :class="['record-card', `record-card--${i.kind}`]"
         data-test="record-card"
+        role="button"
+        tabindex="0"
+        @click="openDetail(i)"
+        @keydown.enter="openDetail(i)"
+        @keydown.space.prevent="openDetail(i)"
       >
         <span class="card-stripe" aria-hidden="true"></span>
         <span class="card-glow" aria-hidden="true"></span>
@@ -348,7 +370,7 @@ onMounted(loadItems)
           </span>
         </div>
 
-        <div v-if="auth.isAdmin" class="card-admin-actions">
+        <div v-if="auth.isAdmin" class="card-admin-actions" @click.stop>
           <button
             type="button"
             class="card-admin-btn"
@@ -377,6 +399,12 @@ onMounted(loadItems)
         新增第一筆紀錄
       </el-button>
     </div>
+
+    <JobDetailDialog
+      v-model="detailOpen"
+      :job="detailJob"
+      @edit="onDetailEdit"
+    />
 
     <JobFormDialog
       v-model="formOpen"
@@ -658,10 +686,19 @@ onMounted(loadItems)
   filter: blur(14px);
 }
 
+.record-card {
+  cursor: pointer;
+}
+
 .record-card:hover {
   transform: translateY(-4px);
   border-color: var(--card-accent-soft);
   box-shadow: 0 18px 42px -16px rgba(15, 23, 42, 0.18);
+}
+
+.record-card:focus-visible {
+  outline: 2px solid var(--card-accent-from);
+  outline-offset: 3px;
 }
 
 .record-card:hover::before {
