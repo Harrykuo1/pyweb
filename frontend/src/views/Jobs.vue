@@ -13,6 +13,7 @@ import {
 import {
   Briefcase,
   Calendar,
+  Delete,
   Edit,
   OfficeBuilding,
   Plus,
@@ -22,6 +23,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 
+import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import JobDetailDialog from '../components/JobDetailDialog.vue'
 import JobFormDialog from '../components/JobFormDialog.vue'
 import { jobsApi } from '../api/jobs'
@@ -119,6 +121,43 @@ function onDetailEdit(job) {
   // its own close emit, so opening the form on the next tick keeps
   // the el-overlay z-index stack tidy.
   setTimeout(() => openEdit(job), 0)
+}
+
+const deleteDialogOpen = ref(false)
+const deleteTarget = ref(null)
+const deleteSubmitting = ref(false)
+const deleteError = ref('')
+
+function askDelete(job) {
+  deleteTarget.value = job
+  deleteError.value = ''
+  deleteDialogOpen.value = true
+}
+
+async function handleDeleteConfirm(password) {
+  const target = deleteTarget.value
+  if (!target) return
+  deleteSubmitting.value = true
+  deleteError.value = ''
+  try {
+    await jobsApi.remove(target.id, password)
+    ElMessage.success(`已刪除「${target.company}」的紀錄`)
+    deleteDialogOpen.value = false
+    deleteTarget.value = null
+    // Close the detail dialog too if it was open on this same row.
+    if (detailOpen.value && detailJob.value?.id === target.id) {
+      detailOpen.value = false
+    }
+    loadItems()
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 401) deleteError.value = '密碼錯誤'
+    else if (status === 403) deleteError.value = '權限不足'
+    else if (status === 404) deleteError.value = '紀錄已不存在'
+    else deleteError.value = '刪除失敗，請稍後再試'
+  } finally {
+    deleteSubmitting.value = false
+  }
 }
 
 async function loadItems() {
@@ -381,6 +420,16 @@ onMounted(loadItems)
           >
             <el-icon :size="14"><Edit /></el-icon>
           </button>
+          <button
+            type="button"
+            class="card-admin-btn card-admin-btn--danger"
+            data-test="delete-job-button"
+            aria-label="刪除"
+            title="刪除"
+            @click="askDelete(i)"
+          >
+            <el-icon :size="14"><Delete /></el-icon>
+          </button>
         </div>
       </article>
     </div>
@@ -404,12 +453,35 @@ onMounted(loadItems)
       v-model="detailOpen"
       :job="detailJob"
       @edit="onDetailEdit"
-    />
+    >
+      <template #footer-extra>
+        <el-button
+          v-if="auth.isAdmin && detailJob"
+          type="danger"
+          plain
+          :icon="Delete"
+          data-test="detail-delete-button"
+          @click="askDelete(detailJob)"
+        >
+          刪除
+        </el-button>
+      </template>
+    </JobDetailDialog>
 
     <JobFormDialog
       v-model="formOpen"
       :job="editingJob"
       @saved="loadItems"
+    />
+
+    <DeleteWithPasswordDialog
+      v-model="deleteDialogOpen"
+      title="刪除求職紀錄"
+      :item-name="deleteTarget?.company ?? ''"
+      warning="將永久刪除這筆求職紀錄，包含心得與時程表。此操作無法復原。"
+      :loading="deleteSubmitting"
+      :error-message="deleteError"
+      @confirm="handleDeleteConfirm"
     />
   </div>
 </template>
@@ -868,6 +940,11 @@ onMounted(loadItems)
   background: #ffffff;
   color: var(--card-accent-ink);
   border-color: var(--card-accent-soft);
+}
+
+.card-admin-btn--danger:hover {
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.3);
 }
 
 /* ============================================================

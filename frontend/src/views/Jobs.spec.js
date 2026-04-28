@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import Jobs from './Jobs.vue'
 import { jobsApi } from '../api/jobs'
+import { useAuthStore } from '../stores/auth'
 
 const replaceMock = vi.fn()
 const routeQuery = { value: {} }
@@ -64,7 +65,9 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-async function mountPage(items = sample, total = items.length) {
+async function mountPage(items = sample, total = items.length, role = 'viewer') {
+  const auth = useAuthStore()
+  auth.user = { id: 1, username: 'a', role }
   const listSpy = vi
     .spyOn(jobsApi, 'list')
     .mockResolvedValue({ items, total })
@@ -324,5 +327,57 @@ describe('Jobs.vue — refresh button', () => {
     await wrapper.find('[data-test="refresh-button"]').trigger('click')
     await flushPromises()
     expect(listSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Jobs.vue — admin delete flow', () => {
+  it('hides delete button for viewers', async () => {
+    const { wrapper } = await mountPage(sample, sample.length, 'viewer')
+    expect(wrapper.find('[data-test="delete-job-button"]').exists())
+      .toBe(false)
+  })
+
+  it('shows delete button for admin and triggers the password dialog', async () => {
+    const { wrapper } = await mountPage(sample, sample.length, 'admin')
+    expect(wrapper.find('[data-test="delete-job-button"]').exists())
+      .toBe(true)
+  })
+
+  it('calls jobsApi.remove with the entered password and refetches on success', async () => {
+    const remove = vi.spyOn(jobsApi, 'remove').mockResolvedValue()
+    const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
+
+    // Click the delete affordance on the first card.
+    await wrapper.find('[data-test="delete-job-button"]').trigger('click')
+    await flushPromises()
+
+    // Drive the confirm directly via the DeleteWithPasswordDialog's emit.
+    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
+    expect(dialog.exists()).toBe(true)
+    listSpy.mockClear()
+    dialog.vm.$emit('confirm', 'admin-pw')
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledWith(sample[0].id, 'admin-pw')
+    expect(listSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces a 401 password-error message instead of refetching', async () => {
+    const remove = vi.spyOn(jobsApi, 'remove').mockRejectedValue({
+      response: { status: 401 },
+    })
+    const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
+
+    await wrapper.find('[data-test="delete-job-button"]').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
+
+    listSpy.mockClear()
+    dialog.vm.$emit('confirm', 'wrong')
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalled()
+    expect(dialog.props('errorMessage')).toBe('密碼錯誤')
+    expect(listSpy).not.toHaveBeenCalled()
   })
 })
