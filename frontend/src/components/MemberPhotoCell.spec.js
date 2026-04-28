@@ -1,16 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 import MemberPhotoCell from './MemberPhotoCell.vue'
 
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
-  // The component now invokes ElMessage as a function for the persistent
-  // "上傳中…" toast; mirror Element Plus's real shape (callable, plus
-  // .success / .error / .info / .warning helpers).
+  // ElMessage is invoked both as a function and via .error/.success
+  // helpers (rejection toasts on invalid file size / MIME).
   const message = vi.fn(() => ({ close: vi.fn() }))
   message.success = vi.fn()
   message.error = vi.fn()
@@ -21,17 +19,6 @@ vi.mock('element-plus', async (importOriginal) => {
     ElMessage: message,
   }
 })
-
-// PhotoCropDialog pulls in cropperjs (web-component custom elements that
-// happy-dom does not fully model). Stub it so the cell tests stay focused.
-vi.mock('./PhotoCropDialog.vue', () => ({
-  default: {
-    name: 'PhotoCropDialog',
-    props: ['modelValue', 'sourceFile'],
-    emits: ['update:modelValue', 'cropped'],
-    template: '<div data-test="crop-stub" />',
-  },
-}))
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -68,13 +55,10 @@ describe('MemberPhotoCell', () => {
     const img = wrapper.findComponent({ name: 'ElImage' })
     expect(img.exists()).toBe(true)
     expect(wrapper.find('[data-test="photo-thumb"]').exists()).toBe(true)
-    // The previewable source list mirrors the thumbnail src so el-image's
-    // built-in viewer can pull up a full-size copy.
     const list = img.props('previewSrcList')
     expect(Array.isArray(list)).toBe(true)
     expect(list).toHaveLength(1)
-    expect(list[0]).toMatch(/\/api\/members\/1\/photo\?v=/)
-    // Must teleport so the preview overlay escapes the table cell stacking.
+    expect(list[0]).toMatch(/\/api\/members\/1\/photo/)
     expect(img.props('previewTeleported')).toBe(true)
   })
 
@@ -109,122 +93,89 @@ describe('MemberPhotoCell', () => {
     expect(w2.find('[data-test="delete-photo"]').exists()).toBe(true)
   })
 
-  it('selecting a valid file opens the crop dialog with that file', async () => {
+  it('selecting a valid file emits request-upload with the member and the raw File', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
-    const upload = vi.spyOn(membersApi, 'uploadPhoto')
 
     const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
     const file = makeFile()
 
     const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
     await onChange({ raw: file, name: file.name, size: file.size })
-    await flushPromises()
 
-    // Upload should NOT be called yet — we wait for the crop confirmation.
-    expect(upload).not.toHaveBeenCalled()
-    const dialog = wrapper.findComponent({ name: 'PhotoCropDialog' })
-    expect(dialog.props('modelValue')).toBe(true)
-    // Vue Test Utils may proxy the prop, so compare identity-ish fields
-    // instead of strict object equality.
-    const passed = dialog.props('sourceFile')
-    expect(passed.name).toBe(file.name)
-    expect(passed.type).toBe(file.type)
-    expect(passed.size).toBe(file.size)
+    const events = wrapper.emitted('request-upload')
+    expect(events).toBeTruthy()
+    expect(events).toHaveLength(1)
+    expect(events[0][0]).toEqual(memberWithoutPhoto)
+    expect(events[0][1].name).toBe(file.name)
+    expect(events[0][1].type).toBe(file.type)
+    expect(events[0][1].size).toBe(file.size)
   })
 
-  it('cropped event triggers uploadPhoto with the cropped file', async () => {
+  it('rejects an oversized file without emitting request-upload', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
-    const upload = vi.spyOn(membersApi, 'uploadPhoto').mockResolvedValue({})
-
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
-    const croppedFile = makeFile({ name: 'photo.jpg', type: 'image/jpeg' })
-
-    await wrapper.vm.handleCropped(croppedFile)
-    await flushPromises()
-
-    expect(upload).toHaveBeenCalledWith(2, croppedFile)
-    expect(wrapper.emitted('changed')).toBeTruthy()
-  })
-
-  it('upload rejected when file too large; crop dialog stays closed', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'a', role: 'admin' }
-    const upload = vi.spyOn(membersApi, 'uploadPhoto')
 
     const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
     const huge = makeFile({ size: 5 * 1024 * 1024 + 1 })
 
     const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
     await onChange({ raw: huge, name: huge.name, size: huge.size })
-    await flushPromises()
 
-    expect(upload).not.toHaveBeenCalled()
-    expect(wrapper.findComponent({ name: 'PhotoCropDialog' }).props('modelValue')).toBe(false)
+    expect(wrapper.emitted('request-upload')).toBeFalsy()
   })
 
-  it('upload rejected for unsupported MIME; crop dialog stays closed', async () => {
+  it('rejects an unsupported MIME without emitting request-upload', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
-    const upload = vi.spyOn(membersApi, 'uploadPhoto')
 
     const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
     const gif = makeFile({ type: 'image/gif', name: 'a.gif' })
 
     const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
     await onChange({ raw: gif, name: gif.name, size: gif.size })
-    await flushPromises()
 
-    expect(upload).not.toHaveBeenCalled()
-    expect(wrapper.findComponent({ name: 'PhotoCropDialog' }).props('modelValue')).toBe(false)
+    expect(wrapper.emitted('request-upload')).toBeFalsy()
   })
 
-  it('handleDelete calls deletePhoto with password and emits changed', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'a', role: 'admin' }
-    const del = vi.spyOn(membersApi, 'deletePhoto').mockResolvedValue()
-
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
-    await wrapper.vm.handleDelete('admin-pw')
-    await flushPromises()
-
-    expect(del).toHaveBeenCalledWith(1, 'admin-pw')
-    expect(wrapper.emitted('changed')).toBeTruthy()
-  })
-
-  it('clicking delete-photo opens DeleteWithPasswordDialog with the member name', async () => {
+  it('clicking delete-photo emits request-delete with the member', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
     const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
-    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
-    expect(dialog.props('modelValue')).toBe(false)
-
     await wrapper.find('[data-test="delete-photo"]').trigger('click')
-    await flushPromises()
 
-    expect(dialog.props('modelValue')).toBe(true)
-    expect(dialog.props('itemName')).toBe('Alice')
+    const events = wrapper.emitted('request-delete')
+    expect(events).toBeTruthy()
+    expect(events).toHaveLength(1)
+    expect(events[0][0]).toEqual(memberWithPhoto)
   })
 
-  it('handleDelete on 401 surfaces 密碼錯誤 via the dialog and does not emit changed', async () => {
+  it('uploading prop renders the in-progress overlay and hides the actions', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
-    vi.spyOn(membersApi, 'deletePhoto').mockRejectedValue(
-      Object.assign(new Error('401'), { response: { status: 401 } }),
-    )
 
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
-    // Open the dialog first so its props reflect the error after submit.
-    wrapper.vm.askDelete()
-    await flushPromises()
-    await wrapper.vm.handleDelete('wrong-pw')
-    await flushPromises()
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithPhoto, uploading: true },
+    })
 
-    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
-    expect(dialog.props('errorMessage')).toBe('密碼錯誤')
-    expect(dialog.props('modelValue')).toBe(true)
-    expect(wrapper.emitted('changed')).toBeFalsy()
+    expect(wrapper.find('[data-test="photo-uploading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="upload-photo"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="delete-photo"]').exists()).toBe(false)
+
+    await wrapper.setProps({ uploading: false })
+    expect(wrapper.find('[data-test="photo-uploading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="upload-photo"]').exists()).toBe(true)
+  })
+
+  it('cache-buster prop is appended to the photo URL', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'v', role: 'viewer' }
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithPhoto, cacheBuster: 'abc123' },
+    })
+
+    const img = wrapper.findComponent({ name: 'ElImage' })
+    expect(img.props('src')).toContain('?v=abc123')
   })
 })

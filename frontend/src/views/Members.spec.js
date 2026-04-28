@@ -11,7 +11,12 @@ vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    ElMessage: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+    // ElMessage is invoked as a function for the persistent
+    // upload/loading toast, plus the regular .success/.error helpers.
+    ElMessage: Object.assign(
+      vi.fn(() => ({ close: vi.fn() })),
+      { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+    ),
   }
 })
 
@@ -382,5 +387,100 @@ describe('Members.vue', () => {
 
     expect(wrapper.vm.deleteDialogOpen).toBe(true)
     expect(wrapper.vm.deleteError).toBe('密碼錯誤')
+  })
+
+  // ---------- Photo upload + delete flow (hoisted to page level) ----------
+
+  it('onPhotoUploadRequest opens the crop dialog targeting the member', async () => {
+    const wrapper = await mountAsAdmin()
+    expect(wrapper.vm.photoCropOpen).toBe(false)
+
+    const file = new File(['x'], 'a.png', { type: 'image/png' })
+    wrapper.vm.onPhotoUploadRequest(sampleMembers[0], file)
+    await flushPromises()
+
+    expect(wrapper.vm.photoCropOpen).toBe(true)
+    expect(wrapper.vm.photoCropTarget?.real_name).toBe('Alice')
+    expect(wrapper.vm.photoCropFile?.name).toBe(file.name)
+  })
+
+  it('onPhotoCropped uploads the cropped file and bumps that member\'s cache-buster', async () => {
+    const wrapper = await mountAsAdmin()
+    const upload = vi.spyOn(membersApi, 'uploadPhoto').mockResolvedValue()
+    const list = vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+
+    const original = new File(['x'], 'a.png', { type: 'image/png' })
+    wrapper.vm.onPhotoUploadRequest(sampleMembers[0], original)
+    await flushPromises()
+
+    const cropped = new File(['y'], 'cropped.png', { type: 'image/png' })
+    await wrapper.vm.onPhotoCropped(cropped)
+    await flushPromises()
+
+    expect(upload).toHaveBeenCalledWith(1, cropped)
+    expect(list).toHaveBeenCalled()
+    // Cache-buster registered for that member id so the photo refetches.
+    expect(typeof wrapper.vm.photoCacheBusters[1]).toBe('number')
+    // Crop state cleared.
+    expect(wrapper.vm.photoCropTarget).toBeNull()
+    expect(wrapper.vm.photoCropFile).toBeNull()
+    expect(wrapper.vm.uploadingPhotoMemberId).toBeNull()
+  })
+
+  it('onPhotoDeleteRequest opens the photo-delete dialog targeting the member', async () => {
+    const wrapper = await mountAsAdmin()
+    expect(wrapper.vm.photoDeleteDialogOpen).toBe(false)
+
+    wrapper.vm.onPhotoDeleteRequest(sampleMembers[0])
+    await flushPromises()
+
+    expect(wrapper.vm.photoDeleteDialogOpen).toBe(true)
+    expect(wrapper.vm.photoDeleteTarget?.real_name).toBe('Alice')
+    expect(wrapper.vm.photoDeleteError).toBe('')
+  })
+
+  it('onPhotoDeleteConfirm calls deletePhoto with password and refreshes', async () => {
+    const wrapper = await mountAsAdmin()
+    const del = vi.spyOn(membersApi, 'deletePhoto').mockResolvedValue()
+    const list = vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+
+    wrapper.vm.onPhotoDeleteRequest(sampleMembers[0])
+    await flushPromises()
+    await wrapper.vm.onPhotoDeleteConfirm('admin-pw')
+    await flushPromises()
+
+    expect(del).toHaveBeenCalledWith(1, 'admin-pw')
+    expect(list).toHaveBeenCalled()
+    expect(wrapper.vm.photoDeleteDialogOpen).toBe(false)
+    expect(wrapper.vm.photoDeleteTarget).toBeNull()
+  })
+
+  it('photo delete on 401 keeps the dialog open and surfaces 密碼錯誤', async () => {
+    const wrapper = await mountAsAdmin()
+    vi.spyOn(membersApi, 'deletePhoto').mockRejectedValue(
+      Object.assign(new Error('401'), { response: { status: 401 } }),
+    )
+
+    wrapper.vm.onPhotoDeleteRequest(sampleMembers[0])
+    await flushPromises()
+    await wrapper.vm.onPhotoDeleteConfirm('wrong-pw')
+    await flushPromises()
+
+    expect(wrapper.vm.photoDeleteDialogOpen).toBe(true)
+    expect(wrapper.vm.photoDeleteError).toBe('密碼錯誤')
+  })
+
+  it('a MemberPhotoCell\'s request-upload event drives the parent\'s crop state', async () => {
+    const wrapper = await mountAsAdmin()
+    const cell = wrapper.findComponent({ name: 'MemberPhotoCell' })
+    expect(cell.exists()).toBe(true)
+
+    const file = new File(['x'], 'b.png', { type: 'image/png' })
+    cell.vm.$emit('request-upload', sampleMembers[0], file)
+    await flushPromises()
+
+    expect(wrapper.vm.photoCropOpen).toBe(true)
+    expect(wrapper.vm.photoCropTarget?.id).toBe(1)
+    expect(wrapper.vm.photoCropFile?.name).toBe(file.name)
   })
 })

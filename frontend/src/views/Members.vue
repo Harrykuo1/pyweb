@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, markRaw, onMounted, ref } from 'vue'
 import {
   ElButton,
   ElIcon,
@@ -15,6 +15,7 @@ import {
   Document,
   Edit,
   Grid,
+  Loading,
   Menu,
   Plus,
   Refresh,
@@ -26,6 +27,7 @@ import {
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import MemberFormDialog from '../components/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/MemberPhotoCell.vue'
+import PhotoCropDialog from '../components/PhotoCropDialog.vue'
 import ResumeViewerDialog from '../components/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
@@ -151,7 +153,97 @@ function openEdit(member) {
   dialogOpen.value = true
 }
 
-// ---------- Delete with admin-password confirmation ----------
+// ---------- Photo upload + delete (single dialogs hoisted up here so
+// the cards/rows don't each carry their own hidden el-dialogs in the
+// DOM — that was the dominant cost of rendering a 50-card grid). ----
+const photoCropOpen = ref(false)
+const photoCropFile = ref(null)
+const photoCropTarget = ref(null)
+const uploadingPhotoMemberId = ref(null)
+// Per-member cache-buster — bumped after a successful upload so the
+// browser refetches that photo without us having to refetch the
+// whole list.
+const photoCacheBusters = ref({})
+
+function photoCacheBusterFor(memberId) {
+  return photoCacheBusters.value[memberId] ?? 0
+}
+
+const photoDeleteDialogOpen = ref(false)
+const photoDeleteTarget = ref(null)
+const photoDeleteSubmitting = ref(false)
+const photoDeleteError = ref('')
+
+function onPhotoUploadRequest(member, file) {
+  photoCropTarget.value = member
+  photoCropFile.value = file
+  photoCropOpen.value = true
+}
+
+async function onPhotoCropped(croppedFile) {
+  const target = photoCropTarget.value
+  if (!target) return
+  uploadingPhotoMemberId.value = target.id
+  const toast = ElMessage({
+    message: '上傳照片中…',
+    icon: markRaw(Loading),
+    duration: 0,
+    customClass: 'message-uploading',
+  })
+  try {
+    await membersApi.uploadPhoto(target.id, croppedFile)
+    photoCacheBusters.value = {
+      ...photoCacheBusters.value,
+      [target.id]: Date.now(),
+    }
+    toast.close()
+    ElMessage.success('已上傳照片')
+    loadMembers()
+  } catch (err) {
+    toast.close()
+    if (err?.response?.status === 413) ElMessage.error('檔案過大')
+    else if (err?.response?.status === 415) ElMessage.error('格式不支援')
+    else ElMessage.error('上傳失敗')
+  } finally {
+    photoCropFile.value = null
+    photoCropTarget.value = null
+    uploadingPhotoMemberId.value = null
+  }
+}
+
+function onPhotoDeleteRequest(member) {
+  photoDeleteTarget.value = member
+  photoDeleteError.value = ''
+  photoDeleteDialogOpen.value = true
+}
+
+async function onPhotoDeleteConfirm(password) {
+  const target = photoDeleteTarget.value
+  if (!target) return
+  photoDeleteSubmitting.value = true
+  photoDeleteError.value = ''
+  try {
+    await membersApi.deletePhoto(target.id, password)
+    // Bump the cache-buster too so any inline preview re-resolves.
+    photoCacheBusters.value = {
+      ...photoCacheBusters.value,
+      [target.id]: Date.now(),
+    }
+    ElMessage.success('已移除照片')
+    photoDeleteDialogOpen.value = false
+    photoDeleteTarget.value = null
+    loadMembers()
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 401) photoDeleteError.value = '密碼錯誤'
+    else if (status === 403) photoDeleteError.value = '權限不足'
+    else photoDeleteError.value = '移除失敗，請稍後再試'
+  } finally {
+    photoDeleteSubmitting.value = false
+  }
+}
+
+// ---------- Delete *member* with admin-password confirmation ----------
 const deleteDialogOpen = ref(false)
 const deleteTarget = ref(null)
 const deleteSubmitting = ref(false)
@@ -349,7 +441,10 @@ onMounted(loadMembers)
           <MemberPhotoCell
             :member="m"
             variant="card"
-            @changed="loadMembers"
+            :cache-buster="photoCacheBusterFor(m.id)"
+            :uploading="uploadingPhotoMemberId === m.id"
+            @request-upload="onPhotoUploadRequest"
+            @request-delete="onPhotoDeleteRequest"
           />
 
           <div class="card-body">
@@ -484,7 +579,13 @@ onMounted(loadMembers)
       </template>
       <el-table-column label="照片" width="140">
         <template #default="{ row }">
-          <MemberPhotoCell :member="row" @changed="loadMembers" />
+          <MemberPhotoCell
+            :member="row"
+            :cache-buster="photoCacheBusterFor(row.id)"
+            :uploading="uploadingPhotoMemberId === row.id"
+            @request-upload="onPhotoUploadRequest"
+            @request-delete="onPhotoDeleteRequest"
+          />
         </template>
       </el-table-column>
       <el-table-column
@@ -593,6 +694,25 @@ onMounted(loadMembers)
       :loading="deleteSubmitting"
       :error-message="deleteError"
       @confirm="handleDeleteConfirm"
+    />
+
+    <!-- Single page-level crop dialog and photo-deletion dialog —
+         every MemberPhotoCell shares them via parent state, instead
+         of mounting its own. -->
+    <PhotoCropDialog
+      v-model="photoCropOpen"
+      :source-file="photoCropFile"
+      @cropped="onPhotoCropped"
+    />
+
+    <DeleteWithPasswordDialog
+      v-model="photoDeleteDialogOpen"
+      title="移除照片"
+      :item-name="photoDeleteTarget?.real_name ?? ''"
+      warning="將永久移除這位成員的照片。此操作無法復原。"
+      :loading="photoDeleteSubmitting"
+      :error-message="photoDeleteError"
+      @confirm="onPhotoDeleteConfirm"
     />
   </div>
 </template>
