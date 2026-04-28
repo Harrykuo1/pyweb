@@ -1,9 +1,28 @@
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.database import SessionLocal, init_models
+from app.database import SessionLocal
 from app.models import User, UserRole
+
+ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
+
+
+def run_migrations() -> None:
+    """Bring the database schema up to head via Alembic.
+
+    On a fresh DB this runs every revision starting from the baseline.
+    On a deployment that predates Alembic, the operator must run
+    `alembic stamp 0001` once out-of-band so this call only applies the
+    post-baseline migrations instead of trying to recreate tables that
+    already exist.
+    """
+    cfg = Config(str(ALEMBIC_INI))
+    command.upgrade(cfg, "head")
 
 
 def _upsert_seed_user(db: Session, username: str, password: str, role: UserRole) -> None:
@@ -36,7 +55,7 @@ def seed_accounts(db: Session) -> None:
 
 
 def main() -> None:
-    init_models()
+    run_migrations()
     with SessionLocal() as db:
         seed_accounts(db)
     print("Database initialized and seeded.")

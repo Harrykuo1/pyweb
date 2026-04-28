@@ -6,9 +6,14 @@ from sqlalchemy import create_engine, event, inspect, text
 from app.database import _set_sqlite_pragmas
 
 
-def test_init_models_creates_users_table(db_engine):
+def test_metadata_registers_all_app_tables(db_engine):
+    # The db_engine fixture imports app.models and calls Base.metadata
+    # create_all, so every table the application defines must show up.
     tables = inspect(db_engine).get_table_names()
     assert "users" in tables
+    assert "members" in tables
+    assert "site_settings" in tables
+    assert "internships" in tables
 
 
 def test_sqlite_pragma_listener_enables_wal_on_file_db():
