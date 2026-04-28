@@ -4,11 +4,22 @@ import {
   ElButton,
   ElDialog,
   ElEmpty,
+  ElIcon,
   ElMessage,
   ElSegmented,
   ElUpload,
 } from 'element-plus'
-import { Delete, Loading, Upload } from '@element-plus/icons-vue'
+import {
+  Calendar,
+  Close,
+  Delete,
+  Document,
+  Loading,
+  Reading,
+  School,
+  Upload,
+  User,
+} from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
@@ -36,6 +47,20 @@ const availableFormats = computed(() => {
   if (props.member.has_resume_md) list.push({ label: 'Markdown', value: 'md' })
   return list
 })
+
+const photoSrc = computed(() => {
+  if (!props.member?.has_photo) return ''
+  return membersApi.photoUrl(props.member.id, cacheBuster.value)
+})
+
+function formatJoinDate(iso) {
+  if (!iso) return '-'
+  return new Date(iso).toLocaleDateString('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+}
 
 const pdfSrc = computed(() => {
   if (!props.member) return ''
@@ -138,25 +163,68 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="member ? `${member.real_name} 的履歷` : '履歷'"
+    title=""
     width="1000"
     class="resume-dialog"
     :close-on-click-modal="false"
+    :show-close="false"
     :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div v-if="member" class="resume-viewer">
-      <div v-if="availableFormats.length > 1" class="switcher-row">
-        <el-segmented
-          v-model="tab"
-          :options="availableFormats"
-          size="large"
-          class="rounded-switcher"
-          data-test="format-segmented"
-        />
+    <header v-if="member" class="resume-hero">
+      <button
+        type="button"
+        class="hero-close"
+        aria-label="關閉"
+        @click="close"
+      >
+        <el-icon :size="18"><Close /></el-icon>
+      </button>
+      <div class="hero-photo-frame">
+        <img v-if="member.has_photo" :src="photoSrc" alt="" />
+        <el-icon v-else :size="44"><User /></el-icon>
       </div>
-      <div v-else-if="availableFormats.length === 1" class="single-tag-row">
-        僅有 {{ availableFormats[0].label }} 格式
+      <div class="hero-text">
+        <h2 class="hero-name">{{ member.real_name }}</h2>
+        <p v-if="member.current_position" class="hero-position">
+          {{ member.current_position }}
+        </p>
+        <div class="hero-meta">
+          <span class="meta-pill">
+            <el-icon :size="13"><School /></el-icon>
+            {{ member.graduation_year }} 年畢業
+          </span>
+          <span v-if="member.joined_at" class="meta-pill">
+            <el-icon :size="13"><Calendar /></el-icon>
+            {{ formatJoinDate(member.joined_at) }} 入群
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <div v-if="member" class="resume-viewer">
+      <div v-if="availableFormats.length > 1" class="format-cards">
+        <button
+          v-for="fmt in availableFormats"
+          :key="fmt.value"
+          type="button"
+          :class="['format-card', { 'is-active': tab === fmt.value }]"
+          :data-test="`format-card-${fmt.value}`"
+          @click="tab = fmt.value"
+        >
+          <span class="format-card__icon">
+            <el-icon :size="20">
+              <Document v-if="fmt.value === 'pdf'" />
+              <Reading v-else />
+            </el-icon>
+          </span>
+          <span class="format-card__text">
+            <span class="format-card__title">{{ fmt.label }}</span>
+            <span class="format-card__subtitle">
+              {{ fmt.value === 'pdf' ? '原始 PDF 檔案' : '格式化 Markdown 筆記' }}
+            </span>
+          </span>
+        </button>
       </div>
 
       <div class="viewer-body" :class="{ 'is-pdf': tab === 'pdf' && availableFormats.length }">
@@ -246,12 +314,13 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   flex-direction: column;
 }
 
+/* The custom hero replaces the EP title bar entirely. */
 .resume-dialog .el-dialog__header {
-  flex-shrink: 0;
+  display: none;
 }
 
 .resume-dialog .el-dialog__body {
-  padding: 16px 24px 0;
+  padding: 0;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -273,50 +342,219 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   gap: 16px;
   flex: 1;
   min-height: 0;
+  padding: 16px 24px 0;
 }
 
-.switcher-row {
+/* ---------- Hero banner ---------- */
+
+/* Bleed to the dialog edges (the body now has padding: 0 to allow this).
+   Gradient + soft radial highlights echo the brand palette and lift the
+   dialog from "blank window with tabs" into "this is so-and-so's resume". */
+.resume-hero {
+  position: relative;
   display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 32px 36px;
+  /* Layered: dot grain on top, then base gradient — gives the panel
+     more material depth than a flat candy gradient. */
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #c026d3 100%);
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.resume-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.22), transparent 55%),
+    radial-gradient(circle at 82% 100%, rgba(255, 255, 255, 0.12), transparent 55%);
+  pointer-events: none;
+}
+
+/* Right-side decorative wordmark. Sits behind the text (z-index 0) and
+   stretches across the empty area to balance the photo+text on the left.
+   Letterspacing pulled tight so it reads as a graphic, not a label. */
+.resume-hero::after {
+  content: 'RESUME';
+  position: absolute;
+  top: 50%;
+  right: 32px;
+  transform: translateY(-50%);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 108px;
+  font-weight: 900;
+  letter-spacing: -5px;
+  color: rgba(255, 255, 255, 0.09);
+  line-height: 1;
+  pointer-events: none;
+  z-index: 0;
+  white-space: nowrap;
+}
+
+.hero-photo-frame {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  border: 3px solid rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.25);
+  flex-shrink: 0;
+  z-index: 1;
 }
 
-.rounded-switcher :deep(.el-segmented) {
-  background: #f0f2f5;
+.hero-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-photo-frame :deep(.el-icon) {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.hero-text {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  z-index: 1;
+}
+
+.hero-name {
+  margin: 0 0 6px;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+
+.hero-position {
+  margin: 0 0 12px;
+  font-size: 15px;
+  opacity: 0.92;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 999px;
-  padding: 4px;
-  --el-segmented-item-selected-bg-color: #ffffff;
-  --el-segmented-item-selected-color: #303133;
-  --el-segmented-item-hover-color: #303133;
-  --el-segmented-color: #606266;
-}
-
-.rounded-switcher :deep(.el-segmented__item) {
-  border-radius: 999px;
-  padding: 0 24px;
-  min-width: 120px;
-  color: #606266;
-  transition: color 0.2s;
-}
-
-/* Element Plus paints the active state via a separate indicator element
-   that absolutely positions behind the selected item — override that one
-   instead of the item background. */
-.rounded-switcher :deep(.el-segmented__item-selected) {
-  background-color: #ffffff !important;
-  border-radius: 999px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.rounded-switcher :deep(.el-segmented__item.is-selected) {
-  color: #303133 !important;
-}
-
-.single-tag-row {
-  text-align: center;
-  color: #909399;
   font-size: 13px;
-  padding: 4px 0;
+  font-weight: 500;
 }
+
+.hero-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  z-index: 2;
+}
+
+.hero-close:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* ---------- Format chooser cards ---------- */
+.format-cards {
+  display: flex;
+  gap: 12px;
+}
+
+.format-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border: 1px solid #e4e7ed;
+  border-radius: 12px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s,
+    transform 0.2s;
+}
+
+.format-card:hover:not(.is-active) {
+  border-color: #c4b5fd;
+  background: #faf8ff;
+  transform: translateY(-1px);
+}
+
+.format-card.is-active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.32);
+}
+
+.format-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #f0eaff;
+  color: #6366f1;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+
+.format-card.is-active .format-card__icon {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.format-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.format-card__title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.format-card__subtitle {
+  font-size: 12px;
+  opacity: 0.72;
+}
+
 
 .viewer-body {
   border: 1px solid #e4e7ed;
@@ -367,5 +605,37 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 640px) {
+  .resume-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    padding: 24px 20px 22px;
+    gap: 14px;
+  }
+
+  .resume-hero::after {
+    font-size: 72px;
+    right: 16px;
+    bottom: 12px;
+    top: auto;
+    transform: none;
+  }
+
+  .hero-photo-frame {
+    width: 72px;
+    height: 72px;
+  }
+
+  .hero-name {
+    font-size: 26px;
+  }
+
+  .resume-viewer {
+    padding: 14px 16px 0;
+  }
 }
 </style>

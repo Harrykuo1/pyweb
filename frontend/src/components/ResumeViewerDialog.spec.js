@@ -82,16 +82,18 @@ describe('ResumeViewerDialog', () => {
     expect(wrapper.find('[data-test="md-preview-stub"]').exists()).toBe(false)
   })
 
-  it('shows Markdown preview and no segmented control when only Markdown exists', async () => {
+  it('shows Markdown preview and no format chooser when only Markdown exists', async () => {
     const wrapper = await open(memberMdOnly)
     expect(wrapper.find('[data-test="md-preview-stub"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="format-segmented"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="format-card-pdf"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="format-card-md"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="md-preview-stub"]').text()).toContain('# Bob resume')
   })
 
-  it('defaults to PDF when both formats are present and shows segmented control', async () => {
+  it('defaults to PDF when both formats are present and shows the format chooser', async () => {
     const wrapper = await open(memberBoth)
-    expect(wrapper.find('[data-test="format-segmented"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="format-card-pdf"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="format-card-md"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="pdf-frame"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="md-preview-stub"]').exists()).toBe(false)
   })
