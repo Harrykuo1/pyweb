@@ -350,7 +350,7 @@ async function handleSubmit() {
   <el-dialog
     :model-value="modelValue"
     :title="title"
-    width="960"
+    width="880"
     top="6vh"
     :close-on-click-modal="false"
     :teleported="false"
@@ -363,38 +363,54 @@ async function handleSubmit() {
       label-position="top"
       class="job-form"
     >
-      <el-form-item label="類型" prop="kind">
-        <div class="kind-picker" role="radiogroup" aria-label="類型">
-          <button
-            v-for="opt in KIND_OPTIONS"
-            :key="opt.value"
-            type="button"
-            role="radio"
-            :aria-checked="form.kind === opt.value"
-            :class="[
-              'kind-option',
-              `kind-option--${opt.value}`,
-              { 'is-active': form.kind === opt.value },
-            ]"
-            :data-test="`kind-option-${opt.value}`"
-            @click="form.kind = opt.value"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
-      </el-form-item>
+      <div class="form-row-inline">
+        <el-form-item label="類型" prop="kind">
+          <div class="kind-picker" role="radiogroup" aria-label="類型">
+            <button
+              v-for="opt in KIND_OPTIONS"
+              :key="opt.value"
+              type="button"
+              role="radio"
+              :aria-checked="form.kind === opt.value"
+              :class="[
+                'kind-option',
+                `kind-option--${opt.value}`,
+                { 'is-active': form.kind === opt.value },
+              ]"
+              :data-test="`kind-option-${opt.value}`"
+              @click="form.kind = opt.value"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+        </el-form-item>
 
-      <el-form-item label="求職年月" prop="job_year">
-        <el-date-picker
-          v-model="jobYearMonth"
-          type="month"
-          format="YYYY / MM"
-          placeholder="選擇年月"
-          :disabled-date="isJobYearMonthDisabled"
-          data-test="form-job-year-month"
-          class="form-year-month"
-        />
-      </el-form-item>
+        <el-form-item
+          label="本名（留空為匿名）"
+          prop="real_name"
+          class="form-real-name-item"
+        >
+          <el-input
+            v-model="form.real_name"
+            placeholder="可留空"
+            maxlength="64"
+            show-word-limit
+            data-test="form-real-name"
+          />
+        </el-form-item>
+
+        <el-form-item label="求職年月" prop="job_year">
+          <el-date-picker
+            v-model="jobYearMonth"
+            type="month"
+            format="YYYY / MM"
+            placeholder="選擇年月"
+            :disabled-date="isJobYearMonthDisabled"
+            data-test="form-job-year-month"
+            class="form-year-month"
+          />
+        </el-form-item>
+      </div>
 
       <el-form-item label="公司" prop="company">
         <el-autocomplete
@@ -406,16 +422,6 @@ async function handleSubmit() {
           show-word-limit
           data-test="form-company"
           class="form-company"
-        />
-      </el-form-item>
-
-      <el-form-item label="本名（留空為匿名）" prop="real_name">
-        <el-input
-          v-model="form.real_name"
-          placeholder="可留空"
-          maxlength="64"
-          show-word-limit
-          data-test="form-real-name"
         />
       </el-form-item>
 
@@ -507,6 +513,27 @@ async function handleSubmit() {
 
 .form-year-month {
   width: 220px;
+}
+
+/* Desktop: pack 類型 / 本名 / 求職年月 on one row. Real-name flexes to
+   absorb leftover width so the row stays balanced. The wrapper gets
+   its own margin-bottom because we zero out the inner form-items'
+   margins to keep the three labels on the same baseline. */
+.form-row-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 32px;
+  margin-bottom: 18px;
+}
+
+.form-row-inline :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.form-real-name-item {
+  flex: 1;
+  min-width: 200px;
 }
 
 /* ---------- Kind picker (radio styled as segmented chips) ---------- */
@@ -641,8 +668,10 @@ async function handleSubmit() {
 }
 
 @media (max-width: 640px) {
-  .row-2 {
-    grid-template-columns: 1fr;
+  .form-row-inline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
   }
 
   :deep(.md-editor) {
