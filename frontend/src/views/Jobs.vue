@@ -13,14 +13,20 @@ import {
 import {
   Briefcase,
   Calendar,
+  Edit,
   OfficeBuilding,
+  Plus,
   Refresh,
   School,
   Search,
   User,
 } from '@element-plus/icons-vue'
 
+import JobFormDialog from '../components/JobFormDialog.vue'
 import { jobsApi } from '../api/jobs'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -84,6 +90,19 @@ const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const items = ref([])
 const total = ref(0)
 const loading = ref(false)
+
+const formOpen = ref(false)
+const editingJob = ref(null)
+
+function openCreate() {
+  editingJob.value = null
+  formOpen.value = true
+}
+
+function openEdit(job) {
+  editingJob.value = { ...job }
+  formOpen.value = true
+}
 
 async function loadItems() {
   loading.value = true
@@ -190,6 +209,15 @@ onMounted(loadItems)
       <div class="actions">
         <el-button :icon="Refresh" data-test="refresh-button" @click="loadItems">
           重新整理
+        </el-button>
+        <el-button
+          v-if="auth.isAdmin"
+          type="primary"
+          :icon="Plus"
+          data-test="add-job-button"
+          @click="openCreate"
+        >
+          新增紀錄
         </el-button>
       </div>
     </header>
@@ -319,6 +347,19 @@ onMounted(loadItems)
             {{ formatDate(i.created_at) }}
           </span>
         </div>
+
+        <div v-if="auth.isAdmin" class="card-admin-actions">
+          <button
+            type="button"
+            class="card-admin-btn"
+            data-test="edit-job-button"
+            aria-label="編輯"
+            title="編輯"
+            @click="openEdit(i)"
+          >
+            <el-icon :size="14"><Edit /></el-icon>
+          </button>
+        </div>
       </article>
     </div>
 
@@ -327,7 +368,21 @@ onMounted(loadItems)
         <el-icon :size="32"><Briefcase /></el-icon>
       </div>
       <p class="empty-text">尚無符合條件的紀錄</p>
+      <el-button
+        v-if="auth.isAdmin && total === 0"
+        type="primary"
+        :icon="Plus"
+        @click="openCreate"
+      >
+        新增第一筆紀錄
+      </el-button>
     </div>
+
+    <JobFormDialog
+      v-model="formOpen"
+      :job="editingJob"
+      @saved="loadItems"
+    />
   </div>
 </template>
 
@@ -735,6 +790,47 @@ onMounted(loadItems)
 .meta-year {
   color: var(--card-accent-ink);
   font-weight: 600;
+}
+
+/* ----- Admin actions on card (hover-revealed) ----- */
+.card-admin-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.record-card:hover .card-admin-actions,
+.record-card:focus-within .card-admin-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.card-admin-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  color: var(--ink-700);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.card-admin-btn:hover {
+  background: #ffffff;
+  color: var(--card-accent-ink);
+  border-color: var(--card-accent-soft);
 }
 
 /* ============================================================
