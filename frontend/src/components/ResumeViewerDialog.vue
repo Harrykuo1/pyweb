@@ -231,25 +231,48 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   />
 </template>
 
-<style scoped>
-.resume-dialog :deep(.el-dialog) {
+<!-- Unscoped: pin the dialog and its layout. The .resume-dialog class
+     is merged onto el-dialog's root which lives inside EP's nested
+     wrappers — Vue's scoped data-v hash doesn't reach that element,
+     so a scoped selector wouldn't match. Targeting it from a global
+     style block guarantees the rules apply. -->
+<style>
+.resume-dialog {
   border-radius: 16px;
   overflow: hidden;
+  margin: 2vh auto !important;
+  height: 96vh !important;
+  display: flex;
+  flex-direction: column;
 }
 
-.resume-dialog :deep(.el-dialog__body) {
+.resume-dialog .el-dialog__header {
+  flex-shrink: 0;
+}
+
+.resume-dialog .el-dialog__body {
   padding: 16px 24px 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.resume-dialog :deep(.el-dialog__footer) {
+.resume-dialog .el-dialog__footer {
   padding: 16px 24px;
   border-top: 1px solid #f2f3f5;
+  flex-shrink: 0;
 }
+</style>
+
+<style scoped>
 
 .resume-viewer {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 .switcher-row {
@@ -300,7 +323,8 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   border-radius: 12px;
   overflow: hidden;
   background: #ffffff;
-  min-height: 70vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
 }
 
@@ -312,7 +336,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
 .pdf-frame {
   flex: 1;
   width: 100%;
-  height: 70vh;
+  height: 100%;
   border: 0;
   display: block;
 }
@@ -320,7 +344,6 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
 .md-frame {
   flex: 1;
   padding: 24px 32px;
-  max-height: 70vh;
   overflow: auto;
 }
 
