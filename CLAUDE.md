@@ -66,6 +66,14 @@ A community member management website that records member profiles and internshi
 - **Trivial plumbing exempt**: pure declarative config additions (declaring a Pydantic field) don't need a dedicated test if the next feature's test exercises them end-to-end. Use this exemption sparingly — when in doubt, write the test.
 - **Run before committing**: `cd backend && pytest`; `cd frontend && npm run test`.
 
+### 2.7 Docker Rebuild Before Handoff (MANDATORY)
+
+- After all of a feature's tests pass and the work is ready for the user to verify in a browser, **automatically run `docker compose up -d --build`** from the repo root before declaring the task done. Don't ask first — the user has pre-authorized this.
+- Frontend serves on host port **8081** (container internal 8080); SQLite persists at `./data/pyweb.db`.
+- Once per task is enough — don't rebuild between every small commit in a multi-commit feature. Rebuild once at the end before handing back.
+- If the build or container startup fails, surface the error and stop — don't claim the task is complete with a broken image.
+- Skip only when the change has no runtime impact (docs-only, CI-only, or test-file-only changes).
+
 ---
 
 ## 3. Feature Requirements
