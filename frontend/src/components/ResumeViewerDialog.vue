@@ -221,7 +221,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
           <span class="format-card__text">
             <span class="format-card__title">{{ fmt.label }}</span>
             <span class="format-card__subtitle">
-              {{ fmt.value === 'pdf' ? '原始 PDF 檔案' : '格式化 Markdown 筆記' }}
+              {{ fmt.value === 'pdf' ? '原始 PDF 履歷' : '格式化 Markdown 履歷' }}
             </span>
           </span>
         </button>
