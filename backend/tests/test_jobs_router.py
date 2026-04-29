@@ -484,6 +484,41 @@ def test_create_internship_job_admin_succeeds(client_factory):
     assert body["created_at"] is not None
 
 
+def test_create_with_category_round_trips(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "category": "DevOps",
+            "kind": "internship",
+            "experience_md": "x",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["category"] == "DevOps"
+
+
+def test_create_without_category_returns_null(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["category"] is None
+
+
 def test_create_fulltime_job_admin_succeeds(client_factory):
     client, login_as = client_factory
     login_as("admin")

@@ -84,6 +84,35 @@ def test_job_kind_required(db_session):
     db_session.rollback()
 
 
+def test_job_category_optional_defaults_to_none(db_session):
+    j = Job(
+        job_year=2025,
+        job_month=6,
+        company="Acme",
+        kind=JobKind.INTERNSHIP,
+        experience_md="x",
+    )
+    db_session.add(j)
+    db_session.commit()
+
+    assert db_session.query(Job).one().category is None
+
+
+def test_job_category_persists_when_set(db_session):
+    j = Job(
+        job_year=2025,
+        job_month=6,
+        company="Acme",
+        category="DevOps",
+        kind=JobKind.INTERNSHIP,
+        experience_md="x",
+    )
+    db_session.add(j)
+    db_session.commit()
+
+    assert db_session.query(Job).one().category == "DevOps"
+
+
 def test_job_kind_rejects_invalid_value(db_session):
     j = Job(
         job_year=2025,

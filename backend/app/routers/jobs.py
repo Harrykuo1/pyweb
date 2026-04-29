@@ -160,6 +160,7 @@ def create_job(
         job_year=payload.job_year,
         job_month=payload.job_month,
         company=payload.company,
+        category=payload.category,
         kind=JobKind(payload.kind),
         experience_md=payload.experience_md,
         real_name=payload.real_name,

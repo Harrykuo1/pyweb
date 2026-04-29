@@ -24,6 +24,7 @@ class JobCreate(BaseModel):
     job_year: int
     job_month: int = Field(ge=1, le=12)
     company: str = Field(min_length=1, max_length=128)
+    category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral
     experience_md: str = Field(min_length=1)
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
@@ -39,6 +40,7 @@ class JobUpdate(BaseModel):
     job_year: int | None = None
     job_month: int | None = Field(default=None, ge=1, le=12)
     company: str | None = Field(default=None, min_length=1, max_length=128)
+    category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral | None = None
     experience_md: str | None = Field(default=None, min_length=1)
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
@@ -57,6 +59,7 @@ class JobResponse(BaseModel):
     job_year: int
     job_month: int
     company: str
+    category: str | None
     kind: JobKindLiteral
     experience_md: str
     real_name: str | None

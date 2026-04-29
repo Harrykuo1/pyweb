@@ -48,6 +48,20 @@ def test_job_create_accepts_optional_fields():
     assert "d" in payload.timeline_md
 
 
+def test_job_create_category_defaults_to_none():
+    assert JobCreate(**_payload()).category is None
+
+
+def test_job_create_accepts_category():
+    assert JobCreate(**_payload(category="DevOps")).category == "DevOps"
+
+
+@pytest.mark.parametrize("bad", ["", "x" * 65])
+def test_job_create_rejects_invalid_category(bad):
+    with pytest.raises(ValidationError):
+        JobCreate(**_payload(category=bad))
+
+
 @pytest.mark.parametrize(
     "field,bad",
     [
@@ -146,6 +160,16 @@ def test_job_update_rejects_empty_company_when_provided():
         JobUpdate(company="")
 
 
+def test_job_update_accepts_category():
+    upd = JobUpdate(category="Backend")
+    assert upd.category == "Backend"
+
+
+def test_job_update_rejects_oversized_category():
+    with pytest.raises(ValidationError):
+        JobUpdate(category="x" * 65)
+
+
 def test_job_update_rejects_invalid_kind_when_provided():
     with pytest.raises(ValidationError):
         JobUpdate(kind="freelance")
@@ -169,6 +193,22 @@ def test_job_response_from_orm_object():
     assert resp.job_month == 6
     assert resp.kind == "internship"
     assert resp.real_name is None
+    assert resp.category is None
+
+
+def test_job_response_exposes_category_when_set():
+    now = datetime.now(timezone.utc)
+    j = Job(
+        id=3,
+        job_year=2025,
+        job_month=1,
+        company="Acme",
+        category="Frontend",
+        kind=JobKind.INTERNSHIP,
+        experience_md="x",
+        created_at=now,
+    )
+    assert JobResponse.model_validate(j).category == "Frontend"
 
 
 def test_job_response_from_fulltime_orm_object():
@@ -193,6 +233,7 @@ def test_list_response_carries_items_and_total():
         job_year=2025,
         job_month=3,
         company="Acme",
+        category=None,
         kind="internship",
         experience_md="x",
         real_name=None,

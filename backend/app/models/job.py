@@ -19,6 +19,7 @@ class Job(Base):
     job_year: Mapped[int] = mapped_column(Integer, nullable=False)
     job_month: Mapped[int] = mapped_column(Integer, nullable=False)
     company: Mapped[str] = mapped_column(String(128), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     kind: Mapped[JobKind] = mapped_column(
         Enum(
             JobKind,
