@@ -41,6 +41,7 @@ vi.mock('element-plus', async (importOriginal) => {
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(jobsApi, 'listCompanies').mockResolvedValue([])
+  vi.spyOn(jobsApi, 'listCategories').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -245,12 +246,76 @@ describe('JobFormDialog — submit', () => {
     expect(payload.real_name).toBeNull()
     expect(payload.timeline_md).toBeNull()
   })
+
+  it('sends category in the payload when filled, null when empty', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findInputByDataTest(wrapper, 'form-category'), 'DevOps')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create.mock.calls[0][0].category).toBe('DevOps')
+  })
+
+  it('treats blank category as null in the payload', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findInputByDataTest(wrapper, 'form-category'), '   ')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create.mock.calls[0][0].category).toBeNull()
+  })
+
+  it('prefills category in edit mode and round-trips through update', async () => {
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      job: {
+        id: 9,
+        kind: 'fulltime',
+        job_year: 2024,
+        job_month: 5,
+        company: 'Acme',
+        category: 'Backend',
+        real_name: 'Alice',
+        experience_md: '## x',
+        timeline_md: null,
+      },
+    })
+
+    expect(findInputByDataTest(wrapper, 'form-category').value).toBe('Backend')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ category: 'Backend' }),
+    )
+  })
 })
 
 describe('JobFormDialog — company autocomplete wiring', () => {
-  it('hooks the autocomplete fetcher to jobsApi.listCompanies', async () => {
+  it('hooks the company autocomplete fetcher to jobsApi.listCompanies', async () => {
     const wrapper = await mountDialog()
-    const autocomplete = wrapper.findComponent({ name: 'ElAutocomplete' })
+    // First ElAutocomplete in the form is the company picker.
+    const autocomplete = wrapper.findAllComponents({ name: 'ElAutocomplete' })[0]
     const fetchSuggestions = autocomplete.props('fetchSuggestions')
 
     jobsApi.listCompanies.mockResolvedValue(['Acme', 'AcmeInc'])
@@ -260,5 +325,22 @@ describe('JobFormDialog — company autocomplete wiring', () => {
     )
     expect(jobsApi.listCompanies).toHaveBeenCalledWith('ac')
     expect(suggestions).toEqual([{ value: 'Acme' }, { value: 'AcmeInc' }])
+  })
+})
+
+describe('JobFormDialog — category autocomplete wiring', () => {
+  it('hooks the category autocomplete fetcher to jobsApi.listCategories', async () => {
+    const wrapper = await mountDialog()
+    // Second ElAutocomplete in the form is the category picker.
+    const autocomplete = wrapper.findAllComponents({ name: 'ElAutocomplete' })[1]
+    const fetchSuggestions = autocomplete.props('fetchSuggestions')
+
+    jobsApi.listCategories.mockResolvedValue(['Backend', 'DevOps'])
+
+    const suggestions = await new Promise((resolve) =>
+      fetchSuggestions('de', resolve),
+    )
+    expect(jobsApi.listCategories).toHaveBeenCalledWith('de')
+    expect(suggestions).toEqual([{ value: 'Backend' }, { value: 'DevOps' }])
   })
 })

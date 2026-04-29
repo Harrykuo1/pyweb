@@ -203,6 +203,7 @@ const form = reactive({
   job_year: CURRENT_YEAR,
   job_month: CURRENT_MONTH,
   company: '',
+  category: '',
   real_name: '',
   experience_md: '',
   timeline_md: '',
@@ -242,6 +243,7 @@ function resetForm(job) {
     job_year: job?.job_year ?? CURRENT_YEAR,
     job_month: job?.job_month ?? CURRENT_MONTH,
     company: job?.company ?? '',
+    category: job?.category ?? '',
     real_name: job?.real_name ?? '',
     experience_md: job?.experience_md ?? '',
     timeline_md: job?.timeline_md ?? '',
@@ -276,14 +278,25 @@ async function fetchCompanySuggestions(queryString, cb) {
   }
 }
 
+async function fetchCategorySuggestions(queryString, cb) {
+  try {
+    const list = await jobsApi.listCategories(queryString || undefined)
+    cb(list.map((c) => ({ value: c })))
+  } catch {
+    cb([])
+  }
+}
+
 function buildPayload() {
   const trimmedRealName = form.real_name.trim()
   const trimmedTimeline = form.timeline_md.trim()
+  const trimmedCategory = form.category.trim()
   return {
     kind: form.kind,
     job_year: form.job_year,
     job_month: form.job_month,
     company: form.company.trim(),
+    category: trimmedCategory === '' ? null : trimmedCategory,
     experience_md: form.experience_md.trim(),
     real_name: trimmedRealName === '' ? null : trimmedRealName,
     timeline_md: trimmedTimeline === '' ? null : trimmedTimeline,
@@ -425,6 +438,19 @@ async function handleSubmit() {
         />
       </el-form-item>
 
+      <el-form-item label="職類（選填）" prop="category">
+        <el-autocomplete
+          v-model="form.category"
+          :fetch-suggestions="fetchCategorySuggestions"
+          :trigger-on-focus="true"
+          placeholder="例如：Backend、DevOps、R&D"
+          maxlength="64"
+          show-word-limit
+          data-test="form-category"
+          class="form-category"
+        />
+      </el-form-item>
+
       <el-form-item prop="experience_md" :show-message="false">
         <el-tabs v-model="activeTab" class="md-tabs">
           <el-tab-pane label="心得" name="experience">
@@ -507,7 +533,8 @@ async function handleSubmit() {
   overflow-x: hidden;
 }
 
-.form-company {
+.form-company,
+.form-category {
   width: 100%;
 }
 

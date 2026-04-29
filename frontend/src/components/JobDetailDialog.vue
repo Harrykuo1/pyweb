@@ -75,6 +75,13 @@ function formatJobYearMonth(j) {
             <span class="kind-dot" aria-hidden="true"></span>
             {{ KIND_META[job.kind]?.label ?? job.kind }}
           </span>
+          <span
+            v-if="job.category"
+            class="category-chip"
+            data-test="detail-category"
+          >
+            {{ job.category }}
+          </span>
         </div>
         <h2 class="detail-company" data-test="detail-company">
           <el-icon class="company-icon" :size="18"><OfficeBuilding /></el-icon>
@@ -176,6 +183,8 @@ function formatJobYearMonth(j) {
 .header-row-1 {
   display: flex;
   align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .kind-badge {
@@ -189,6 +198,18 @@ function formatJobYearMonth(j) {
   border-radius: 999px;
   background: var(--header-soft);
   color: var(--header-ink);
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--ink-700);
 }
 
 .kind-dot {
