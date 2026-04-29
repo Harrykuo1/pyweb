@@ -8,13 +8,18 @@ Supported syntax:
   * Quoted phrases preserve internal whitespace: ``"team lead"``.
   * Negated phrases: ``-"team lead"`` and ``NOT "team lead"``.
 
-The parser is a pure function — no I/O, no DB. Output is the IR consumed
-by both the SQLAlchemy filter builder (backend) and the JS mirror (frontend).
+``parse()`` is a pure function (stdlib only) and is mirrored verbatim by
+the JS frontend in ``frontend/src/utils/searchQuery.js``. ``build_ilike_filter()``
+turns the IR into a SQLAlchemy expression for use by routers.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Sequence
+
+from sqlalchemy import and_, not_, or_
+from sqlalchemy.sql import ColumnElement
 
 
 @dataclass(frozen=True)
@@ -100,3 +105,40 @@ def parse(q: str) -> list[list[Term]]:
         groups[-1].append(Term(text=text, negate=negate))
 
     return [g for g in groups if g]
+
+
+def build_ilike_filter(
+    groups: list[list[Term]],
+    columns: Sequence[ColumnElement],
+) -> ColumnElement | None:
+    """Translate parser output into a SQLAlchemy boolean expression.
+
+    For each AND-group: a positive term matches when at least one of the
+    columns ILIKEs ``%text%``; a negated term matches when no column does.
+    Groups are OR'd. Returns ``None`` if there is nothing to filter on
+    (caller should skip ``query.filter``).
+
+    Note: ``%`` and ``_`` in user input are passed through to the LIKE
+    pattern as wildcards — same behavior as the prior single-term ILIKE.
+    """
+    if not groups or not columns:
+        return None
+
+    group_exprs = []
+    for group in groups:
+        term_exprs = []
+        for term in group:
+            pattern = f"%{term.text}%"
+            # IS NOT NULL guard so SQL's three-valued logic doesn't drop rows
+            # under negation: `NOT (NULL ILIKE p OR FALSE)` evaluates to NULL,
+            # which `WHERE` treats as filtered-out.
+            positive = or_(*(
+                and_(col.is_not(None), col.ilike(pattern)) for col in columns
+            ))
+            term_exprs.append(not_(positive) if term.negate else positive)
+        if term_exprs:
+            group_exprs.append(and_(*term_exprs))
+
+    if not group_exprs:
+        return None
+    return or_(*group_exprs)

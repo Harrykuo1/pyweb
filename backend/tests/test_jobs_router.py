@@ -282,6 +282,123 @@ def test_list_combined_filter_and_search(client_factory, db_session):
     assert body["total"] == 1
 
 
+def test_list_search_q_implicit_and_two_terms(client_factory, db_session):
+    # Both terms must appear; either field is fine for either term.
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "Has-both", "experience_md": "senior react work"},
+        {"company": "Only-senior", "experience_md": "senior backend"},
+        {"company": "Only-react", "real_name": "react-fan", "experience_md": "x"},
+        {"company": "Cross-fields", "real_name": "senior person", "experience_md": "react notes"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=senior react")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["Cross-fields", "Has-both"]
+
+
+def test_list_search_q_or_groups(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "A", "experience_md": "react notes"},
+        {"company": "B", "experience_md": "vue notes"},
+        {"company": "C", "experience_md": "go notes"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=react OR vue")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["A", "B"]
+
+
+def test_list_search_q_dash_excludes(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "Senior-only", "experience_md": "senior react"},
+        {"company": "Senior+junior", "experience_md": "senior react junior"},
+        {"company": "Junior-only", "experience_md": "junior react"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=react -junior")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["Senior-only"]
+
+
+def test_list_search_q_not_keyword_excludes(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "A", "experience_md": "team lead role"},
+        {"company": "B", "experience_md": "team member role"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=team NOT lead")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["B"]
+
+
+def test_list_search_q_quoted_phrase_preserves_whitespace(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "Match", "experience_md": "promoted to team lead in 2024"},
+        {"company": "Wrong-order", "experience_md": "the lead of the team"},
+        {"company": "Tokens-only", "experience_md": "led the team and was a lead"},
+    ])
+    login_as("viewer")
+
+    r = client.get('/api/jobs?q="team lead"')
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["Match"]
+
+
+def test_list_search_q_combined_boolean_query(client_factory, db_session):
+    # `senior react OR vue -junior "team lead"` (Google-style):
+    # (senior AND react) OR (vue AND NOT junior AND "team lead")
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "G1-hit", "experience_md": "senior react work"},
+        {"company": "G1-also-junior", "experience_md": "senior react junior"},  # still hits G1
+        {"company": "G2-hit", "experience_md": "vue role, team lead"},
+        {"company": "G2-junior", "experience_md": "vue role, team lead, junior"},  # excluded
+        {"company": "G2-no-phrase", "experience_md": "vue role, the lead of the team"},  # phrase missing
+        {"company": "Neither", "experience_md": "go backend"},
+    ])
+    login_as("viewer")
+
+    r = client.get('/api/jobs?q=senior react OR vue -junior "team lead"')
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["G1-also-junior", "G1-hit", "G2-hit"]
+
+
+def test_list_search_q_single_term_remains_substring(client_factory, db_session):
+    # Backwards-compatible with the old single-term ILIKE behavior.
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "A", "experience_md": "interview tips"},
+        {"company": "B", "experience_md": "system design"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=interview")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["A"]
+
+
+def test_list_search_q_still_excludes_company_field(client_factory, db_session):
+    # Company is filtered via the multi-select picker, not q.
+    client, login_as = client_factory
+    _seed(db_session, [
+        {"company": "Acme", "real_name": "alice", "experience_md": "x"},
+        {"company": "Other", "real_name": "bob", "experience_md": "y"},
+    ])
+    login_as("viewer")
+
+    r = client.get("/api/jobs?q=Acme")
+    assert r.json()["items"] == []
+
+
 def test_list_rejects_invalid_sort(client_factory):
     client, login_as = client_factory
     login_as("viewer")

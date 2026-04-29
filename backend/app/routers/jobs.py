@@ -1,10 +1,11 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case, or_
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
+from app.core.search_query import build_ilike_filter, parse as parse_search_query
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, JobKind, User
@@ -80,14 +81,14 @@ def list_jobs(
         query = query.filter(Job.kind == kind)
     if q:
         # Company is filtered separately via the multi-select tag picker,
-        # so keep q focused on free-form text fields.
-        pattern = f"%{q}%"
-        query = query.filter(
-            or_(
-                Job.real_name.ilike(pattern),
-                Job.experience_md.ilike(pattern),
-            )
+        # so keep q focused on free-form text fields. Supports boolean
+        # syntax (AND / OR / NOT / -prefix / "phrase") via search_query.
+        expr = build_ilike_filter(
+            parse_search_query(q),
+            [Job.real_name, Job.experience_md],
         )
+        if expr is not None:
+            query = query.filter(expr)
 
     if sort == "kind":
         primary = _KIND_PRIORITY.asc() if order == "asc" else _KIND_PRIORITY.desc()
