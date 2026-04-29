@@ -31,6 +31,7 @@ import PhotoCropDialog from '../components/PhotoCropDialog.vue'
 import ResumeViewerDialog from '../components/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
+import { matchHaystack, parseQuery } from '../utils/searchQuery'
 
 const auth = useAuthStore()
 
@@ -93,14 +94,15 @@ const stringSort = (key) => (a, b) =>
   String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
 
 // ---------- Search ----------
-// Client-side substring match across name / position / graduation year. Fast
-// enough at community-scale (we don't expect 10k members) and avoids a
-// round-trip to the backend.
+// Client-side boolean search across name / position / graduation year.
+// Supports `AND` (implicit), uppercase `OR`, `-` / `NOT` negation, and
+// "quoted phrases" — same syntax as the Jobs backend search. The parser
+// is shared with the backend in spirit (mirrored Python ↔ JS).
 const searchQuery = ref('')
 
 const filteredMembers = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return members.value
+  const parsed = parseQuery(searchQuery.value)
+  if (parsed.length === 0) return members.value
   return members.value.filter((m) => {
     const haystack = [
       m.real_name,
@@ -109,8 +111,7 @@ const filteredMembers = computed(() => {
     ]
       .filter(Boolean)
       .join(' ')
-      .toLowerCase()
-    return haystack.includes(q)
+    return matchHaystack(parsed, haystack)
   })
 })
 

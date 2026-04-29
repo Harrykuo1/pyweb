@@ -45,6 +45,56 @@ const sampleMembers = [
   },
 ]
 
+// Richer fixture for the boolean-search tests: positions and years are
+// crafted so each operator (AND, OR, NOT, "phrase") has a row that
+// matches and one that doesn't.
+const booleanSearchMembers = [
+  {
+    id: 11,
+    graduation_year: 2020,
+    real_name: 'Alice',
+    current_position: 'Senior React Developer',
+    resume_md: null,
+    joined_at: '2020-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+  },
+  {
+    id: 12,
+    graduation_year: 2021,
+    real_name: 'Bob',
+    current_position: 'Junior React Developer',
+    resume_md: null,
+    joined_at: '2021-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+  },
+  {
+    id: 13,
+    graduation_year: 2022,
+    real_name: 'Charlie',
+    current_position: 'Vue Team Lead',
+    resume_md: null,
+    joined_at: '2022-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+  },
+  {
+    id: 14,
+    graduation_year: 2023,
+    real_name: 'Dave',
+    current_position: 'Backend Engineer',
+    resume_md: null,
+    joined_at: '2023-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+  },
+]
+
 // Wrappers created with attachTo: document.body need explicit unmount —
 // otherwise Element Plus's popconfirm reference handlers leak between
 // tests and the next click silently no-ops. Track each one and unmount
@@ -175,6 +225,49 @@ describe('Members.vue', () => {
     expect(table.props('data')).toHaveLength(0)
     // EP renders the #empty slot inside the table once data is empty.
     expect(wrapper.text()).toContain('找不到符合')
+  })
+
+  // ---------- Boolean search syntax ----------
+  // Asserts that the searchQuery parser is actually wired into Members.
+  // Per-operator parsing is exhaustively tested in utils/searchQuery.spec.js;
+  // here we confirm Members consumes the parser end-to-end.
+
+  async function tableNamesAfterSearch(query) {
+    const wrapper = await mountInListMode(booleanSearchMembers)
+    const search = wrapper.findComponent('.search-input')
+    await search.setValue(query)
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    return table.props('data').map((m) => m.real_name).sort()
+  }
+
+  it('search: implicit AND requires every term', async () => {
+    expect(await tableNamesAfterSearch('senior react')).toEqual(['Alice'])
+  })
+
+  it('search: uppercase OR splits into groups', async () => {
+    expect(await tableNamesAfterSearch('vue OR backend')).toEqual([
+      'Charlie',
+      'Dave',
+    ])
+  })
+
+  it('search: dash prefix excludes matching rows', async () => {
+    // Both Alice (Senior React) and Bob (Junior React) contain "react",
+    // but `-junior` excludes Bob.
+    expect(await tableNamesAfterSearch('react -junior')).toEqual(['Alice'])
+  })
+
+  it('search: quoted phrase requires contiguous match', async () => {
+    expect(await tableNamesAfterSearch('"team lead"')).toEqual(['Charlie'])
+  })
+
+  it('search: combined boolean query end-to-end', async () => {
+    // (senior AND react) OR (vue AND NOT junior AND "team lead")
+    // -> Alice from group 1, Charlie from group 2.
+    expect(
+      await tableNamesAfterSearch('senior react OR vue -junior "team lead"'),
+    ).toEqual(['Alice', 'Charlie'])
   })
 
   it('grid mode exposes sort pills for the four sort keys with joined_at active asc', async () => {
