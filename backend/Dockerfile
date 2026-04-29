@@ -31,4 +31,10 @@ EXPOSE 8000
 
 # init_db is idempotent (skips existing rows) so re-running on every
 # container start is safe and ensures the seeded accounts exist.
-CMD ["sh", "-c", "python -m app.init_db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# --proxy-headers + --forwarded-allow-ips=* makes uvicorn honour the
+# X-Forwarded-For / X-Real-IP headers the frontend nginx already sends,
+# so request.client.host (and therefore the rate-limiter key) reflects
+# the real client IP rather than the docker bridge address. Safe to
+# trust all sources here because backend's port 8000 is `expose:` only
+# (docker-internal), never published to the host or the internet.
+CMD ["sh", "-c", "python -m app.init_db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"]

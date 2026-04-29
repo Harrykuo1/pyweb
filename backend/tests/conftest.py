@@ -44,3 +44,18 @@ def db_session(db_engine):
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    # The slowapi limiter is module-level singleton state, so a test that
+    # runs login() five times will burn through the production budget for
+    # every test that follows. Clear the in-memory storage between tests
+    # so each one starts with a clean slate. Tests that explicitly want
+    # to assert limiter behavior simply make their requests within their
+    # own fixture scope.
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
+from app.core.rate_limit import limiter
 from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models import User, UserRole
@@ -13,6 +14,13 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# Per-IP brute-force throttle. 5/minute is generous enough that real users
+# never hit it (login is once per session) and tight enough that a typical
+# bcrypt-bottlenecked attacker can't sweep a password space against the
+# two seeded accounts in any reasonable wall-clock budget. Successes count
+# too — simpler, and a real user logging in 5 times in a minute is unusual.
+LOGIN_RATE_LIMIT = "5/minute"
 
 
 def _get_user_by_role(db: Session, role: UserRole) -> User:
@@ -26,9 +34,10 @@ def _get_user_by_role(db: Session, role: UserRole) -> User:
 
 
 @router.post("/login", response_model=UserResponse)
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login(
-    payload: LoginRequest,
     request: Request,
+    payload: LoginRequest,
     db: Session = Depends(get_db),
 ) -> User:
     # bcrypt hashes are salted, so we cannot index by them. Two seeded
