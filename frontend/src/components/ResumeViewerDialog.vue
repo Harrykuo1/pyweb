@@ -166,7 +166,6 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
     title=""
     width="1000"
     class="resume-dialog"
-    :close-on-click-modal="false"
     :show-close="false"
     :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
