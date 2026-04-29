@@ -555,12 +555,20 @@ async function handleSubmit() {
 /* Desktop: pack 類型 / 本名 / 求職年月 on one row. Real-name flexes to
    absorb leftover width so the row stays balanced. The wrapper gets
    its own margin-bottom because we zero out the inner form-items'
-   margins to keep the three labels on the same baseline. */
+   margins to keep the three labels on the same baseline.
+
+   row-gap is split out from column-gap so that when the row wraps to
+   a vertical stack (narrow desktop or stacked next to another inline
+   row), each item is exactly one between-row rhythm apart instead of
+   inheriting the much larger horizontal gap. 22px = wrapper's
+   margin-bottom (18) + parent form's gap (4), so inside-wrap rhythm
+   matches between-wrapper rhythm. */
 .form-row-inline {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 32px;
+  column-gap: 32px;
+  row-gap: 22px;
   margin-bottom: 18px;
 }
 
@@ -718,7 +726,9 @@ async function handleSubmit() {
   .form-row-inline {
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
+    /* Match the 22px between-wrapper rhythm so the column-mode stack
+       doesn't read as tighter than the gaps between adjacent rows. */
+    gap: 22px;
   }
 
   :deep(.md-editor) {
