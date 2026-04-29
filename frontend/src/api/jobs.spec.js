@@ -16,7 +16,7 @@ describe('jobsApi.list', () => {
     expect(get).toHaveBeenCalledWith('/jobs?sort=created_at&order=desc')
   })
 
-  it('passes sort/order/year/company/kind/q through with company as repeated params', async () => {
+  it('passes sort/order/year/company/category/kind/q through with array params repeated', async () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
@@ -25,11 +25,22 @@ describe('jobsApi.list', () => {
       order: 'asc',
       year: 2024,
       company: ['Acme', 'Globex'],
+      category: ['Backend', 'DevOps'],
       kind: 'fulltime',
       q: 'interview',
     })
     expect(get).toHaveBeenCalledWith(
-      '/jobs?sort=company&order=asc&year=2024&company=Acme&company=Globex&kind=fulltime&q=interview',
+      '/jobs?sort=company&order=asc&year=2024&company=Acme&company=Globex&category=Backend&category=DevOps&kind=fulltime&q=interview',
+    )
+  })
+
+  it('accepts a bare string category for symmetry with company', async () => {
+    const get = vi
+      .spyOn(client, 'get')
+      .mockResolvedValue({ data: { items: [], total: 0 } })
+    await jobsApi.list({ category: 'Backend' })
+    expect(get).toHaveBeenCalledWith(
+      '/jobs?sort=created_at&order=desc&category=Backend',
     )
   })
 
@@ -47,7 +58,13 @@ describe('jobsApi.list', () => {
     const get = vi
       .spyOn(client, 'get')
       .mockResolvedValue({ data: { items: [], total: 0 } })
-    await jobsApi.list({ year: '', company: [], kind: '', q: '' })
+    await jobsApi.list({
+      year: '',
+      company: [],
+      category: [],
+      kind: '',
+      q: '',
+    })
     expect(get).toHaveBeenCalledWith('/jobs?sort=created_at&order=desc')
   })
 
@@ -118,6 +135,25 @@ describe('jobsApi.listCompanies', () => {
     await jobsApi.listCompanies('ac')
     expect(get).toHaveBeenCalledWith('/jobs/companies', {
       params: { prefix: 'ac' },
+    })
+  })
+})
+
+describe('jobsApi.listCategories', () => {
+  it('GETs /jobs/categories with no prefix by default', async () => {
+    const get = vi
+      .spyOn(client, 'get')
+      .mockResolvedValue({ data: ['Backend'] })
+    const result = await jobsApi.listCategories()
+    expect(get).toHaveBeenCalledWith('/jobs/categories', { params: {} })
+    expect(result).toEqual(['Backend'])
+  })
+
+  it('passes prefix when provided', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
+    await jobsApi.listCategories('de')
+    expect(get).toHaveBeenCalledWith('/jobs/categories', {
+      params: { prefix: 'de' },
     })
   })
 })

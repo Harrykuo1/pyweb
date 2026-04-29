@@ -86,6 +86,7 @@ describe('Jobs.vue — initial load', () => {
       order: 'desc',
       year: undefined,
       company: [],
+      category: [],
       kind: undefined,
       q: undefined,
     })
@@ -175,6 +176,64 @@ describe('Jobs.vue — URL-driven state on first paint', () => {
     expect(listSpy).toHaveBeenCalledWith(
       expect.objectContaining({ year: undefined }),
     )
+  })
+
+  it('reads category from route.query as an array', async () => {
+    routeQuery.value = { category: ['Backend', 'DevOps'] }
+    const { listSpy } = await mountPage()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ category: ['Backend', 'DevOps'] }),
+    )
+  })
+
+  it('reads a single category value as a one-item array', async () => {
+    routeQuery.value = { category: 'Backend' }
+    const { listSpy } = await mountPage()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ category: ['Backend'] }),
+    )
+  })
+})
+
+describe('Jobs.vue — category filter', () => {
+  it('renders the filter-category multi-select with placeholder', async () => {
+    const { wrapper } = await mountPage()
+    const select = wrapper.find('[data-test="filter-category"]')
+    expect(select.exists()).toBe(true)
+    expect(wrapper.text()).toContain('職類（可多選）')
+  })
+
+  it('calls jobsApi.listCategories on remote keystrokes', async () => {
+    const listCategoriesSpy = vi
+      .spyOn(jobsApi, 'listCategories')
+      .mockResolvedValue(['Backend', 'DevOps'])
+    const { wrapper } = await mountPage()
+
+    const select = wrapper.findComponent('[data-test="filter-category"]')
+    // Trigger the remote-method by invoking the prop directly — the
+    // el-select internal input wiring would otherwise need a real focus
+    // sequence under happy-dom.
+    await select.vm.remoteMethod('de')
+    await flushPromises()
+
+    expect(listCategoriesSpy).toHaveBeenCalledWith('de')
+  })
+
+  it('renders a category chip on cards that have a category', async () => {
+    const items = [
+      { ...sample[0], id: 11, category: 'Backend' },
+      { ...sample[1], id: 12, category: null },
+    ]
+    const { wrapper } = await mountPage(items)
+    const chips = wrapper.findAll('[data-test="card-category"]')
+    expect(chips).toHaveLength(1)
+    expect(chips[0].text()).toBe('Backend')
+  })
+
+  it('search input placeholder is the new 姓名、心得內文 copy', async () => {
+    const { wrapper } = await mountPage()
+    const input = wrapper.find('.filter-search input')
+    expect(input.attributes('placeholder')).toBe('搜尋姓名、心得內文')
   })
 })
 

@@ -15,6 +15,7 @@ import {
   Delete,
   Edit,
   OfficeBuilding,
+  Operation,
   Plus,
   Refresh,
   School,
@@ -83,21 +84,20 @@ function _safeYear(v) {
 }
 
 const COMPANY_FILTER_LIMIT = 10
+const CATEGORY_FILTER_LIMIT = 10
 
-// route.query.company is `string | string[] | undefined` depending on
-// how many `company=` params the URL carries. Normalize to a deduped
-// array of trimmed strings so the select's v-model has a stable shape.
-function _safeCompanyList(v) {
-  const raw = v === undefined || v === null
-    ? []
-    : Array.isArray(v) ? v : [v]
+// route.query.{company,category} is `string | string[] | undefined` depending
+// on how many params the URL carries. Normalize to a deduped array of trimmed
+// strings so each select's v-model has a stable shape.
+function _safeStringList(v, limit) {
+  const raw = v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]
   const out = []
   for (const item of raw) {
     if (typeof item !== 'string') continue
     const trimmed = item.trim()
     if (!trimmed) continue
     if (!out.includes(trimmed)) out.push(trimmed)
-    if (out.length >= COMPANY_FILTER_LIMIT) break
+    if (out.length >= limit) break
   }
   return out
 }
@@ -105,7 +105,10 @@ function _safeCompanyList(v) {
 const sortKey = ref(_safeSort(route.query.sort))
 const sortOrder = ref(_safeOrder(route.query.order))
 const year = ref(_safeYear(route.query.year))
-const company = ref(_safeCompanyList(route.query.company))
+const company = ref(_safeStringList(route.query.company, COMPANY_FILTER_LIMIT))
+const category = ref(
+  _safeStringList(route.query.category, CATEGORY_FILTER_LIMIT),
+)
 const kind = ref(_safeKind(route.query.kind))
 const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
 
@@ -187,6 +190,7 @@ async function loadItems() {
       order: sortOrder.value,
       year: year.value ?? undefined,
       company: company.value,
+      category: category.value,
       kind: kind.value || undefined,
       q: q.value || undefined,
     })
@@ -214,15 +218,16 @@ function syncUrl() {
   if (sortOrder.value !== 'desc') query.order = sortOrder.value
   if (year.value) query.year = String(year.value)
   if (company.value.length > 0) query.company = [...company.value]
+  if (category.value.length > 0) query.category = [...category.value]
   if (kind.value) query.kind = kind.value
   if (q.value) query.q = q.value
   router.replace({ query })
 }
 
-// Sort/year/company/kind changes are immediate. Search input is debounced
-// so a user typing doesn't fire a request per keystroke.
+// Sort/year/company/category/kind changes are immediate. Search input is
+// debounced so a user typing doesn't fire a request per keystroke.
 watch(
-  [sortKey, sortOrder, year, company, kind],
+  [sortKey, sortOrder, year, company, category, kind],
   () => {
     syncUrl()
     loadItems()
@@ -250,6 +255,7 @@ onUnmounted(() => {
 // don't inject them into options (that would surface unrelated chips
 // during a fresh keyword search).
 const companySuggestions = ref([])
+const categorySuggestions = ref([])
 
 async function fetchCompanySuggestions(queryString) {
   try {
@@ -259,11 +265,21 @@ async function fetchCompanySuggestions(queryString) {
   }
 }
 
+async function fetchCategorySuggestions(queryString) {
+  try {
+    categorySuggestions.value = await jobsApi.listCategories(
+      queryString || undefined,
+    )
+  } catch {
+    categorySuggestions.value = []
+  }
+}
+
 // Block auto-repeat Backspace when the inline editor is empty so a
 // held key can't rapid-fire delete every selected chip. The first
 // press still removes one chip; the user has to release and press
 // again to delete the next one.
-function onCompanyFilterKeydown(event) {
+function onChipFilterKeydown(event) {
   if (
     event.key === 'Backspace' &&
     event.repeat &&
@@ -277,16 +293,23 @@ function onCompanyFilterKeydown(event) {
 
 // Push already-selected matches to the bottom so the user always sees
 // new options first; each group keeps the API's alphabetical order.
-const displayedCompanySuggestions = computed(() => {
-  const selected = new Set(company.value)
+function _reorderSuggestions(selected, suggestions) {
+  const sel = new Set(selected)
   const fresh = []
   const stale = []
-  for (const c of companySuggestions.value) {
-    if (selected.has(c)) stale.push(c)
-    else fresh.push(c)
+  for (const item of suggestions) {
+    if (sel.has(item)) stale.push(item)
+    else fresh.push(item)
   }
   return [...fresh, ...stale]
-})
+}
+
+const displayedCompanySuggestions = computed(() =>
+  _reorderSuggestions(company.value, companySuggestions.value),
+)
+const displayedCategorySuggestions = computed(() =>
+  _reorderSuggestions(category.value, categorySuggestions.value),
+)
 
 function realNameOrAnonymous(item) {
   return item.real_name || '匿名'
@@ -393,7 +416,7 @@ onMounted(loadItems)
           clearable
           data-test="filter-company"
           class="filter-company"
-          @keydown.capture="onCompanyFilterKeydown"
+          @keydown.capture="onChipFilterKeydown"
         >
           <template #prefix>
             <el-icon><OfficeBuilding /></el-icon>
@@ -405,11 +428,36 @@ onMounted(loadItems)
             :value="c"
           />
         </el-select>
+
+        <el-select
+          v-model="category"
+          multiple
+          filterable
+          remote
+          :remote-method="fetchCategorySuggestions"
+          :reserve-keyword="false"
+          :multiple-limit="10"
+          placeholder="職類（可多選）"
+          clearable
+          data-test="filter-category"
+          class="filter-category"
+          @keydown.capture="onChipFilterKeydown"
+        >
+          <template #prefix>
+            <el-icon><Operation /></el-icon>
+          </template>
+          <el-option
+            v-for="c in displayedCategorySuggestions"
+            :key="c"
+            :label="c"
+            :value="c"
+          />
+        </el-select>
       </div>
 
       <el-input
         v-model="q"
-        placeholder="搜尋姓名、心得"
+        placeholder="搜尋姓名、心得內文"
         :prefix-icon="Search"
         clearable
         data-test="filter-search"
@@ -464,10 +512,19 @@ onMounted(loadItems)
         <span class="card-stripe" aria-hidden="true"></span>
         <span class="card-glow" aria-hidden="true"></span>
 
-        <span class="kind-badge" :data-test="`kind-${i.kind}`">
-          <span class="kind-dot" aria-hidden="true"></span>
-          {{ KIND_META[i.kind]?.label ?? i.kind }}
-        </span>
+        <div class="card-tags">
+          <span class="kind-badge" :data-test="`kind-${i.kind}`">
+            <span class="kind-dot" aria-hidden="true"></span>
+            {{ KIND_META[i.kind]?.label ?? i.kind }}
+          </span>
+          <span
+            v-if="i.category"
+            class="category-chip"
+            data-test="card-category"
+          >
+            {{ i.category }}
+          </span>
+        </div>
 
         <h3 class="card-company">
           <el-icon class="company-icon" :size="14"><OfficeBuilding /></el-icon>
@@ -711,9 +768,19 @@ onMounted(loadItems)
   width: 130px;
 }
 
+/* Company is given roughly twice the horizontal real-estate of category
+   on desktop because company names tend to be longer (and there are
+   typically more of them in the dropdown). flex-wrap on the parent row
+   handles the narrow-viewport stack automatically once the combined
+   widths exceed the row. */
 .filter-company {
-  flex: 1;
+  flex: 2;
   min-width: 200px;
+}
+
+.filter-category {
+  flex: 1;
+  min-width: 160px;
 }
 
 /* Suppress the nested border that would otherwise appear around the
@@ -721,7 +788,9 @@ onMounted(loadItems)
    when filterable+multiple, and our generic .filter-bar input shadow
    leaks into it. We want only the outer wrapper to show a border. */
 .filter-company :deep(.el-select__input),
-.filter-company :deep(.el-select__selection) input {
+.filter-company :deep(.el-select__selection) input,
+.filter-category :deep(.el-select__input),
+.filter-category :deep(.el-select__selection) input {
   box-shadow: none !important;
   border: none !important;
   outline: none !important;
@@ -914,8 +983,15 @@ onMounted(loadItems)
   opacity: 1;
 }
 
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
 .kind-badge {
-  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -926,7 +1002,24 @@ onMounted(loadItems)
   border-radius: 999px;
   background: var(--card-accent-soft);
   color: var(--card-accent-ink);
-  margin-bottom: 2px;
+}
+
+/* Neutral, slightly recessive so the kind-badge keeps visual primacy.
+   The chip sits right next to it like a secondary tag. */
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--ink-700);
+  max-width: 12ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kind-dot {
@@ -1200,7 +1293,8 @@ onMounted(loadItems)
   }
 
   .filter-year,
-  .filter-company {
+  .filter-company,
+  .filter-category {
     width: 100%;
   }
 

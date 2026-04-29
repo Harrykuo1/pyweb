@@ -6,6 +6,7 @@ export const jobsApi = {
     order = 'desc',
     year,
     company,
+    category,
     kind,
     q,
   } = {}) {
@@ -23,6 +24,11 @@ export const jobsApi = {
       for (const c of company) if (c) search.append('company', c)
     } else if (company) {
       search.append('company', company)
+    }
+    if (Array.isArray(category)) {
+      for (const c of category) if (c) search.append('category', c)
+    } else if (category) {
+      search.append('category', category)
     }
     if (kind) search.set('kind', kind)
     if (q) search.set('q', q)
@@ -48,6 +54,12 @@ export const jobsApi = {
     const params = {}
     if (prefix) params.prefix = prefix
     const { data } = await client.get('/jobs/companies', { params })
+    return data
+  },
+  async listCategories(prefix) {
+    const params = {}
+    if (prefix) params.prefix = prefix
+    const { data } = await client.get('/jobs/categories', { params })
     return data
   },
 }
