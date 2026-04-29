@@ -25,7 +25,7 @@ const sampleMembers = [
     id: 1,
     graduation_year: 2022,
     real_name: 'Alice',
-    current_position: 'SWE',
+    institution: 'SWE',
     resume_md: '# resume',
     joined_at: '2022-01-01T00:00:00+00:00',
     has_photo: true,
@@ -36,7 +36,7 @@ const sampleMembers = [
     id: 2,
     graduation_year: 2023,
     real_name: 'Bob',
-    current_position: 'PM',
+    institution: 'PM',
     resume_md: null,
     joined_at: '2023-06-01T00:00:00+00:00',
     has_photo: false,
@@ -53,7 +53,7 @@ const booleanSearchMembers = [
     id: 11,
     graduation_year: 2020,
     real_name: 'Alice',
-    current_position: 'Senior React Developer',
+    institution: 'Senior React Developer',
     resume_md: null,
     joined_at: '2020-01-01T00:00:00+00:00',
     has_photo: false,
@@ -64,7 +64,7 @@ const booleanSearchMembers = [
     id: 12,
     graduation_year: 2021,
     real_name: 'Bob',
-    current_position: 'Junior React Developer',
+    institution: 'Junior React Developer',
     resume_md: null,
     joined_at: '2021-01-01T00:00:00+00:00',
     has_photo: false,
@@ -75,7 +75,7 @@ const booleanSearchMembers = [
     id: 13,
     graduation_year: 2022,
     real_name: 'Charlie',
-    current_position: 'Vue Team Lead',
+    institution: 'Vue Team Lead',
     resume_md: null,
     joined_at: '2022-01-01T00:00:00+00:00',
     has_photo: false,
@@ -86,7 +86,7 @@ const booleanSearchMembers = [
     id: 14,
     graduation_year: 2023,
     real_name: 'Dave',
-    current_position: 'Backend Engineer',
+    institution: 'Backend Engineer',
     resume_md: null,
     joined_at: '2023-01-01T00:00:00+00:00',
     has_photo: false,
@@ -159,7 +159,7 @@ describe('Members.vue', () => {
     expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
   })
 
-  it('list view renders el-table with the four sortable columns', async () => {
+  it('list view renders el-table with the five sortable columns', async () => {
     const wrapper = await mountInListMode()
 
     const cols = wrapper.findAllComponents({ name: 'ElTableColumn' })
@@ -169,7 +169,7 @@ describe('Members.vue', () => {
         .map((c) => [c.props('prop'), c.props('sortOrders')]),
     )
     expect(Object.keys(sortable).sort()).toEqual(
-      ['current_position', 'graduation_year', 'joined_at', 'real_name'].sort(),
+      ['graduation_year', 'institution', 'joined_at', 'position', 'real_name'].sort(),
     )
     for (const orders of Object.values(sortable)) {
       expect(orders).toEqual(['ascending', 'descending'])
@@ -275,7 +275,7 @@ describe('Members.vue', () => {
     const wrapper = mount(Members)
     await flushPromises()
 
-    for (const key of ['joined_at', 'graduation_year', 'real_name', 'current_position']) {
+    for (const key of ['joined_at', 'graduation_year', 'real_name', 'institution']) {
       expect(wrapper.find(`[data-test="sort-${key}"]`).exists()).toBe(true)
     }
 
@@ -385,7 +385,7 @@ describe('Members.vue', () => {
         id: 1,
         graduation_year: 2024,
         real_name: 'Carol',
-        current_position: 'X',
+        institution: 'X',
         resume_md: null,
         joined_at: '2024-01-01T00:00:00+00:00',
         has_photo: false,

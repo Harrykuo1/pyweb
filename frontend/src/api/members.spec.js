@@ -40,7 +40,7 @@ describe('membersApi.get', () => {
 describe('membersApi.create', () => {
   it('POSTs payload to /members', async () => {
     const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 1 } })
-    const payload = { graduation_year: 2024, real_name: 'A', current_position: 'B' }
+    const payload = { graduation_year: 2024, real_name: 'A', institution: 'B' }
     const result = await membersApi.create(payload)
     expect(post).toHaveBeenCalledWith('/members', payload)
     expect(result).toEqual({ id: 1 })

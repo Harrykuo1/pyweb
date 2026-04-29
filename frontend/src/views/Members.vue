@@ -70,7 +70,7 @@ const SORT_OPTIONS = [
   { key: 'joined_at', label: '入群時間' },
   { key: 'graduation_year', label: '畢業年份' },
   { key: 'real_name', label: '本名' },
-  { key: 'current_position', label: '職位' },
+  { key: 'institution', label: '學校／公司' },
 ]
 const sortKey = ref('joined_at')
 const sortOrder = ref('asc')
@@ -106,7 +106,8 @@ const filteredMembers = computed(() => {
   return members.value.filter((m) => {
     const haystack = [
       m.real_name,
-      m.current_position,
+      m.institution,
+      m.position,
       String(m.graduation_year ?? ''),
     ]
       .filter(Boolean)
@@ -450,7 +451,13 @@ onMounted(loadMembers)
 
           <div class="card-body">
             <h3 class="card-name">{{ m.real_name }}</h3>
-            <p class="card-position">{{ m.current_position }}</p>
+            <p class="card-institution">{{ m.institution }}</p>
+            <p
+              class="card-position"
+              :class="{ 'is-empty': !m.position }"
+            >
+              {{ m.position || '—' }}
+            </p>
 
             <div class="card-meta">
               <span class="card-year">
@@ -609,13 +616,26 @@ onMounted(loadMembers)
         :sort-orders="SORT_ORDERS"
       />
       <el-table-column
-        prop="current_position"
-        label="目前就職／就讀"
+        prop="institution"
+        label="學校／公司"
         sortable
-        :sort-method="stringSort('current_position')"
+        :sort-method="stringSort('institution')"
         :sort-orders="SORT_ORDERS"
-        min-width="200"
+        min-width="180"
       />
+      <el-table-column
+        prop="position"
+        label="系所／職位"
+        sortable
+        :sort-method="stringSort('position')"
+        :sort-orders="SORT_ORDERS"
+        min-width="160"
+      >
+        <template #default="{ row }">
+          <span v-if="row.position">{{ row.position }}</span>
+          <span v-else class="muted-cell">—</span>
+        </template>
+      </el-table-column>
       <el-table-column
         prop="joined_at"
         label="入群時間"
@@ -929,6 +949,11 @@ onMounted(loadMembers)
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  /* Flex column so .card-body can absorb the leftover height in
+     mixed-line-count rows, keeping the meta + action rows aligned
+     across cards no matter how long each member's position text is. */
+  display: flex;
+  flex-direction: column;
   transition: transform var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
@@ -944,6 +969,9 @@ onMounted(loadMembers)
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Fill the leftover card height so .card-meta's margin-top:auto has
+     room to push the meta + action rows down to the bottom edge. */
+  flex: 1;
 }
 
 .card-name {
@@ -954,22 +982,41 @@ onMounted(loadMembers)
   letter-spacing: -0.005em;
 }
 
-.card-position {
+.card-institution {
   margin: 0;
   font-size: 13px;
-  color: var(--ink-500);
-  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink-700);
+  line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.card-position {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-500);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-position.is-empty {
+  color: var(--ink-300);
 }
 
 .card-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 4px;
+  /* auto pushes the meta row (and the action row that follows) to the
+     bottom of .card-body, so cards with 1-line vs 2-line positions
+     line up their footer chrome on the same baseline. */
+  margin-top: auto;
   padding-top: var(--sp-sm);
   border-top: 1px solid rgba(15, 23, 42, 0.06);
 }

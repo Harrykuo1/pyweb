@@ -49,10 +49,10 @@ function setVmValue(wrapper, key, value) {
     else if (el.placeholder?.includes('Phase 7')) map.resume_md = el
     else if (el.tagName === 'TEXTAREA') map.resume_md = el
   }
-  // Remaining inputs (number, real_name, current_position) are matched by
-  // their visual order, which is stable.
+  // Remaining inputs (number, real_name, institution, position) are
+  // matched by their visual order, which is stable.
   const ordered = inputs.filter((el) => !Object.values(map).includes(el))
-  ;[map.graduation_year, map.real_name, map.current_position] = ordered
+  ;[map.graduation_year, map.real_name, map.institution, map.position] = ordered
 
   const target = map[key]
   if (!target) throw new Error(`No DOM target for ${key}`)
@@ -73,7 +73,7 @@ describe('MemberFormDialog', () => {
         id: 1,
         graduation_year: 2022,
         real_name: 'Alice',
-        current_position: 'SWE',
+        institution: 'SWE',
         resume_md: '# x',
         joined_at: '2022-05-01',
       },
@@ -93,7 +93,7 @@ describe('MemberFormDialog', () => {
     const wrapper = await mountDialog()
 
     setVmValue(wrapper, 'real_name', 'Carol')
-    setVmValue(wrapper, 'current_position', 'PhD student')
+    setVmValue(wrapper, 'institution', 'PhD student')
     setVmValue(wrapper, 'resume_md', '# resume')
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
@@ -102,9 +102,51 @@ describe('MemberFormDialog', () => {
     expect(create).toHaveBeenCalledTimes(1)
     const payload = create.mock.calls[0][0]
     expect(payload.real_name).toBe('Carol')
-    expect(payload.current_position).toBe('PhD student')
+    expect(payload.institution).toBe('PhD student')
+    expect(payload.position).toBeNull()
     expect(payload.resume_md).toBe('# resume')
     expect(typeof payload.graduation_year).toBe('number')
+  })
+
+  it('prefills institution + position in edit mode', async () => {
+    const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        position: '資工系',
+        resume_md: null,
+        joined_at: null,
+        has_photo: false,
+        has_resume_md: false,
+        has_resume_pdf: false,
+      },
+    })
+
+    // Save without changes; payload should round-trip institution + position.
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ institution: 'NYCU', position: '資工系' }),
+    )
+  })
+
+  it('sends position in payload when filled, null when blank', async () => {
+    const create = vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Frank')
+    setVmValue(wrapper, 'institution', 'Acme')
+    setVmValue(wrapper, 'position', 'Backend Engineer')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create.mock.calls[0][0].position).toBe('Backend Engineer')
   })
 
   it('edit flow calls membersApi.update with the member id', async () => {
@@ -114,7 +156,7 @@ describe('MemberFormDialog', () => {
         id: 7,
         graduation_year: 2020,
         real_name: 'Old',
-        current_position: 'Old',
+        institution: 'Old',
         resume_md: null,
         joined_at: null,
       },
@@ -132,7 +174,7 @@ describe('MemberFormDialog', () => {
     const wrapper = await mountDialog()
 
     setVmValue(wrapper, 'real_name', 'Alice')
-    setVmValue(wrapper, 'current_position', 'SWE')
+    setVmValue(wrapper, 'institution', 'SWE')
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -148,7 +190,7 @@ describe('MemberFormDialog', () => {
     const wrapper = await mountDialog()
 
     setVmValue(wrapper, 'real_name', 'Alice')
-    setVmValue(wrapper, 'current_position', 'SWE')
+    setVmValue(wrapper, 'institution', 'SWE')
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -170,7 +212,7 @@ describe('MemberFormDialog', () => {
 
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
-    setVmValue(wrapper, 'current_position', 'SWE')
+    setVmValue(wrapper, 'institution', 'SWE')
     const file = pdfFile()
     await wrapper.vm.handlePdfChange({ raw: file, name: file.name, size: file.size })
 
@@ -191,7 +233,7 @@ describe('MemberFormDialog', () => {
         id: 7,
         graduation_year: 2020,
         real_name: 'Old',
-        current_position: 'Old',
+        institution: 'Old',
         resume_md: null,
         joined_at: null,
         has_resume_pdf: false,
@@ -216,7 +258,7 @@ describe('MemberFormDialog', () => {
         id: 7,
         graduation_year: 2020,
         real_name: 'Old',
-        current_position: 'Old',
+        institution: 'Old',
         resume_md: null,
         joined_at: null,
         has_resume_pdf: true,
@@ -245,7 +287,7 @@ describe('MemberFormDialog', () => {
         id: 7,
         graduation_year: 2020,
         real_name: 'Old',
-        current_position: 'Old',
+        institution: 'Old',
         resume_md: null,
         joined_at: null,
         has_resume_pdf: true,
@@ -267,7 +309,7 @@ describe('MemberFormDialog', () => {
 
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
-    setVmValue(wrapper, 'current_position', 'SWE')
+    setVmValue(wrapper, 'institution', 'SWE')
     const big = pdfFile(11 * 1024 * 1024)
     await wrapper.vm.handlePdfChange({ raw: big, name: big.name, size: big.size })
 
@@ -283,7 +325,7 @@ describe('MemberFormDialog', () => {
 
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
-    setVmValue(wrapper, 'current_position', 'SWE')
+    setVmValue(wrapper, 'institution', 'SWE')
     const docx = pdfFile(1024, 'application/msword', 'r.docx')
     await wrapper.vm.handlePdfChange({ raw: docx, name: docx.name, size: docx.size })
 
@@ -301,7 +343,7 @@ describe('MemberFormDialog', () => {
 
     const wrapper = await mountDialog()
     setVmValue(wrapper, 'real_name', 'Alice')
-    setVmValue(wrapper, 'current_position', 'SWE')
+    setVmValue(wrapper, 'institution', 'SWE')
     const f = pdfFile()
     await wrapper.vm.handlePdfChange({ raw: f, name: f.name, size: f.size })
 
@@ -328,7 +370,7 @@ describe('MemberFormDialog', () => {
         id: 9,
         graduation_year: 2024,
         real_name: 'X',
-        current_position: 'Y',
+        institution: 'Y',
         resume_md: null,
         joined_at: null,
         has_resume_pdf: false,

@@ -186,8 +186,8 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
       </div>
       <div class="hero-text">
         <h2 class="hero-name">{{ member.real_name }}</h2>
-        <p v-if="member.current_position" class="hero-position">
-          {{ member.current_position }}
+        <p v-if="member.institution" class="hero-position">
+          {{ member.institution }}<span v-if="member.position"> · {{ member.position }}</span>
         </p>
         <div class="hero-meta">
           <span class="meta-pill">

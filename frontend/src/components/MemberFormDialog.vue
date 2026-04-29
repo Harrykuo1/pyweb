@@ -32,7 +32,8 @@ const submitting = ref(false)
 const form = reactive({
   graduation_year: new Date().getFullYear(),
   real_name: '',
-  current_position: '',
+  institution: '',
+  position: '',
   resume_md: '',
   joined_at: null,
 })
@@ -51,7 +52,7 @@ const pdfDeleteError = ref('')
 const rules = {
   graduation_year: [{ required: true, message: '請輸入畢業年份', trigger: 'blur' }],
   real_name: [{ required: true, message: '請輸入本名', trigger: 'blur' }],
-  current_position: [{ required: true, message: '請輸入目前就職／就讀', trigger: 'blur' }],
+  institution: [{ required: true, message: '請輸入學校／公司', trigger: 'blur' }],
 }
 
 const hasExistingPdf = computed(
@@ -80,7 +81,8 @@ function resetForm(member) {
   Object.assign(form, {
     graduation_year: member?.graduation_year ?? new Date().getFullYear(),
     real_name: member?.real_name ?? '',
-    current_position: member?.current_position ?? '',
+    institution: member?.institution ?? '',
+    position: member?.position ?? '',
     resume_md: member?.resume_md ?? '',
     joined_at: member?.joined_at ?? null,
   })
@@ -152,10 +154,12 @@ async function handleDeletePdf(password) {
 }
 
 function buildPayload() {
+  const trimmedPosition = form.position.trim()
   const payload = {
     graduation_year: form.graduation_year,
     real_name: form.real_name.trim(),
-    current_position: form.current_position.trim(),
+    institution: form.institution.trim(),
+    position: trimmedPosition === '' ? null : trimmedPosition,
     resume_md: form.resume_md.trim() || null,
   }
   if (form.joined_at) {
@@ -252,8 +256,21 @@ defineExpose({ handlePdfChange, clearPdfChange })
       <el-form-item label="本名" prop="real_name">
         <el-input v-model="form.real_name" maxlength="64" show-word-limit />
       </el-form-item>
-      <el-form-item label="目前就職／就讀" prop="current_position">
-        <el-input v-model="form.current_position" maxlength="255" show-word-limit />
+      <el-form-item label="學校／公司" prop="institution">
+        <el-input
+          v-model="form.institution"
+          maxlength="128"
+          show-word-limit
+          data-test="form-institution"
+        />
+      </el-form-item>
+      <el-form-item label="系所／職位（選填）" prop="position">
+        <el-input
+          v-model="form.position"
+          maxlength="128"
+          show-word-limit
+          data-test="form-position"
+        />
       </el-form-item>
       <el-form-item label="入群時間">
         <el-date-picker
