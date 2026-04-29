@@ -144,7 +144,13 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  /* Pin to viewport so the page never scrolls. dvh tracks Safari's
+     URL bar collapse (regular vh would oversize on first paint).
+     border-box so the 24px padding sits inside the 100dvh, otherwise
+     it'd add a scrollbar's worth of extra height on macOS Safari. */
+  height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 24px;
   background-size: cover;
   background-position: center;
@@ -166,8 +172,12 @@ async function handleSubmit() {
 
 .login-shell {
   position: relative;
-  display: grid;
-  grid-template-columns: 5fr 6fr;
+  /* flex (not grid) so .form-panel is a flex item, not a grid item.
+     The Safari layout-recalc bug requires the panel to be both a grid
+     item AND a flex container (with vertical padding) for its intrinsic
+     height to be miscalculated on every focus/blur/hover event. Flex
+     parent + flex container child doesn't trigger the bug. */
+  display: flex;
   width: 100%;
   max-width: 960px;
   min-height: 540px;
@@ -182,13 +192,14 @@ async function handleSubmit() {
 .brand-panel {
   position: relative;
   overflow: hidden;
+  /* flex 5 / 6 mirrors the original 5fr / 6fr grid columns. */
+  flex: 5;
   padding: 48px 40px;
   background: linear-gradient(155deg, #312e81 0%, #4f46e5 40%, #7c3aed 100%);
   color: #ffffff;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 100%;
 }
 
 .brand-decor {
@@ -282,6 +293,7 @@ async function handleSubmit() {
 
 /* ---------- Form panel (right) ---------- */
 .form-panel {
+  flex: 6;
   background: #ffffff;
   display: flex;
   align-items: center;
