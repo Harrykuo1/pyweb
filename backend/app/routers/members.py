@@ -68,7 +68,8 @@ def create_member(
     member = Member(
         graduation_year=payload.graduation_year,
         real_name=payload.real_name,
-        current_position=payload.current_position,
+        institution=payload.institution,
+        position=payload.position,
         resume_md=payload.resume_md,
         joined_at=payload.joined_at or datetime.now(timezone.utc),
     )

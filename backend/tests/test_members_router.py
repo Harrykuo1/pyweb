@@ -43,7 +43,7 @@ def _seed_members(db_session, count=3):
             Member(
                 graduation_year=2020 + i,
                 real_name=f"member-{i}",
-                current_position=f"role-{i}",
+                institution=f"role-{i}",
                 joined_at=base.replace(month=1 + i),
             )
         )
@@ -93,7 +93,7 @@ def test_list_excludes_photo_field(client_factory, db_session):
         Member(
             graduation_year=2024,
             real_name="x",
-            current_position="y",
+            institution="y",
             photo=b"\x00\x01",
             joined_at=datetime.now(timezone.utc),
         )
@@ -132,7 +132,7 @@ def test_create_member_admin_succeeds(client_factory):
     payload = {
         "graduation_year": 2024,
         "real_name": "Alice",
-        "current_position": "SWE",
+        "institution": "SWE",
         "resume_md": "# resume",
     }
     r = client.post("/api/members", json=payload)
@@ -148,7 +148,7 @@ def test_create_member_viewer_403(client_factory):
     login_as("viewer")
     r = client.post(
         "/api/members",
-        json={"graduation_year": 2024, "real_name": "x", "current_position": "y"},
+        json={"graduation_year": 2024, "real_name": "x", "institution": "y"},
     )
     assert r.status_code == 403
 
@@ -157,7 +157,7 @@ def test_create_member_unauth_401(client_factory):
     client, _ = client_factory
     r = client.post(
         "/api/members",
-        json={"graduation_year": 2024, "real_name": "x", "current_position": "y"},
+        json={"graduation_year": 2024, "real_name": "x", "institution": "y"},
     )
     assert r.status_code == 401
 
@@ -167,7 +167,7 @@ def test_create_member_validates_payload(client_factory):
     login_as("admin")
     r = client.post(
         "/api/members",
-        json={"graduation_year": 1899, "real_name": "x", "current_position": "y"},
+        json={"graduation_year": 1899, "real_name": "x", "institution": "y"},
     )
     assert r.status_code == 422
 
@@ -180,12 +180,45 @@ def test_create_member_accepts_explicit_joined_at(client_factory):
         json={
             "graduation_year": 2020,
             "real_name": "Bob",
-            "current_position": "MS",
+            "institution": "MS",
             "joined_at": "2020-09-01",
         },
     )
     assert r.status_code == 201
     assert r.json()["joined_at"].startswith("2020-09-01")
+
+
+def test_create_member_with_position_round_trips(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Carol",
+            "institution": "NYCU",
+            "position": "資工系",
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["institution"] == "NYCU"
+    assert body["position"] == "資工系"
+
+
+def test_create_member_without_position_returns_null(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Dave",
+            "institution": "Acme",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["position"] is None
 
 
 # ---------- update ----------
@@ -197,10 +230,10 @@ def test_update_member_admin_partial(client_factory, db_session):
 
     r = client.put(
         "/api/members/1",
-        json={"current_position": "Senior Engineer"},
+        json={"institution": "Senior Engineer"},
     )
     assert r.status_code == 200
-    assert r.json()["current_position"] == "Senior Engineer"
+    assert r.json()["institution"] == "Senior Engineer"
     assert r.json()["real_name"] == "member-0"  # unchanged
 
 

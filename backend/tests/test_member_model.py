@@ -8,7 +8,7 @@ def test_create_member_with_required_fields(db_session):
     m = Member(
         graduation_year=2024,
         real_name="Alice Wang",
-        current_position="SWE @ Acme",
+        institution="SWE @ Acme",
     )
     db_session.add(m)
     db_session.commit()
@@ -26,7 +26,7 @@ def test_create_member_with_photo_blob_and_resume(db_session):
     m = Member(
         graduation_year=2023,
         real_name="Bob",
-        current_position="MS student",
+        institution="MS student",
         photo=blob,
         photo_content_type="image/png",
         resume_md="# Bob\n\nResume in markdown.",
@@ -43,7 +43,7 @@ def test_create_member_with_photo_blob_and_resume(db_session):
 
 
 def test_member_has_flags_default_false(db_session):
-    m = Member(graduation_year=2024, real_name="A", current_position="B")
+    m = Member(graduation_year=2024, real_name="A", institution="B")
     db_session.add(m)
     db_session.commit()
 
@@ -57,7 +57,7 @@ def test_member_has_flags_when_populated(db_session):
     m = Member(
         graduation_year=2024,
         real_name="A",
-        current_position="B",
+        institution="B",
         photo=b"\x89PNG",
         resume_md="# heading",
         resume_pdf=b"%PDF",
@@ -75,7 +75,7 @@ def test_member_has_resume_md_false_for_whitespace_only(db_session):
     m = Member(
         graduation_year=2024,
         real_name="A",
-        current_position="B",
+        institution="B",
         resume_md="   \n\t",
     )
     db_session.add(m)
@@ -85,7 +85,36 @@ def test_member_has_resume_md_false_for_whitespace_only(db_session):
 
 
 def test_member_required_field_real_name_missing_raises(db_session):
-    m = Member(graduation_year=2022, current_position="Engineer")
+    m = Member(graduation_year=2022, institution="Engineer")
+    db_session.add(m)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_member_position_optional_defaults_to_none(db_session):
+    m = Member(graduation_year=2024, real_name="A", institution="NYCU")
+    db_session.add(m)
+    db_session.commit()
+
+    assert db_session.query(Member).one().position is None
+
+
+def test_member_position_persists_when_set(db_session):
+    m = Member(
+        graduation_year=2024,
+        real_name="A",
+        institution="NYCU",
+        position="CS dept, MS",
+    )
+    db_session.add(m)
+    db_session.commit()
+
+    assert db_session.query(Member).one().position == "CS dept, MS"
+
+
+def test_member_required_field_institution_missing_raises(db_session):
+    m = Member(graduation_year=2024, real_name="A")
     db_session.add(m)
     with pytest.raises(IntegrityError):
         db_session.commit()

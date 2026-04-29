@@ -27,7 +27,7 @@ def client_factory(db_session):
             id=1,
             graduation_year=2024,
             real_name="Alice",
-            current_position="SWE",
+            institution="SWE",
             joined_at=datetime.now(timezone.utc),
         )
     )
