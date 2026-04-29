@@ -434,6 +434,9 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.5px;
+  /* Force white over the gradient — EP's global h2 rule otherwise wins
+     against the inherited #ffffff from .resume-hero. */
+  color: #ffffff;
 }
 
 .hero-position {
