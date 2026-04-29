@@ -425,31 +425,41 @@ async function handleSubmit() {
         </el-form-item>
       </div>
 
-      <el-form-item label="公司" prop="company">
-        <el-autocomplete
-          v-model="form.company"
-          :fetch-suggestions="fetchCompanySuggestions"
-          :trigger-on-focus="true"
-          placeholder="請輸入公司名稱"
-          maxlength="128"
-          show-word-limit
-          data-test="form-company"
-          class="form-company"
-        />
-      </el-form-item>
+      <div class="form-row-inline form-company-row">
+        <el-form-item
+          label="公司"
+          prop="company"
+          class="form-company-item"
+        >
+          <el-autocomplete
+            v-model="form.company"
+            :fetch-suggestions="fetchCompanySuggestions"
+            :trigger-on-focus="true"
+            placeholder="請輸入公司名稱"
+            maxlength="128"
+            show-word-limit
+            data-test="form-company"
+            class="form-company"
+          />
+        </el-form-item>
 
-      <el-form-item label="職類（選填）" prop="category">
-        <el-autocomplete
-          v-model="form.category"
-          :fetch-suggestions="fetchCategorySuggestions"
-          :trigger-on-focus="true"
-          placeholder="例如：Backend、DevOps、R&D"
-          maxlength="64"
-          show-word-limit
-          data-test="form-category"
-          class="form-category"
-        />
-      </el-form-item>
+        <el-form-item
+          label="職類（選填）"
+          prop="category"
+          class="form-category-item"
+        >
+          <el-autocomplete
+            v-model="form.category"
+            :fetch-suggestions="fetchCategorySuggestions"
+            :trigger-on-focus="true"
+            placeholder="例如：Backend、DevOps、R&D"
+            maxlength="64"
+            show-word-limit
+            data-test="form-category"
+            class="form-category"
+          />
+        </el-form-item>
+      </div>
 
       <el-form-item prop="experience_md" :show-message="false">
         <el-tabs v-model="activeTab" class="md-tabs">
@@ -559,6 +569,16 @@ async function handleSubmit() {
 }
 
 .form-real-name-item {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Equal-width 1:1 split for the company / category pair on desktop.
+   form-row-inline's flex-wrap takes care of stacking once a side
+   shrinks below the min-width, and the 640px breakpoint forces the
+   column layout for phones. */
+.form-company-item,
+.form-category-item {
   flex: 1;
   min-width: 200px;
 }
