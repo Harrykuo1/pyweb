@@ -38,6 +38,7 @@ _KIND_PRIORITY = case(
 )
 
 COMPANIES_AUTOCOMPLETE_LIMIT = 20
+CATEGORIES_AUTOCOMPLETE_LIMIT = 20
 
 
 def _get_or_404(db: Session, job_id: int) -> Job:
@@ -66,6 +67,7 @@ def list_jobs(
     # Repeatable: ?company=A&company=B → OR-matched against Job.company.
     # Capped server-side so a malicious caller can't blow up the IN clause.
     company: list[str] = Query(default_factory=list, max_length=10),
+    category: list[str] = Query(default_factory=list, max_length=10),
     kind: JobKindLiteral | None = None,
     q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
@@ -77,6 +79,8 @@ def list_jobs(
         query = query.filter(Job.job_year == year)
     if company:
         query = query.filter(Job.company.in_(company))
+    if category:
+        query = query.filter(Job.category.in_(category))
     if kind is not None:
         query = query.filter(Job.kind == kind)
     if q:
@@ -132,6 +136,24 @@ def list_companies(
     rows = (
         query.order_by(Job.company)
         .limit(COMPANIES_AUTOCOMPLETE_LIMIT)
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+@router.get("/categories", response_model=list[str])
+def list_categories(
+    prefix: str | None = Query(default=None, max_length=64),
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+) -> list[str]:
+    # Skip NULL rows so they don't surface as a phantom autocomplete option.
+    query = db.query(Job.category).distinct().filter(Job.category.is_not(None))
+    if prefix:
+        query = query.filter(Job.category.ilike(f"{prefix}%"))
+    rows = (
+        query.order_by(Job.category)
+        .limit(CATEGORIES_AUTOCOMPLETE_LIMIT)
         .all()
     )
     return [row[0] for row in rows]

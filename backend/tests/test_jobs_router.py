@@ -422,6 +422,122 @@ def test_companies_autocomplete_distinct(client_factory, db_session):
     assert r.json() == ["Acme", "Globex"]
 
 
+def test_list_filter_by_category_single(client_factory, db_session):
+    client, login_as = client_factory
+    db_session.add_all([
+        Job(job_year=2025, job_month=1, company="A", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=2, company="B", category="DevOps",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=3, company="C", category=None,
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/jobs?category=Backend")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["A"]
+
+
+def test_list_filter_by_category_multi_or(client_factory, db_session):
+    client, login_as = client_factory
+    db_session.add_all([
+        Job(job_year=2025, job_month=1, company="A", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=2, company="B", category="DevOps",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=3, company="C", category="R&D",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/jobs?category=Backend&category=DevOps")
+    companies = sorted(x["company"] for x in r.json()["items"])
+    assert companies == ["A", "B"]
+
+
+def test_list_filter_by_category_excludes_null(client_factory, db_session):
+    client, login_as = client_factory
+    db_session.add_all([
+        Job(job_year=2025, job_month=1, company="A", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=2, company="B", category=None,
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/jobs?category=Backend")
+    assert sorted(x["company"] for x in r.json()["items"]) == ["A"]
+
+
+def test_list_filter_by_category_combined_with_company(client_factory, db_session):
+    # Filters compose with AND across orthogonal facets.
+    client, login_as = client_factory
+    db_session.add_all([
+        Job(job_year=2025, job_month=1, company="Acme", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=2, company="Acme", category="DevOps",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=3, company="Globex", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/jobs?company=Acme&category=Backend")
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["company"] == "Acme"
+    assert items[0]["category"] == "Backend"
+
+
+def test_categories_autocomplete_distinct_skips_nulls(client_factory, db_session):
+    client, login_as = client_factory
+    db_session.add_all([
+        Job(job_year=2025, job_month=1, company="A", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=2, company="B", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),  # dup
+        Job(job_year=2025, job_month=3, company="C", category="DevOps",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=4, company="D", category=None,
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/jobs/categories")
+    assert r.status_code == 200
+    assert r.json() == ["Backend", "DevOps"]
+
+
+def test_categories_autocomplete_prefix(client_factory, db_session):
+    client, login_as = client_factory
+    db_session.add_all([
+        Job(job_year=2025, job_month=1, company="A", category="Backend",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=2, company="B", category="DevOps",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+        Job(job_year=2025, job_month=3, company="C", category="Data",
+            kind=JobKind.INTERNSHIP, experience_md="x"),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/jobs/categories?prefix=de")
+    # ILIKE so prefix is case-insensitive.
+    assert r.json() == ["DevOps"]
+
+
+def test_categories_autocomplete_requires_auth(client_factory):
+    client, _ = client_factory
+    r = client.get("/api/jobs/categories")
+    assert r.status_code == 401
+
+
 def test_companies_autocomplete_prefix(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [
