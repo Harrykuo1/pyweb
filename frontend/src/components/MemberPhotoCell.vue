@@ -14,9 +14,6 @@ const props = defineProps({
     default: 'thumb',
     validator: (v) => ['thumb', 'card'].includes(v),
   },
-  // Cache-busts the photo <img> src after a parent-driven upload /
-  // delete so the browser refetches without us having to remount.
-  cacheBuster: { type: [String, Number], default: 0 },
   // Set by the parent while this member's photo is mid-upload — drives
   // the dim veil + spinner overlay on top of the photo.
   uploading: { type: Boolean, default: false },
@@ -28,7 +25,7 @@ const auth = useAuthStore()
 
 function photoSrc() {
   if (!props.member.has_photo) return null
-  return membersApi.photoUrl(props.member.id, props.cacheBuster)
+  return membersApi.photoUrl(props.member.id, props.member.photo_updated_at ?? '')
 }
 
 function handlePicked(uploadFile) {

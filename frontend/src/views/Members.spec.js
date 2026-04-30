@@ -497,7 +497,7 @@ describe('Members.vue', () => {
     expect(wrapper.vm.photoCropFile?.name).toBe(file.name)
   })
 
-  it('onPhotoCropped uploads the cropped file and bumps that member\'s cache-buster', async () => {
+  it('onPhotoCropped uploads the cropped file and reloads the list', async () => {
     const wrapper = await mountAsAdmin()
     const upload = vi.spyOn(membersApi, 'uploadPhoto').mockResolvedValue()
     const list = vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
@@ -511,10 +511,10 @@ describe('Members.vue', () => {
     await flushPromises()
 
     expect(upload).toHaveBeenCalledWith(1, cropped)
+    // Reloading the list pulls in the fresh photo_updated_at, which the
+    // photo cell uses as its cache-busting URL stamp — no parent-held
+    // cache-buster state needed.
     expect(list).toHaveBeenCalled()
-    // Cache-buster registered for that member id so the photo refetches.
-    expect(typeof wrapper.vm.photoCacheBusters[1]).toBe('number')
-    // Crop state cleared.
     expect(wrapper.vm.photoCropTarget).toBeNull()
     expect(wrapper.vm.photoCropFile).toBeNull()
     expect(wrapper.vm.uploadingPhotoMemberId).toBeNull()

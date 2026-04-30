@@ -168,14 +168,24 @@ describe('MemberPhotoCell', () => {
     expect(wrapper.find('[data-test="upload-photo"]').exists()).toBe(true)
   })
 
-  it('cache-buster prop is appended to the photo URL', () => {
+  it('appends member.photo_updated_at as cache-busting version stamp', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'v', role: 'viewer' }
-    const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithPhoto, cacheBuster: 'abc123' },
-    })
+    const stamped = { ...memberWithPhoto, photo_updated_at: '2026-04-30T12:00:00Z' }
+    const wrapper = mount(MemberPhotoCell, { props: { member: stamped } })
 
     const img = wrapper.findComponent({ name: 'ElImage' })
-    expect(img.props('src')).toContain('?v=abc123')
+    expect(img.props('src')).toContain('?v=')
+    expect(img.props('src')).toContain(encodeURIComponent('2026-04-30T12:00:00Z'))
+  })
+
+  it('omits version stamp when photo_updated_at is null', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'v', role: 'viewer' }
+    const stamped = { ...memberWithPhoto, photo_updated_at: null }
+    const wrapper = mount(MemberPhotoCell, { props: { member: stamped } })
+
+    const img = wrapper.findComponent({ name: 'ElImage' })
+    expect(img.props('src')).toBe('/api/members/1/photo')
   })
 })

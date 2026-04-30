@@ -50,7 +50,7 @@ const availableFormats = computed(() => {
 
 const photoSrc = computed(() => {
   if (!props.member?.has_photo) return ''
-  return membersApi.photoUrl(props.member.id, cacheBuster.value)
+  return membersApi.photoUrl(props.member.id, props.member.photo_updated_at ?? '')
 })
 
 function formatJoinDate(iso) {

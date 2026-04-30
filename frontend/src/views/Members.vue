@@ -162,14 +162,6 @@ const photoCropOpen = ref(false)
 const photoCropFile = ref(null)
 const photoCropTarget = ref(null)
 const uploadingPhotoMemberId = ref(null)
-// Per-member cache-buster — bumped after a successful upload so the
-// browser refetches that photo without us having to refetch the
-// whole list.
-const photoCacheBusters = ref({})
-
-function photoCacheBusterFor(memberId) {
-  return photoCacheBusters.value[memberId] ?? 0
-}
 
 const photoDeleteDialogOpen = ref(false)
 const photoDeleteTarget = ref(null)
@@ -194,10 +186,6 @@ async function onPhotoCropped(croppedFile) {
   })
   try {
     await membersApi.uploadPhoto(target.id, croppedFile)
-    photoCacheBusters.value = {
-      ...photoCacheBusters.value,
-      [target.id]: Date.now(),
-    }
     toast.close()
     ElMessage.success('已上傳照片')
     loadMembers()
@@ -226,11 +214,6 @@ async function onPhotoDeleteConfirm(password) {
   photoDeleteError.value = ''
   try {
     await membersApi.deletePhoto(target.id, password)
-    // Bump the cache-buster too so any inline preview re-resolves.
-    photoCacheBusters.value = {
-      ...photoCacheBusters.value,
-      [target.id]: Date.now(),
-    }
     ElMessage.success('已移除照片')
     photoDeleteDialogOpen.value = false
     photoDeleteTarget.value = null
@@ -443,7 +426,6 @@ onMounted(loadMembers)
           <MemberPhotoCell
             :member="m"
             variant="card"
-            :cache-buster="photoCacheBusterFor(m.id)"
             :uploading="uploadingPhotoMemberId === m.id"
             @request-upload="onPhotoUploadRequest"
             @request-delete="onPhotoDeleteRequest"
@@ -589,7 +571,6 @@ onMounted(loadMembers)
         <template #default="{ row }">
           <MemberPhotoCell
             :member="row"
-            :cache-buster="photoCacheBusterFor(row.id)"
             :uploading="uploadingPhotoMemberId === row.id"
             @request-upload="onPhotoUploadRequest"
             @request-delete="onPhotoDeleteRequest"
