@@ -32,5 +32,7 @@ class MemberResponse(BaseModel):
     has_photo: bool
     has_resume_md: bool
     has_resume_pdf: bool
+    photo_updated_at: datetime | None
+    resume_pdf_updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)

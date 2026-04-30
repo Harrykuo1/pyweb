@@ -58,10 +58,33 @@ def test_upload_pdf_admin(client_factory, db_session):
         files={"file": ("a.pdf", TINY_PDF, "application/pdf")},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["has_resume_pdf"] is True
+    body = r.json()
+    assert body["has_resume_pdf"] is True
+    assert body["resume_pdf_updated_at"] is not None
 
     member = db_session.query(Member).filter_by(id=1).one()
     assert member.resume_pdf == TINY_PDF
+    assert member.resume_pdf_updated_at is not None
+
+
+def test_upload_pdf_bumps_timestamp_on_each_upload(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+
+    r1 = client.post(
+        "/api/members/1/resume.pdf",
+        files={"file": ("a.pdf", TINY_PDF, "application/pdf")},
+    )
+    first = r1.json()["resume_pdf_updated_at"]
+    assert first is not None
+
+    r2 = client.post(
+        "/api/members/1/resume.pdf",
+        files={"file": ("a.pdf", TINY_PDF, "application/pdf")},
+    )
+    second = r2.json()["resume_pdf_updated_at"]
+    assert second is not None
+    assert second >= first
 
 
 def test_upload_pdf_viewer_403(client_factory):
@@ -149,6 +172,7 @@ def test_delete_pdf_admin(client_factory, db_session):
     client, login_as = client_factory
     member = db_session.query(Member).filter_by(id=1).one()
     member.resume_pdf = TINY_PDF
+    member.resume_pdf_updated_at = datetime.now(timezone.utc)
     db_session.commit()
     login_as("admin")
 
@@ -159,6 +183,7 @@ def test_delete_pdf_admin(client_factory, db_session):
 
     db_session.refresh(member)
     assert member.resume_pdf is None
+    assert member.resume_pdf_updated_at is None
 
 
 def test_delete_pdf_wrong_password_401(client_factory, db_session):

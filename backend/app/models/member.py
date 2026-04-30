@@ -16,8 +16,17 @@ class Member(Base):
     position: Mapped[str | None] = mapped_column(String(128), nullable=True)
     photo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     photo_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Bumped on every photo upload, cleared on delete. Used by the frontend
+    # as a cache-busting version stamp so browsers refetch only when the
+    # photo actually changes.
+    photo_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     resume_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     resume_pdf: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    resume_pdf_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

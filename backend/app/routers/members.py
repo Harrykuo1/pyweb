@@ -147,6 +147,7 @@ async def upload_member_photo(
     member = _get_member_or_404(db, member_id)
     member.photo = data
     member.photo_content_type = file.content_type
+    member.photo_updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(member)
     return member
@@ -163,6 +164,7 @@ def delete_member_photo(
     member = _get_member_or_404(db, member_id)
     member.photo = None
     member.photo_content_type = None
+    member.photo_updated_at = None
     db.commit()
 
 
@@ -208,6 +210,7 @@ async def upload_member_resume_pdf(
 
     member = _get_member_or_404(db, member_id)
     member.resume_pdf = data
+    member.resume_pdf_updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(member)
     return member
@@ -223,4 +226,5 @@ def delete_member_resume_pdf(
     _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
     member.resume_pdf = None
+    member.resume_pdf_updated_at = None
     db.commit()

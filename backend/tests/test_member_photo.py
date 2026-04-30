@@ -62,11 +62,32 @@ def test_upload_photo_admin(client_factory, db_session):
         files={"file": ("a.png", TINY_PNG, "image/png")},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["has_photo"] is True
+    body = r.json()
+    assert body["has_photo"] is True
+    assert body["photo_updated_at"] is not None
 
     member = db_session.query(Member).filter_by(id=1).one()
     assert member.photo == TINY_PNG
     assert member.photo_content_type == "image/png"
+    assert member.photo_updated_at is not None
+
+
+def test_upload_photo_bumps_timestamp_on_each_upload(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+
+    r1 = client.post(
+        "/api/members/1/photo", files={"file": ("a.png", TINY_PNG, "image/png")}
+    )
+    first = r1.json()["photo_updated_at"]
+    assert first is not None
+
+    r2 = client.post(
+        "/api/members/1/photo", files={"file": ("a.png", TINY_PNG, "image/png")}
+    )
+    second = r2.json()["photo_updated_at"]
+    assert second is not None
+    assert second >= first
 
 
 def test_upload_photo_viewer_403(client_factory):
@@ -155,6 +176,7 @@ def test_delete_photo_admin(client_factory, db_session):
     member = db_session.query(Member).filter_by(id=1).one()
     member.photo = TINY_PNG
     member.photo_content_type = "image/png"
+    member.photo_updated_at = datetime.now(timezone.utc)
     db_session.commit()
     login_as("admin")
 
@@ -166,6 +188,7 @@ def test_delete_photo_admin(client_factory, db_session):
     db_session.refresh(member)
     assert member.photo is None
     assert member.photo_content_type is None
+    assert member.photo_updated_at is None
 
 
 def test_delete_photo_wrong_password_401(client_factory, db_session):
