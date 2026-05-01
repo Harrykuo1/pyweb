@@ -26,6 +26,7 @@ import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
 import { jobsApi } from '../api/jobs'
+import TimelineEditor from './TimelineEditor.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -68,7 +69,6 @@ function isJobYearMonthDisabled(date) {
 
 const formRef = ref(null)
 const experienceEditorRef = ref(null)
-const timelineEditorRef = ref(null)
 const submitting = ref(false)
 const activeTab = ref('experience')
 
@@ -159,20 +159,19 @@ function shouldAutoSplitPreview() {
 }
 
 function expandEditor(which) {
-  const ed =
-    which === 'experience' ? experienceEditorRef.value : timelineEditorRef.value
-  ed?.togglePageFullscreen?.()
+  // Only the experience editor remains as a markdown surface; timeline
+  // is now a structured-row editor that doesn't need fullscreening.
+  if (which !== 'experience') return
+  experienceEditorRef.value?.togglePageFullscreen?.()
 }
 
 // Tracks per-editor pageFullscreen state so we can hide the dedicated
 // "expand" button while the editor is already covering the dialog —
 // the custom button would be unreachable behind the overlay anyway.
 const isExperienceFullscreen = ref(false)
-const isTimelineFullscreen = ref(false)
 
 function _fullscreenStateRef(ed) {
   if (ed === experienceEditorRef.value) return isExperienceFullscreen
-  if (ed === timelineEditorRef.value) return isTimelineFullscreen
   return null
 }
 
@@ -195,7 +194,6 @@ function wirePreviewSync(ed) {
 async function wireAllPreviewSync() {
   await nextTick()
   wirePreviewSync(experienceEditorRef.value)
-  wirePreviewSync(timelineEditorRef.value)
 }
 
 const form = reactive({
@@ -206,7 +204,7 @@ const form = reactive({
   category: '',
   real_name: '',
   experience_md: '',
-  timeline_md: '',
+  timeline_events: [],
 })
 
 // Two-way bridge between the el-date-picker (Date) and the form's
@@ -228,6 +226,14 @@ const jobYearMonth = computed({
   },
 })
 
+// Anchor for the timeline date pickers when a row has no date yet
+// and there's no previous row to fall back on. Using the job's own
+// year+month means editing a year-old job no longer makes admin
+// click `<` 12+ times on every row to reach the right month.
+const timelineDefaultDate = computed(() =>
+  _ymToDate(form.job_year ?? CURRENT_YEAR, form.job_month ?? CURRENT_MONTH),
+)
+
 const rules = {
   kind: [{ required: true, message: '請選擇類型', trigger: 'change' }],
   job_year: [{ required: true, message: '請選擇求職年月', trigger: 'blur' }],
@@ -246,11 +252,17 @@ function resetForm(job) {
     category: job?.category ?? '',
     real_name: job?.real_name ?? '',
     experience_md: job?.experience_md ?? '',
-    timeline_md: job?.timeline_md ?? '',
+    // Structured editor bound to a copy so the user's edits don't
+    // mutate the parent's job object until they actually save.
+    // Legacy jobs (which only have timeline_md) start with an empty
+    // list — admin re-enters the timeline through the structured
+    // editor on next save, replacing the old markdown.
+    timeline_events: Array.isArray(job?.timeline_events)
+      ? job.timeline_events.map((e) => ({ ...e }))
+      : [],
   })
   activeTab.value = 'experience'
   isExperienceFullscreen.value = false
-  isTimelineFullscreen.value = false
   formRef.value?.clearValidate()
 }
 
@@ -289,8 +301,18 @@ async function fetchCategorySuggestions(queryString, cb) {
 
 function buildPayload() {
   const trimmedRealName = form.real_name.trim()
-  const trimmedTimeline = form.timeline_md.trim()
   const trimmedCategory = form.category.trim()
+  // Drop incomplete rows (missing date or blank event text) so the
+  // backend's per-row validation never sees partial input. An entirely
+  // empty list goes through as []; the backend distinguishes [] (admin
+  // chose no timeline) from null (legacy markdown-only job) and we
+  // always send the structured form here.
+  const cleanedEvents = form.timeline_events
+    .map((e) => ({
+      date: typeof e.date === 'string' ? e.date : null,
+      event: typeof e.event === 'string' ? e.event.trim() : '',
+    }))
+    .filter((e) => e.date !== null && e.event.length > 0)
   return {
     kind: form.kind,
     job_year: form.job_year,
@@ -299,7 +321,11 @@ function buildPayload() {
     category: trimmedCategory === '' ? null : trimmedCategory,
     experience_md: form.experience_md.trim(),
     real_name: trimmedRealName === '' ? null : trimmedRealName,
-    timeline_md: trimmedTimeline === '' ? null : trimmedTimeline,
+    timeline_events: cleanedEvents,
+    // Always null out the legacy markdown column when saving via the
+    // structured editor — otherwise an old job's markdown would shadow
+    // the freshly-entered structured timeline in the viewer fallback.
+    timeline_md: null,
   }
 }
 
@@ -491,24 +517,10 @@ async function handleSubmit() {
             </p>
           </el-tab-pane>
           <el-tab-pane label="時程表（選填）" name="timeline">
-            <button
-              v-if="isMobileWidth && !isTimelineFullscreen"
-              type="button"
-              class="md-expand-btn"
-              data-test="expand-timeline-button"
-              @click="expandEditor('timeline')"
-            >
-              <el-icon :size="14"><FullScreen /></el-icon>
-              展開編輯
-            </button>
-            <MdEditor
-              ref="timelineEditorRef"
-              v-model="form.timeline_md"
-              theme="light"
-              language="zh-TW"
-              :preview="false"
-              :toolbars="editorToolbars"
-              data-test="form-timeline-md"
+            <TimelineEditor
+              v-model="form.timeline_events"
+              :default-date="timelineDefaultDate"
+              data-test="form-timeline-editor"
             />
           </el-tab-pane>
         </el-tabs>

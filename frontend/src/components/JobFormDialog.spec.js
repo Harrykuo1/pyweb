@@ -150,7 +150,11 @@ describe('JobFormDialog — submit', () => {
       company: 'Acme',
       experience_md: '## interview',
       real_name: null,
+      // The structured editor is the only timeline surface now; saving
+      // always nulls out the legacy markdown column so it can't shadow
+      // the structured timeline in the viewer fallback.
       timeline_md: null,
+      timeline_events: [],
     })
     expect(typeof payload.job_year).toBe('number')
     expect(typeof payload.job_month).toBe('number')
@@ -223,7 +227,7 @@ describe('JobFormDialog — submit', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('treats blank real_name and timeline as null in the payload', async () => {
+  it('treats blank real_name as null and empty timeline as [] in the payload', async () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
 
@@ -245,6 +249,78 @@ describe('JobFormDialog — submit', () => {
     const payload = create.mock.calls[0][0]
     expect(payload.real_name).toBeNull()
     expect(payload.timeline_md).toBeNull()
+    expect(payload.timeline_events).toEqual([])
+  })
+
+  it('round-trips timeline_events through edit mode unchanged when not modified', async () => {
+    // Loading an existing job with structured timeline events into the
+    // editor and saving without further edits must produce a payload
+    // identical to the input — i.e. the form preserves both the rows
+    // and their input order.
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
+    const wrapper = await mountDialog({
+      job: {
+        id: 7,
+        kind: 'internship',
+        job_year: 2025,
+        job_month: 4,
+        company: 'Acme',
+        real_name: null,
+        experience_md: '## x',
+        timeline_md: null,
+        timeline_events: [
+          { date: '2025-02-23', event: '投遞' },
+          { date: '2025-04-17', event: '拿到 offer' },
+        ],
+      },
+    })
+
+    expect(wrapper.findAll('[data-test="timeline-row"]')).toHaveLength(2)
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = update.mock.calls[0][1]
+    expect(payload.timeline_events).toEqual([
+      { date: '2025-02-23', event: '投遞' },
+      { date: '2025-04-17', event: '拿到 offer' },
+    ])
+    // Legacy markdown column always nulled out by the structured editor.
+    expect(payload.timeline_md).toBeNull()
+  })
+
+  it('drops timeline rows that are missing date or blank event before saving', async () => {
+    // Inject partial rows through the job prop (the editor accepts
+    // {date: null, event: ''} as the seed for a freshly-added row,
+    // so the same shape drives this test) and verify buildPayload's
+    // filter strips them before sending.
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
+    const wrapper = await mountDialog({
+      job: {
+        id: 7,
+        kind: 'internship',
+        job_year: 2025,
+        job_month: 4,
+        company: 'Acme',
+        real_name: null,
+        experience_md: '## x',
+        timeline_md: null,
+        timeline_events: [
+          { date: '2025-02-23', event: '投遞' },
+          { date: null, event: '半填的' }, // missing date
+          { date: '2025-03-05', event: '' }, // missing event text
+          { date: '2025-04-17', event: '拿到 offer' },
+        ],
+      },
+    })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update.mock.calls[0][1].timeline_events).toEqual([
+      { date: '2025-02-23', event: '投遞' },
+      { date: '2025-04-17', event: '拿到 offer' },
+    ])
   })
 
   it('sends category in the payload when filled, null when empty', async () => {
