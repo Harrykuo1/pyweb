@@ -360,3 +360,83 @@ def test_update_password_rejects_empty_new_password(client):
         json={"current_password": "admin-pw", "new_password": ""},
     )
     assert r.status_code == 422
+
+
+# ---------- session invalidation on password change ----------
+
+
+def test_changing_viewer_password_evicts_other_viewer_session(client):
+    # Viewer logs in on "device A" (this client). Admin logs in on a
+    # second client and rotates the viewer's password. The viewer's
+    # session must be rejected on the next request.
+    client.post("/api/auth/login", json={"password": "viewer-pw"})
+    assert client.get("/api/auth/me").status_code == 200
+
+    with TestClient(app) as admin_client:
+        admin_client.post("/api/auth/login", json={"password": "admin-pw"})
+        r = admin_client.patch(
+            "/api/auth/users/viewer/password",
+            json={"current_password": "admin-pw", "new_password": "fresh-pw"},
+        )
+        assert r.status_code == 204
+
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_changing_admin_password_evicts_other_admin_session(client):
+    # Admin "device A" logs in here; admin "device B" rotates the
+    # password. Device A's session must be rejected.
+    client.post("/api/auth/login", json={"password": "admin-pw"})
+    assert client.get("/api/auth/me").status_code == 200
+
+    with TestClient(app) as admin_b:
+        admin_b.post("/api/auth/login", json={"password": "admin-pw"})
+        r = admin_b.patch(
+            "/api/auth/users/admin/password",
+            json={"current_password": "admin-pw", "new_password": "rotated-pw"},
+        )
+        assert r.status_code == 204
+
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_admin_changing_own_password_keeps_current_session_alive(client):
+    # The session that performs the rotation should be re-stamped with
+    # the new version so the admin doesn't have to re-login from the
+    # very browser they just used.
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/admin/password",
+        json={"current_password": "admin-pw", "new_password": "rotated-pw"},
+    )
+    assert r.status_code == 204
+
+    me = client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["role"] == "admin"
+
+
+def test_admin_changing_viewer_password_keeps_admin_session_alive(client):
+    # Rotating someone else's password must not affect the actor's session.
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": "fresh-pw"},
+    )
+    assert r.status_code == 204
+
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_stale_password_version_in_db_evicts_session(client, db_session):
+    # Simulates either an admin rotating the password through some
+    # out-of-band channel, or a freshly-deployed bump where the cookie
+    # was issued before the column existed.
+    client.post("/api/auth/login", json={"password": "viewer-pw"})
+    assert client.get("/api/auth/me").status_code == 200
+
+    viewer = db_session.query(User).filter_by(role=UserRole.VIEWER).one()
+    viewer.password_version += 1
+    db_session.commit()
+
+    assert client.get("/api/auth/me").status_code == 401

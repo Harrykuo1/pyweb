@@ -18,6 +18,14 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Bumped whenever the password changes. Stamped into the session at
+    # login time and re-checked on every authenticated request, so any
+    # session signed before the bump is rejected — that's how we evict
+    # other devices when a user (or admin acting on them) rotates the
+    # password.
+    password_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,

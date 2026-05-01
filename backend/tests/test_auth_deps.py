@@ -29,6 +29,11 @@ def _build_app(db_session, *, seed_users: list[User] | None = None) -> FastAPI:
     @app.post("/test/_login_as/{user_id}")
     def login_as(user_id: int, request: Request):
         request.session["user_id"] = user_id
+        # Mirror what the real login does: stamp the user's password
+        # version so get_current_user's stale-session check passes.
+        user = db_session.query(User).filter_by(id=user_id).one_or_none()
+        if user is not None:
+            request.session["password_version"] = user.password_version
         return {"ok": True}
 
     @app.get("/test/me")

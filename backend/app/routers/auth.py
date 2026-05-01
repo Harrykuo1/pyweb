@@ -46,6 +46,7 @@ def login(
         if verify_password(payload.password, user.password_hash):
             request.session["user_id"] = user.id
             request.session["role"] = user.role.value
+            request.session["password_version"] = user.password_version
             return user
 
     raise HTTPException(
@@ -111,6 +112,7 @@ def update_username(
 def update_password(
     role: UserRole,
     payload: UpdatePasswordRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Response:
@@ -132,5 +134,17 @@ def update_password(
             )
 
     target.password_hash = hash_password(payload.new_password)
+    # Bump the version so any session signed with the old number gets
+    # rejected by get_current_user. Other devices for this user — and
+    # any attacker holding a stolen cookie — get evicted on their next
+    # request.
+    target.password_version += 1
     db.commit()
+
+    # When the admin rotates their own password, re-stamp the current
+    # session with the new version so this browser stays logged in.
+    # Other sessions for the same admin still get evicted.
+    if target.id == current_user.id:
+        request.session["password_version"] = target.password_version
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)

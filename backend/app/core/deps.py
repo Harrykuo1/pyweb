@@ -23,6 +23,16 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session user no longer exists",
         )
+    # Stale-session check: session was signed before the user's last
+    # password rotation, so it's been invalidated on purpose. Includes
+    # the missing-key case, which covers cookies issued before this
+    # mechanism was deployed.
+    if request.session.get("password_version") != user.password_version:
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired due to password change",
+        )
     return user
 
 
