@@ -71,6 +71,48 @@ def test_login_rejects_missing_password(client):
     assert r.status_code == 422
 
 
+# ---------- audit log ----------
+
+
+def test_failed_login_writes_audit_line(client, audit_log_dir):
+    r = client.post(
+        "/api/auth/login",
+        json={"password": "WRONG"},
+        headers={"x-forwarded-for": "203.0.113.7"},
+    )
+    assert r.status_code == 401
+
+    log = (audit_log_dir / "auth.log").read_text(encoding="utf-8")
+    assert "login_failed" in log
+    assert "ip=203.0.113.7" in log
+
+
+def test_successful_login_does_not_write_audit_line(client, audit_log_dir):
+    r = client.post("/api/auth/login", json={"password": "admin-pw"})
+    assert r.status_code == 200
+
+    log_file = audit_log_dir / "auth.log"
+    # Either the file was never created (no logger triggered) or it's empty.
+    assert not log_file.exists() or log_file.read_text(encoding="utf-8") == ""
+
+
+def test_brute_forced_success_writes_suspicious_audit_line(client, audit_log_dir):
+    headers = {"x-forwarded-for": "198.51.100.9"}
+
+    from app.core import audit_log as audit
+
+    for _ in range(audit.FAIL_THRESHOLD):
+        client.post("/api/auth/login", json={"password": "WRONG"}, headers=headers)
+
+    r = client.post("/api/auth/login", json={"password": "admin-pw"}, headers=headers)
+    assert r.status_code == 200
+
+    log = (audit_log_dir / "auth.log").read_text(encoding="utf-8")
+    assert "login_success_after_failures" in log
+    assert "ip=198.51.100.9" in log
+    assert "role=admin" in log
+
+
 # ---------- per-IP rate limit ----------
 
 

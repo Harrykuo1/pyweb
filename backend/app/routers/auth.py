@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.core import audit_log
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
 from app.core.security import hash_password, verify_password
@@ -40,6 +41,8 @@ def login(
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ) -> User:
+    ip = audit_log.client_ip(request)
+
     # bcrypt hashes are salted, so we cannot index by them. Two seeded
     # accounts means the linear scan is fine; revisit if the user count grows.
     for user in db.query(User).all():
@@ -47,8 +50,10 @@ def login(
             request.session["user_id"] = user.id
             request.session["role"] = user.role.value
             request.session["password_version"] = user.password_version
+            audit_log.record_success(ip, role=user.role.value)
             return user
 
+    audit_log.record_failure(ip)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid password",

@@ -82,3 +82,20 @@ def _reset_rate_limiter():
     limiter.reset()
     yield
     limiter.reset()
+
+
+@pytest.fixture(autouse=True)
+def audit_log_dir(tmp_path, monkeypatch):
+    """Redirect the audit logger to a per-test temp dir and reset its
+    module-level state (file handler + in-memory failure tracker) so the
+    suspicious-success counter doesn't leak across tests. Yields the
+    directory path so individual tests can read auth.log to assert
+    contents."""
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUDIT_LOG_DIR", str(log_dir))
+
+    from app.core import audit_log
+
+    audit_log._reset_for_tests()
+    yield log_dir
+    audit_log._reset_for_tests()
