@@ -196,6 +196,7 @@ Commit incrementally through each phase. Always present the phase's TODO list an
 - XSS: all user-supplied Markdown rendered through DOMPurify on the client.
 - File uploads: validate MIME type and size on the backend; reject non-image content for the photo field.
 - SQL: use SQLAlchemy ORM / parameterized queries — never string-concatenate SQL.
+- **Admin recovery**: there is no self-serve forgot-password flow. If admin credentials are lost, an operator with host shell access runs `docker compose exec backend python -m app.reset_password admin <new_pw>` — this rotates the hash and bumps `password_version` so any previously-issued cookie is also evicted.
 
 ---
 
