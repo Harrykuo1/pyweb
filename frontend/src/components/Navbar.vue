@@ -310,8 +310,8 @@ async function handleLogout() {
   display: none;
 }
 
-/* ---------- Mobile ---------- */
-@media (max-width: 640px) {
+/* ---------- Mobile / tablet portrait ---------- */
+@media (max-width: 1024px) {
   .navbar-inner {
     padding: 8px 12px;
     /* row-gap: 0 keeps the collapsed drawer flush against row 1; when
