@@ -30,6 +30,14 @@ export const useAuthStore = defineStore('auth', () => {
     viewAsViewer.value = false
   }
 
+  // Reset client-side auth state without touching the server. Used by the
+  // axios 401 interceptor — the cookie is already invalid backend-side, so
+  // calling /auth/logout would just produce another 401.
+  function clearLocal() {
+    user.value = null
+    viewAsViewer.value = false
+  }
+
   // Used by router guard on first navigation to restore session from cookie.
   // Swallows 401 because "no session" is not an error in that context.
   async function fetchMe() {
@@ -73,6 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
     actualRole,
     login,
     logout,
+    clearLocal,
     fetchMe,
     setViewAsViewer,
     updateUsername,

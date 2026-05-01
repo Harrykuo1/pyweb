@@ -69,6 +69,20 @@ describe('useAuthStore', () => {
     expect(store.isAuthenticated).toBe(false)
   })
 
+  it('clearLocal() resets user and viewAsViewer without calling the api', async () => {
+    const logout = vi.spyOn(authApi, 'logout').mockResolvedValue()
+    const store = useAuthStore()
+    store.user = { id: 1, username: 'admin', role: 'admin' }
+    store.setViewAsViewer(true)
+
+    store.clearLocal()
+
+    expect(store.user).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.viewAsViewer).toBe(false)
+    expect(logout).not.toHaveBeenCalled()
+  })
+
   it('fetchMe() populates user when session is valid', async () => {
     const fakeUser = { id: 3, username: 'someone', role: 'viewer' }
     vi.spyOn(authApi, 'getMe').mockResolvedValue(fakeUser)
