@@ -54,10 +54,38 @@ http {
         root  __PYWEB_ROOT__/frontend/dist;
         index index.html;
 
+        # Vite emits hashed filenames for everything under /assets/ — when
+        # the bundle changes, the filename changes too, so the cache key
+        # turns over on its own. Tell the browser to cache forever and
+        # skip even conditional revalidation; this turns repeat visits
+        # into pure disk-cache hits. Using only add_header (not the
+        # `expires` directive) so we don't emit two Cache-Control values.
+        location ^~ /assets/ {
+            add_header Cache-Control "public, immutable, max-age=31536000";
+            try_files $uri =404;
+        }
+
+        # index.html is the SPA entry point and its filename is NOT hashed,
+        # so we MUST NOT cache it — otherwise users keep referencing old
+        # hashed bundle filenames after a deploy and end up with a white
+        # screen until they manually clear cache. The same header also
+        # needs to apply when index.html is served via try_files for SPA
+        # routes (/, /members, /login, etc.), which is why the rule lives
+        # in the catch-all location too.
+        location = /index.html {
+            add_header Cache-Control "no-cache";
+        }
+
         # SPA history-mode fallback: any unknown path returns index.html so
         # that vue-router can take over after the page loads. Real assets
         # under /assets/ are served directly because $uri matches them.
         location / {
+            # Same no-cache header as the dedicated /index.html block —
+            # nginx's add_header only inherits when the child has none of
+            # its own, so we duplicate it here so SPA routes that fall
+            # through try_files into index.html still tell the browser
+            # not to cache the entry document.
+            add_header Cache-Control "no-cache";
             try_files $uri $uri/ /index.html;
         }
 
