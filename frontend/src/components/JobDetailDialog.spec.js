@@ -84,21 +84,57 @@ describe('JobDetailDialog — markdown tabs', () => {
     expect(exp.text()).toContain('## interview content')
   })
 
-  it('renders the timeline tab when timeline_md is present', async () => {
+  it('renders the timeline tab when timeline_md (legacy) is present', async () => {
     const wrapper = await mountDialog()
     expect(wrapper.text()).toContain('時程表')
   })
 
-  it('hides the timeline tab when timeline_md is empty / null', async () => {
+  it('hides the timeline tab when both timeline_md and timeline_events are empty', async () => {
     const wrapper = await mountDialog({
-      job: { ...sample, timeline_md: '' },
+      job: { ...sample, timeline_md: '', timeline_events: null },
     })
     expect(wrapper.text()).not.toContain('時程表')
 
     const wrapper2 = await mountDialog({
-      job: { ...sample, timeline_md: null },
+      job: { ...sample, timeline_md: null, timeline_events: [] },
     })
     expect(wrapper2.text()).not.toContain('時程表')
+  })
+
+  it('renders TimelineDisplay when timeline_events is non-empty (preferred over legacy markdown)', async () => {
+    // Even if both fields are populated, the structured events take
+    // priority — that's the migration path: editing a legacy job
+    // refills timeline_events, which immediately shadows the old
+    // markdown column without us having to delete it server-side.
+    const wrapper = await mountDialog({
+      job: {
+        ...sample,
+        timeline_md: '舊資料',
+        timeline_events: [
+          { date: '2025-02-23', event: '投遞' },
+          { date: '2025-04-17', event: '拿到 offer' },
+        ],
+      },
+    })
+    expect(wrapper.find('[data-test="timeline-display"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-timeline-legacy"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('投遞')
+    expect(wrapper.text()).toContain('拿到 offer')
+  })
+
+  it('falls back to legacy markdown with a deprecated badge when only timeline_md is set', async () => {
+    const wrapper = await mountDialog({
+      job: {
+        ...sample,
+        timeline_md: '舊版時程內文',
+        timeline_events: null,
+      },
+    })
+    expect(wrapper.find('[data-test="timeline-display"]').exists()).toBe(false)
+    const legacy = wrapper.find('[data-test="detail-timeline-legacy"]')
+    expect(legacy.exists()).toBe(true)
+    expect(legacy.text()).toContain('舊版時程表')
+    expect(wrapper.text()).toContain('舊版時程內文')
   })
 })
 

@@ -6,6 +6,7 @@ import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
 import { useAuthStore } from '../stores/auth'
+import TimelineDisplay from './TimelineDisplay.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -23,8 +24,18 @@ const KIND_META = {
 
 const tab = ref('experience')
 
-const hasTimeline = computed(
+// New jobs use timeline_events (structured rows). hasTimelineEvents is
+// the preferred path; the legacy timeline_md branch only matters for
+// rows that haven't been re-saved through the structured editor since
+// the migration.
+const hasTimelineEvents = computed(
+  () => Array.isArray(props.job?.timeline_events) && props.job.timeline_events.length > 0,
+)
+const hasLegacyTimelineMd = computed(
   () => !!props.job?.timeline_md && props.job.timeline_md.trim().length > 0,
+)
+const hasTimeline = computed(
+  () => hasTimelineEvents.value || hasLegacyTimelineMd.value,
 )
 
 watch(
@@ -124,11 +135,20 @@ function formatJobYearMonth(j) {
       </el-tab-pane>
       <el-tab-pane v-if="hasTimeline" label="時程表" name="timeline">
         <div class="md-frame" data-test="detail-timeline">
-          <MdPreview
-            :model-value="job.timeline_md ?? ''"
-            theme="light"
-            preview-theme="default"
+          <TimelineDisplay
+            v-if="hasTimelineEvents"
+            :events="job.timeline_events"
           />
+          <div v-else data-test="detail-timeline-legacy">
+            <p class="legacy-timeline-badge">
+              ⚠ 舊版時程表（編輯這筆紀錄即可升級為結構化時程）
+            </p>
+            <MdPreview
+              :model-value="job.timeline_md ?? ''"
+              theme="light"
+              preview-theme="default"
+            />
+          </div>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -322,6 +342,16 @@ function formatJobYearMonth(j) {
 
 .detail-empty {
   padding: 32px 0;
+}
+
+.legacy-timeline-badge {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #92400e;
 }
 
 @media (max-width: 640px) {
