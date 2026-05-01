@@ -121,7 +121,12 @@ async def get_member_photo(
     return Response(
         content=member.photo,
         media_type=member.photo_content_type or "application/octet-stream",
-        headers={"Cache-Control": "private, max-age=60"},
+        # The URL is content-addressed via ?v=<photo_updated_at>, so a
+        # given URL always points at the same bytes. Tell the browser
+        # to cache forever and skip even conditional revalidation —
+        # admin replacing the photo bumps photo_updated_at, which
+        # changes the URL and naturally produces a cache miss.
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
     )
 
 
@@ -183,7 +188,9 @@ async def get_member_resume_pdf(
         content=member.resume_pdf,
         media_type=RESUME_PDF_TYPE,
         headers={
-            "Cache-Control": "private, max-age=60",
+            # URL is content-addressed via ?v=<resume_pdf_updated_at>;
+            # see the photo endpoint above for the rationale.
+            "Cache-Control": "private, max-age=31536000, immutable",
             "Content-Disposition": f'inline; filename="member-{member_id}-resume.pdf"',
         },
     )

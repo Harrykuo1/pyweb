@@ -156,6 +156,26 @@ def test_get_photo_returns_bytes_with_content_type(client_factory, db_session):
     assert r.content == TINY_PNG
 
 
+def test_get_photo_response_uses_immutable_cache_header(client_factory, db_session):
+    # Photo URLs carry a ?v=<photo_updated_at> stamp, so the bytes at a
+    # given URL never change. Tell the browser to cache forever and
+    # skip conditional revalidation — admin replacing the photo bumps
+    # photo_updated_at, which changes the URL.
+    client, login_as = client_factory
+    member = db_session.query(Member).filter_by(id=1).one()
+    member.photo = TINY_PNG
+    member.photo_content_type = "image/png"
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/members/1/photo")
+    assert r.status_code == 200
+    cache_control = r.headers.get("cache-control", "")
+    assert "private" in cache_control
+    assert "max-age=31536000" in cache_control
+    assert "immutable" in cache_control
+
+
 def test_get_photo_404_when_missing(client_factory):
     client, login_as = client_factory
     login_as("viewer")

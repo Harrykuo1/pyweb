@@ -153,6 +153,23 @@ def test_get_pdf_returns_bytes(client_factory, db_session):
     assert r.content == TINY_PDF
 
 
+def test_get_pdf_response_uses_immutable_cache_header(client_factory, db_session):
+    # See the photo equivalent test for rationale — same content-
+    # addressed-URL guarantee via ?v=<resume_pdf_updated_at>.
+    client, login_as = client_factory
+    member = db_session.query(Member).filter_by(id=1).one()
+    member.resume_pdf = TINY_PDF
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/members/1/resume.pdf")
+    assert r.status_code == 200
+    cache_control = r.headers.get("cache-control", "")
+    assert "private" in cache_control
+    assert "max-age=31536000" in cache_control
+    assert "immutable" in cache_control
+
+
 def test_get_pdf_404_when_missing(client_factory):
     client, login_as = client_factory
     login_as("viewer")
