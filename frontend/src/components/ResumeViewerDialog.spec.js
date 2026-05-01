@@ -195,6 +195,38 @@ describe('ResumeViewerDialog', () => {
     expect(wrapper.vm.deletePdfDialogOpen).toBe(true)
   })
 
+  it('pdfSrc embeds resume_pdf_updated_at as cache-busting version stamp', async () => {
+    const stamped = {
+      ...memberPdfOnly,
+      resume_pdf_updated_at: '2026-04-30T12:00:00Z',
+    }
+    const wrapper = await open(stamped)
+    const iframe = wrapper.find('[data-test="pdf-frame"]')
+    expect(iframe.exists()).toBe(true)
+    const src = iframe.attributes('src')
+    expect(src).toContain('?v=')
+    expect(src).toContain(encodeURIComponent('2026-04-30T12:00:00Z'))
+  })
+
+  it('pdfSrc does not change between dialog opens when timestamp is unchanged', async () => {
+    // Regression guard: previously every dialog open bumped a Date.now()
+    // ref so the PDF URL changed on each open, defeating HTTP cache.
+    const stamped = {
+      ...memberPdfOnly,
+      resume_pdf_updated_at: '2026-04-30T12:00:00Z',
+    }
+    const wrapper = await open(stamped)
+    const firstSrc = wrapper.find('[data-test="pdf-frame"]').attributes('src')
+
+    await wrapper.setProps({ modelValue: false })
+    await flushPromises()
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const secondSrc = wrapper.find('[data-test="pdf-frame"]').attributes('src')
+    expect(secondSrc).toBe(firstSrc)
+  })
+
   it('handleDeletePdf on 401 surfaces 密碼錯誤 and does not emit changed', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }

@@ -36,7 +36,6 @@ const emit = defineEmits(['update:modelValue', 'changed'])
 
 const auth = useAuthStore()
 
-const cacheBuster = ref(Date.now())
 const tab = ref('pdf')
 const uploadingPdf = ref(false)
 
@@ -68,7 +67,10 @@ const pdfSrc = computed(() => {
   // navigation pane, and fit the page to the iframe width. Chromium-based
   // browsers (Chrome / Edge) respect these fragment parameters; others
   // ignore them and fall back to their defaults.
-  const url = membersApi.resumePdfUrl(props.member.id, cacheBuster.value)
+  const url = membersApi.resumePdfUrl(
+    props.member.id,
+    props.member.resume_pdf_updated_at ?? '',
+  )
   return `${url}#toolbar=0&navpanes=0&view=FitH`
 })
 
@@ -76,7 +78,6 @@ watch(
   () => [props.modelValue, props.member?.id, props.member?.has_resume_pdf, props.member?.has_resume_md],
   ([open]) => {
     if (!open || !props.member) return
-    cacheBuster.value = Date.now()
     if (props.member.has_resume_pdf) tab.value = 'pdf'
     else if (props.member.has_resume_md) tab.value = 'md'
   },
@@ -110,7 +111,6 @@ async function handleUploadPdf(uploadFile) {
   })
   try {
     await membersApi.uploadResumePdf(props.member.id, file)
-    cacheBuster.value = Date.now()
     toast.close()
     ElMessage.success('已上傳履歷 PDF')
     tab.value = 'pdf'
