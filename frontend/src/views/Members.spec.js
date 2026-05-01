@@ -405,6 +405,50 @@ describe('Members.vue', () => {
     expect(wrapper.text()).toContain('尚無成員資料')
   })
 
+  // matchMedia stub: returns matches=true for the phone media query and
+  // false otherwise. addEventListener/removeEventListener are no-ops because
+  // the test never resizes; we just want the mount-time .matches read to
+  // report phone width.
+  function stubMatchMediaPhone() {
+    const original = window.matchMedia
+    window.matchMedia = (q) => ({
+      matches: q === '(max-width: 640px)',
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+      onchange: null,
+    })
+    return () => {
+      window.matchMedia = original
+    }
+  }
+
+  it('phone breakpoint forces grid view even when localStorage says list', async () => {
+    const restore = stubMatchMediaPhone()
+    try {
+      localStorage.setItem('pyweb.members.viewMode', 'list')
+      const auth = useAuthStore()
+      auth.user = { id: 1, username: 'a', role: 'admin' }
+      vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+
+      const wrapper = mount(Members, { attachTo: document.body })
+      pendingTeardowns.push(wrapper)
+      await flushPromises()
+
+      // Cards rendered, table not.
+      expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
+      expect(wrapper.findComponent({ name: 'ElTable' }).exists()).toBe(false)
+      // Stored desktop preference is preserved — only the rendered view
+      // is overridden.
+      expect(localStorage.getItem('pyweb.members.viewMode')).toBe('list')
+    } finally {
+      restore()
+    }
+  })
+
   it('clicking view-list toggle switches to el-table and persists to localStorage', async () => {
     vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
     const wrapper = mount(Members)

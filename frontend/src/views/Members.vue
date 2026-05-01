@@ -1,5 +1,5 @@
 <script setup>
-import { computed, markRaw, onMounted, ref } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ElButton,
   ElIcon,
@@ -64,6 +64,21 @@ function setViewMode(m) {
     /* swallow — quota / private mode */
   }
 }
+
+// The view-mode toggle is hidden at the phone breakpoint (≤640px) because
+// el-table at that width is unusable. Force grid mode there regardless of
+// the user's stored desktop preference, so a viewer who last picked "list"
+// on desktop still sees cards on their phone. Desktop choice is preserved.
+const PHONE_MQ = '(max-width: 640px)'
+const isPhone = ref(false)
+let phoneMql = null
+function syncPhone(e) {
+  isPhone.value = e.matches
+}
+
+const effectiveViewMode = computed(() =>
+  isPhone.value ? 'grid' : viewMode.value,
+)
 
 // ---------- Sort (drives the grid; el-table has its own header sort) ----------
 const SORT_OPTIONS = [
@@ -290,7 +305,19 @@ function formatDate(iso) {
   })
 }
 
-onMounted(loadMembers)
+onMounted(() => {
+  loadMembers()
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    phoneMql = window.matchMedia(PHONE_MQ)
+    isPhone.value = phoneMql.matches
+    phoneMql.addEventListener?.('change', syncPhone)
+  }
+})
+
+onBeforeUnmount(() => {
+  phoneMql?.removeEventListener?.('change', syncPhone)
+  phoneMql = null
+})
 </script>
 
 <template>
@@ -307,7 +334,7 @@ onMounted(loadMembers)
           </span>
         </div>
         <p class="subtitle">
-          {{ viewMode === 'grid' ? '點上方排序按鈕切換排序方向' : '點欄位標題可切換排序方向' }}
+          {{ effectiveViewMode === 'grid' ? '點上方排序按鈕切換排序方向' : '點欄位標題可切換排序方向' }}
         </p>
       </div>
 
@@ -375,7 +402,7 @@ onMounted(loadMembers)
     </header>
 
     <!-- Sort pills (grid mode only — table has its own column-click sort). -->
-    <div v-if="viewMode === 'grid'" class="sort-row">
+    <div v-if="effectiveViewMode === 'grid'" class="sort-row">
       <span class="sort-label">排序</span>
       <button
         v-for="opt in SORT_OPTIONS"
@@ -393,7 +420,7 @@ onMounted(loadMembers)
     </div>
 
     <!-- ---------- GRID VIEW ---------- -->
-    <div v-if="viewMode === 'grid'" class="grid-stage">
+    <div v-if="effectiveViewMode === 'grid'" class="grid-stage">
       <!-- Skeleton placeholders cover the initial fetch so users see card
            shapes immediately instead of an EP spinner overlay. -->
       <div v-if="loading" class="member-grid" data-test="grid-skeleton">
@@ -519,7 +546,7 @@ onMounted(loadMembers)
     <!-- Skeleton table mimics the real layout so the page doesn't shift
          when data arrives — much calmer than the v-loading spinner overlay. -->
     <div
-      v-if="viewMode === 'list' && loading"
+      v-if="effectiveViewMode === 'list' && loading"
       class="table-skeleton"
       data-test="table-skeleton"
     >
@@ -554,7 +581,7 @@ onMounted(loadMembers)
     </div>
 
     <el-table
-      v-else-if="viewMode === 'list'"
+      v-else-if="effectiveViewMode === 'list'"
       :data="filteredMembers"
       class="members-table"
       :default-sort="{ prop: 'joined_at', order: 'ascending' }"
@@ -1346,9 +1373,9 @@ onMounted(loadMembers)
   }
 
   /* Card / table toggle is desktop-only: the table view at phone width
-     is unusable (forces horizontal scroll). Hide the toggle and let
-     the user stay in whichever mode they had on desktop; if it's
-     "list" they still see the table, just without the toggle UI. */
+     is unusable. Hide the toggle and force grid mode via
+     effectiveViewMode in the template, so a viewer who last picked
+     "list" on desktop still sees cards on their phone. */
   .view-toggle {
     display: none;
   }
@@ -1377,20 +1404,6 @@ onMounted(loadMembers)
   .sort-pill {
     padding: 4px 10px;
     font-size: 11px;
-  }
-
-  /* Table columns sum to ~860 px which is wider than a phone viewport;
-     let it scroll horizontally inside the card instead of overflowing the
-     whole page. The table component already wraps its body in a scrollable
-     element-plus inner, but we also need the wrapper itself not to clip. */
-  .members-table {
-    width: 100%;
-    overflow-x: auto;
-  }
-
-  .members-table :deep(.el-table__body),
-  .members-table :deep(.el-table__header) {
-    min-width: 860px;
   }
 
   .member-grid {
