@@ -1,7 +1,15 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElButton, ElMessage, ElSwitch, ElTag, ElTooltip } from 'element-plus'
+import {
+  ElButton,
+  ElIcon,
+  ElMessage,
+  ElSwitch,
+  ElTag,
+  ElTooltip,
+} from 'element-plus'
+import { Close, MoreFilled } from '@element-plus/icons-vue'
 
 import AccountSettingsDialog from './AccountSettingsDialog.vue'
 import { useAuthStore } from '../stores/auth'
@@ -17,8 +25,15 @@ const previewAsViewer = computed({
 })
 
 const accountDialogVisible = ref(false)
+const mobileMenuOpen = ref(false)
+
+function openAccountSettings() {
+  accountDialogVisible.value = true
+  mobileMenuOpen.value = false
+}
 
 async function handleLogout() {
+  mobileMenuOpen.value = false
   try {
     await auth.logout()
     ElMessage.success('已登出')
@@ -43,7 +58,21 @@ async function handleLogout() {
         <router-link to="/jobs" class="nav-link">求職</router-link>
       </nav>
 
-      <div class="navbar-right">
+      <el-button
+        text
+        class="mobile-menu-toggle"
+        :aria-expanded="mobileMenuOpen"
+        :aria-label="mobileMenuOpen ? '收起選單' : '展開選單'"
+        data-test="mobile-menu-toggle"
+        @click="mobileMenuOpen = !mobileMenuOpen"
+      >
+        <el-icon :size="20">
+          <Close v-if="mobileMenuOpen" />
+          <MoreFilled v-else />
+        </el-icon>
+      </el-button>
+
+      <div class="navbar-right" :class="{ 'is-mobile-open': mobileMenuOpen }">
         <el-tooltip
           v-if="auth.isActuallyAdmin"
           content="切換後 UI 會以檢視者身分顯示，後端權限不變"
@@ -86,11 +115,13 @@ async function handleLogout() {
           v-if="auth.isActuallyAdmin"
           text
           data-test="account-settings"
-          @click="accountDialogVisible = true"
+          @click="openAccountSettings"
         >
           帳號設定
         </el-button>
-        <el-button text @click="handleLogout">登出</el-button>
+        <el-button text data-test="logout" @click="handleLogout">
+          登出
+        </el-button>
       </div>
     </div>
 
@@ -274,24 +305,56 @@ async function handleLogout() {
   background: rgba(15, 23, 42, 0.1);
 }
 
+/* Mobile-only hamburger; takes over row-1's right edge when shown. */
+.mobile-menu-toggle {
+  display: none;
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .navbar-inner {
     padding: 8px 12px;
-    gap: 12px;
+    /* row-gap: 0 keeps the collapsed drawer flush against row 1; when
+       expanded, navbar-right adds its own padding-top for separation. */
+    column-gap: 12px;
+    row-gap: 0;
     min-height: 56px;
   }
 
-  /* Push nav-links and the right-side block to a second row, sharing it. */
+  /* Row 1: brand + page nav (compact) + hamburger pinned right. */
   .nav-links {
-    order: 3;
-    flex-basis: 100%;
+    flex: 0 0 auto;
     gap: 4px;
   }
 
-  .navbar-right {
+  .mobile-menu-toggle {
+    display: inline-flex;
     margin-left: auto;
+    padding: 6px;
+  }
+
+  /* Row 2: navbar-right collapses to a full-width drawer below row 1.
+     Hidden by default; .is-mobile-open expands it. max-height/opacity
+     (not display:none) keeps the transition smooth. */
+  .navbar-right {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
     gap: 8px;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease,
+      padding-top 0.25s ease;
+  }
+
+  .navbar-right.is-mobile-open {
+    max-height: 320px;
+    opacity: 1;
+    padding-top: 12px;
+    margin-top: 8px;
+    border-top: 1px solid rgba(15, 23, 42, 0.06);
   }
 
   /* Hide the verbose label of the preview switch; the toggle itself stays. */

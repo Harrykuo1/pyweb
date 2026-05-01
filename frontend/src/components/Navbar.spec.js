@@ -90,13 +90,45 @@ describe('Navbar.vue', () => {
     const logoutSpy = vi.spyOn(auth, 'logout').mockResolvedValue()
 
     const wrapper = mount(Navbar, { global: { stubs } })
-    // The first plain button is the el-switch's trigger; logout is the
-    // last button in the row.
-    const buttons = wrapper.findAll('button')
-    await buttons[buttons.length - 1].trigger('click')
+    await wrapper.find('[data-test="logout"]').trigger('click')
 
     expect(logoutSpy).toHaveBeenCalled()
     expect(pushMock).toHaveBeenCalledWith('/login')
+  })
+
+  it('mobile menu toggle expands and collapses the navbar-right drawer', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const navbarRight = wrapper.find('.navbar-right')
+    expect(navbarRight.classes()).not.toContain('is-mobile-open')
+
+    const toggle = wrapper.find('[data-test="mobile-menu-toggle"]')
+    expect(toggle.exists()).toBe(true)
+
+    await toggle.trigger('click')
+    expect(navbarRight.classes()).toContain('is-mobile-open')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+
+    await toggle.trigger('click')
+    expect(navbarRight.classes()).not.toContain('is-mobile-open')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+  })
+
+  it('clicking logout from the expanded drawer collapses it', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    vi.spyOn(auth, 'logout').mockResolvedValue()
+
+    const wrapper = mount(Navbar, { global: { stubs } })
+    await wrapper.find('[data-test="mobile-menu-toggle"]').trigger('click')
+    expect(wrapper.find('.navbar-right').classes()).toContain('is-mobile-open')
+
+    await wrapper.find('[data-test="logout"]').trigger('click')
+    expect(wrapper.find('.navbar-right').classes()).not.toContain(
+      'is-mobile-open',
+    )
   })
 
   it('preview-as-viewer toggle is shown for admin only', () => {
