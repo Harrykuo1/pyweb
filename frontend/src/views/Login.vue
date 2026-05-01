@@ -347,7 +347,7 @@ async function handleSubmit() {
 
 @media (max-width: 760px) {
   .login-shell {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     min-height: 0;
     max-width: 460px;
   }
@@ -360,9 +360,6 @@ async function handleSubmit() {
   }
   .brand-tagline {
     font-size: 13px;
-  }
-  .brand-foot {
-    display: none;
   }
   .logo-circle {
     width: 48px;
