@@ -74,6 +74,22 @@ A community member management website that records member profiles and internshi
 - If the build or container startup fails, surface the error and stop — don't claim the task is complete with a broken image.
 - Skip only when the change has no runtime impact (docs-only, CI-only, or test-file-only changes).
 
+### 2.8 Wait for User Verification Before Commit (MANDATORY)
+
+- **Tests passing ≠ feature works.** Unit tests catch regressions in known invariants; they don't catch broken UI mounts, missing imports surfacing only at runtime, circular module init, wrong API contract, dynamic import failures, or anything else that only shows up when the page actually loads.
+- **Default workflow for any change that touches runtime code** (backend handlers, frontend components, API client, router, store, migrations, etc.):
+  1. Apply the edit.
+  2. Run the relevant test suite (`cd backend && .venv/bin/pytest` / `cd frontend && npm run test`).
+  3. Run `docker compose up -d --build` so the change is live on `http://localhost:8081`.
+  4. Hand off to the user explicitly noting the change is **uncommitted** — e.g. "rebuilt and live, verify in browser then I'll commit".
+  5. **Only commit after the user confirms** the change actually behaves correctly in the browser.
+- If the user reports it didn't work: fix forward in the working tree (or revert local edits) and rebuild. Nothing was committed, so no `git reset` needed.
+- **Allowed to commit immediately without browser verification only when:**
+  - Change is docs-only, CI-only, or test-file-only (no runtime impact).
+  - Change is a pure refactor with no behavior change AND tests fully cover the affected paths.
+- When in doubt, wait for verification. One extra round-trip costs nothing; rolling back a published commit is expensive.
+- This supersedes the older "only wait for visual / Safari fixes" guidance — the rule now applies to **all** runtime changes.
+
 ---
 
 ## 3. Feature Requirements
