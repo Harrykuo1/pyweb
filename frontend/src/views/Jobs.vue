@@ -1281,6 +1281,20 @@ onMounted(loadItems)
     height: 32px;
   }
 
+  /* Stack the action buttons full-width on phones; otherwise they sit
+     inline with the title and squeeze .header-text down to the point
+     where "求職紀錄" wraps one character per line. */
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Subtitle prose is redundant on phones — the sort pills below are
+     themselves tappable controls, no instructional copy needed. */
+  .subtitle {
+    display: none;
+  }
+
   .filter-bar {
     padding: 8px;
   }
@@ -1296,6 +1310,21 @@ onMounted(loadItems)
   .filter-company,
   .filter-category {
     width: 100%;
+  }
+
+  /* Compact sort row: drop the "排序" label and tighten pills so the
+     options sit on one or two cleaner lines. Mirrors Members. */
+  .sort-label {
+    display: none;
+  }
+
+  .sort-row {
+    gap: 4px;
+  }
+
+  .sort-pill {
+    padding: 4px 10px;
+    font-size: 11px;
   }
 
   .card-grid {
