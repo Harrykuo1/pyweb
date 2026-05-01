@@ -1320,6 +1320,15 @@ onMounted(loadMembers)
   font-size: 14px;
 }
 
+/* Tablet portrait + phone: drop the actions row to a full-width second
+   line so the header text isn't squeezed. */
+@media (max-width: 1024px) {
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 640px) {
   .title {
     font-size: 20px;
@@ -1328,6 +1337,46 @@ onMounted(loadMembers)
   .title-icon {
     width: 32px;
     height: 32px;
+  }
+
+  /* Sort pills are themselves tappable controls — the prose hint above
+     them is redundant on a small screen and just steals a row. */
+  .subtitle {
+    display: none;
+  }
+
+  /* Card / table toggle is desktop-only: the table view at phone width
+     is unusable (forces horizontal scroll). Hide the toggle and let
+     the user stay in whichever mode they had on desktop; if it's
+     "list" they still see the table, just without the toggle UI. */
+  .view-toggle {
+    display: none;
+  }
+
+  /* Search takes its own full-width row so the input isn't squeezed
+     against the view toggle. Refresh / add buttons wrap to the next
+     row naturally via .actions's flex-wrap. */
+  .search-wrap {
+    flex: 1 1 100%;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  /* Compact sort row: drop the "排序" label and tighten pills so the
+     four sort options fit on one or two cleaner lines. */
+  .sort-label {
+    display: none;
+  }
+
+  .sort-row {
+    gap: 4px;
+  }
+
+  .sort-pill {
+    padding: 4px 10px;
+    font-size: 11px;
   }
 
   /* Table columns sum to ~860 px which is wider than a phone viewport;
@@ -1344,12 +1393,6 @@ onMounted(loadMembers)
     min-width: 860px;
   }
 
-  /* Stack the action buttons full-width on phones so each is easy to tap. */
-  .actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
   .member-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--sp-sm);
@@ -1357,6 +1400,27 @@ onMounted(loadMembers)
 
   .card-body {
     padding: var(--sp-sm) var(--sp-md);
+  }
+
+  /* At ~155-180 px card width the year-icon row and date-icon row do
+     not fit on one line; stacking them vertically (and dropping the
+     margin-left:auto that would otherwise right-align the second row)
+     keeps both flush-left and avoids the disconnected split. */
+  .card-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .card-join {
+    margin-left: 0;
+  }
+
+  /* Same idea for the action buttons: when they wrap, don't shove the
+     admin actions to the right edge of the next row — left-align so
+     all three buttons read as one group. */
+  .card-admin-actions {
+    margin-left: 0;
   }
 }
 </style>
