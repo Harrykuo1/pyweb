@@ -768,6 +768,211 @@ def test_update_404(client_factory):
     assert r.status_code == 404
 
 
+# ---------- timeline_events ----------
+
+def test_create_with_timeline_events_round_trips(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    events = [
+        {"date": "2025-02-23", "event": "投遞履歷"},
+        {"date": "2025-03-06", "event": "面試邀請"},
+        {"date": "2025-04-17", "event": "拿到 offer"},
+    ]
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": events,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["timeline_events"] == events
+
+
+def test_create_with_cross_year_timeline_events(client_factory):
+    # The whole reason the schema records full ISO dates instead of
+    # month + day is to handle recruitment processes that span the
+    # year boundary cleanly. Verify a Dec → Jan timeline round-trips.
+    client, login_as = client_factory
+    login_as("admin")
+    events = [
+        {"date": "2025-12-15", "event": "投遞履歷"},
+        {"date": "2026-01-08", "event": "面試"},
+        {"date": "2026-02-03", "event": "拿到 offer"},
+    ]
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2026,
+            "job_month": 2,
+            "company": "Acme",
+            "kind": "fulltime",
+            "experience_md": "x",
+            "timeline_events": events,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["timeline_events"] == events
+
+
+def test_create_without_timeline_events_returns_null(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["timeline_events"] is None
+
+
+def test_create_with_empty_timeline_events_list_round_trips(client_factory):
+    # An empty list should be accepted and stored as an empty list, not
+    # coerced to null — the editor can produce this when admin starts a
+    # timeline and immediately deletes all rows.
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": [],
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["timeline_events"] == []
+
+
+def test_create_rejects_timeline_event_with_invalid_date(client_factory):
+    # Pydantic's date type rejects malformed strings and impossible
+    # dates (e.g. Feb 30) automatically — assert both paths.
+    client, login_as = client_factory
+    login_as("admin")
+    for bad in ("2025-13-01", "2025-02-30", "not-a-date"):
+        r = client.post(
+            "/api/jobs",
+            json={
+                "job_year": 2025,
+                "job_month": 4,
+                "company": "Acme",
+                "kind": "internship",
+                "experience_md": "x",
+                "timeline_events": [{"date": bad, "event": "x"}],
+            },
+        )
+        assert r.status_code == 422, f"expected 422 for date={bad!r}, got {r.status_code}"
+
+
+def test_create_rejects_timeline_event_with_blank_text(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": [{"date": "2025-02-23", "event": ""}],
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_create_rejects_too_many_timeline_events(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    too_many = [{"date": "2025-01-01", "event": "e"} for _ in range(51)]
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": too_many,
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_update_replaces_timeline_events(client_factory, db_session):
+    # PUT semantics: sending a new list overwrites the previous one.
+    client, login_as = client_factory
+    _seed(db_session, [{"company": "Acme", "experience_md": "x"}])
+    login_as("admin")
+
+    first = [{"date": "2025-02-01", "event": "a"}]
+    second = [
+        {"date": "2025-03-05", "event": "b"},
+        {"date": "2025-04-10", "event": "c"},
+    ]
+
+    r1 = client.put("/api/jobs/1", json={"timeline_events": first})
+    assert r1.status_code == 200
+    assert r1.json()["timeline_events"] == first
+
+    r2 = client.put("/api/jobs/1", json={"timeline_events": second})
+    assert r2.status_code == 200
+    assert r2.json()["timeline_events"] == second
+
+
+def test_update_clears_timeline_events_with_null(client_factory, db_session):
+    client, login_as = client_factory
+    _seed(
+        db_session,
+        [{"company": "Acme", "experience_md": "x"}],
+    )
+    login_as("admin")
+    client.put(
+        "/api/jobs/1",
+        json={"timeline_events": [{"date": "2025-02-01", "event": "a"}]},
+    )
+
+    r = client.put("/api/jobs/1", json={"timeline_events": None})
+    assert r.status_code == 200
+    assert r.json()["timeline_events"] is None
+
+
+def test_legacy_timeline_md_and_new_timeline_events_are_independent(
+    client_factory, db_session
+):
+    # Old jobs only have timeline_md; new jobs use timeline_events.
+    # Setting one must not silently clear the other so the viewer's
+    # "fall back to legacy markdown" path stays predictable.
+    client, login_as = client_factory
+    _seed(
+        db_session,
+        [{"company": "Acme", "experience_md": "x", "timeline_md": "- 投遞 2/23"}],
+    )
+    login_as("admin")
+
+    r = client.put(
+        "/api/jobs/1",
+        json={"timeline_events": [{"date": "2025-02-23", "event": "投遞"}]},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["timeline_md"] == "- 投遞 2/23"
+    assert body["timeline_events"] == [{"date": "2025-02-23", "event": "投遞"}]
+
+
 # ---------- delete ----------
 
 def test_delete_admin_with_correct_password(client_factory, db_session):

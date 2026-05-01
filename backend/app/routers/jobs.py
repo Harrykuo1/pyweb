@@ -187,6 +187,15 @@ def create_job(
         experience_md=payload.experience_md,
         real_name=payload.real_name,
         timeline_md=payload.timeline_md,
+        # Pydantic gives us TimelineEvent instances containing date
+        # objects; SQLAlchemy's JSON column needs plain dicts with
+        # JSON-serialisable scalars, so use mode="json" to force the
+        # date -> ISO string conversion at the boundary.
+        timeline_events=(
+            [e.model_dump(mode="json") for e in payload.timeline_events]
+            if payload.timeline_events is not None
+            else None
+        ),
     )
     db.add(obj)
     db.commit()
@@ -202,7 +211,10 @@ def update_job(
     _: object = Depends(require_admin),
 ) -> Job:
     obj = _get_or_404(db, job_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    # mode="json" so any nested date objects (timeline_events[].date)
+    # arrive at the SQLAlchemy JSON column already serialised to ISO
+    # strings — same boundary handling as create_job above.
+    for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
         if field == "kind" and value is not None:
             value = JobKind(value)
         setattr(obj, field, value)

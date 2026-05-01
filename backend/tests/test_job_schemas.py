@@ -238,6 +238,7 @@ def test_list_response_carries_items_and_total():
         experience_md="x",
         real_name=None,
         timeline_md=None,
+        timeline_events=None,
         created_at=now,
     )
     page = ListResponse[JobResponse](items=[item], total=1)

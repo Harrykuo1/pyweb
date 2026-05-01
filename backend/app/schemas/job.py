@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -6,6 +6,23 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MIN_JOB_YEAR = 2000
 
 JobKindLiteral = Literal["internship", "fulltime"]
+
+# Cap timeline length to keep the JSON payload sane and to avoid the
+# editor UI degrading on absurd inputs. 50 entries comfortably covers
+# the longest realistic recruitment process; if someone genuinely
+# needs more, that signals the schema needs more thought rather than
+# this number going up.
+TIMELINE_EVENTS_MAX = 50
+
+
+class TimelineEvent(BaseModel):
+    # Full ISO date so a recruitment process that spans the year
+    # boundary (Dec → Jan) records honestly without having to bake
+    # the year into the surrounding job context. D+N is computed at
+    # display time as a simple Date subtraction, which keeps leap
+    # years correct for free.
+    date: date
+    event: str = Field(min_length=1, max_length=200)
 
 
 def _max_job_year() -> int:
@@ -29,6 +46,9 @@ class JobCreate(BaseModel):
     experience_md: str = Field(min_length=1)
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
     timeline_md: str | None = None
+    timeline_events: list[TimelineEvent] | None = Field(
+        default=None, max_length=TIMELINE_EVENTS_MAX
+    )
 
     @field_validator("job_year")
     @classmethod
@@ -45,6 +65,9 @@ class JobUpdate(BaseModel):
     experience_md: str | None = Field(default=None, min_length=1)
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
     timeline_md: str | None = None
+    timeline_events: list[TimelineEvent] | None = Field(
+        default=None, max_length=TIMELINE_EVENTS_MAX
+    )
 
     @field_validator("job_year")
     @classmethod
@@ -64,6 +87,7 @@ class JobResponse(BaseModel):
     experience_md: str
     real_name: str | None
     timeline_md: str | None
+    timeline_events: list[TimelineEvent] | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
