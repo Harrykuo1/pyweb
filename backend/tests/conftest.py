@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 
 # Set required env vars before importing app modules so Settings() loads.
 os.environ.setdefault("SESSION_SECRET", "test-session-secret")
@@ -9,11 +10,33 @@ os.environ.setdefault("SEED_VIEWER_USERNAME", "test-viewer")
 os.environ.setdefault("SEED_VIEWER_PASSWORD", "test-viewer-pw")
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
+
+
+@contextmanager
+def count_queries(engine):
+    """Capture every SQL statement issued against `engine` while the
+    block runs. The returned list is appended to in real time, so
+    callers can assert exact counts after exiting the block.
+
+    Used to lock in N+1 guarantees on hot list endpoints — if a future
+    change accidentally touches a deferred column during list
+    serialization, the per-row SELECTs show up here.
+    """
+    statements: list[str] = []
+
+    def listener(_conn, _cursor, statement, *_args, **_kw):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
 
 
 @pytest.fixture

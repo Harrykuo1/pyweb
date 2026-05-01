@@ -14,7 +14,17 @@ class Member(Base):
     real_name: Mapped[str] = mapped_column(String(64), nullable=False)
     institution: Mapped[str] = mapped_column(String(128), nullable=False)
     position: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    photo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # photo and resume_pdf are deferred so list queries don't drag the
+    # multi-MB BLOB through SQLite -> Python memory just to be discarded
+    # by the response schema. They get loaded only when the dedicated
+    # binary endpoints actually access the column. has_photo and
+    # has_resume_pdf below intentionally read the small companion
+    # columns (content_type / updated_at) so they don't trigger the
+    # deferred load — that's how we avoid turning the optimisation into
+    # a real N+1.
+    photo: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, deferred=True
+    )
     photo_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Bumped on every photo upload, cleared on delete. Used by the frontend
     # as a cache-busting version stamp so browsers refetch only when the
@@ -22,8 +32,13 @@ class Member(Base):
     photo_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # resume_md is intentionally NOT deferred: MemberResponse exposes its
+    # raw markdown in the list payload, so deferring would trigger a
+    # per-row SELECT during response serialization (i.e. a real N+1).
     resume_md: Mapped[str | None] = mapped_column(Text, nullable=True)
-    resume_pdf: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    resume_pdf: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, deferred=True
+    )
     resume_pdf_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -35,7 +50,11 @@ class Member(Base):
 
     @property
     def has_photo(self) -> bool:
-        return self.photo is not None
+        # Read the companion small column rather than the deferred BLOB.
+        # photo_content_type is set in lockstep with photo on upload and
+        # cleared together on delete, so it's a faithful indicator that
+        # doesn't require pulling the bytes off disk.
+        return self.photo_content_type is not None
 
     @property
     def has_resume_md(self) -> bool:
@@ -43,4 +62,5 @@ class Member(Base):
 
     @property
     def has_resume_pdf(self) -> bool:
-        return self.resume_pdf is not None
+        # Companion non-deferred column: set on upload, cleared on delete.
+        return self.resume_pdf_updated_at is not None
