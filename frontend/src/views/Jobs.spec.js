@@ -112,6 +112,20 @@ describe('Jobs.vue — initial load', () => {
     const { wrapper } = await mountPage(sample, 17)
     expect(wrapper.text()).toContain('17 筆')
   })
+
+  it('renders the category chip with an inner text span (marquee target)', async () => {
+    // The hover-marquee animates an inner .category-chip-text span
+    // independently of the chip outer; assert the structure is intact
+    // so the marquee handler can find its target. Animation itself is
+    // not testable in jsdom (no layout), so this is structural only.
+    const withCategory = [{ ...sample[0], category: 'Design Verification' }]
+    const { wrapper } = await mountPage(withCategory)
+    const chip = wrapper.find('[data-test="card-category"]')
+    expect(chip.exists()).toBe(true)
+    const inner = chip.find('.category-chip-text')
+    expect(inner.exists()).toBe(true)
+    expect(inner.text()).toBe('Design Verification')
+  })
 })
 
 describe('Jobs.vue — empty state', () => {

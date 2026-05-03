@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -142,6 +142,40 @@ function onDetailEdit(job) {
   // its own close emit, so opening the form on the next tick keeps
   // the el-overlay z-index stack tidy.
   setTimeout(() => openEdit(job), 0)
+}
+
+// Marquee-on-hover for the category chip when its text overflows.
+// Triggered on the whole card (not the chip) — the card is the primary
+// hover target, and the chip is too small a hit area on its own.
+// Single-direction loop via dual-copy: a ghost copy follows the primary
+// with a fixed gap; we translate the chip's content from 0 to
+// -(textWidth + gap), at which point the ghost sits where the primary
+// started, so the animation jumps back to 0 seamlessly.
+const marqueeing = reactive(new Set())
+const CHIP_PADDING_X = 20 // 10px each side, must mirror .category-chip padding
+const CHIP_GAP = 24 // .category-chip-text--ghost padding-left
+
+function onCardHover(e, item) {
+  const chip = e.currentTarget.querySelector('.category-chip')
+  if (!chip) return
+  // chip.scrollWidth includes left+right padding; subtract to get the
+  // text content width. Default-state text is inline so its own
+  // offsetWidth is unreliable.
+  const textWidth = chip.scrollWidth - CHIP_PADDING_X
+  if (textWidth <= chip.clientWidth - CHIP_PADDING_X + 1) return // no overflow
+  const distance = textWidth + CHIP_GAP
+  const duration = Math.max(3, distance / 30) // ~30px/sec for slow read
+  chip.style.setProperty('--marquee-distance', `-${distance}px`)
+  chip.style.setProperty('--marquee-duration', `${duration}s`)
+  marqueeing.add(item.id)
+}
+
+function onCardLeave(e, item) {
+  marqueeing.delete(item.id)
+  const chip = e.currentTarget.querySelector('.category-chip')
+  if (!chip) return
+  chip.style.removeProperty('--marquee-distance')
+  chip.style.removeProperty('--marquee-duration')
 }
 
 const deleteDialogOpen = ref(false)
@@ -507,6 +541,8 @@ onMounted(loadItems)
         @click="openDetail(i)"
         @keydown.enter="openDetail(i)"
         @keydown.space.prevent="openDetail(i)"
+        @mouseenter="(e) => onCardHover(e, i)"
+        @mouseleave="(e) => onCardLeave(e, i)"
       >
         <span class="card-stripe" aria-hidden="true"></span>
         <span class="card-glow" aria-hidden="true"></span>
@@ -520,8 +556,14 @@ onMounted(loadItems)
             v-if="i.category"
             class="category-chip"
             data-test="card-category"
+            :class="{ 'is-marqueeing': marqueeing.has(i.id) }"
           >
-            {{ i.category }}
+            <span class="category-chip-text">{{ i.category }}</span>
+            <span
+              v-if="marqueeing.has(i.id)"
+              class="category-chip-text category-chip-text--ghost"
+              aria-hidden="true"
+            >{{ i.category }}</span>
           </span>
         </div>
 
@@ -962,10 +1004,13 @@ onMounted(loadItems)
 
 .card-tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
   margin-bottom: 2px;
+  /* Allow the chip child to shrink below its intrinsic content width
+     so it stays inline with .kind-badge instead of wrapping. */
+  min-width: 0;
 }
 
 .kind-badge {
@@ -979,13 +1024,18 @@ onMounted(loadItems)
   border-radius: 999px;
   background: var(--card-accent-soft);
   color: var(--card-accent-ink);
+  /* Pin the kind label at full size — only the category chip should
+     compress when the row runs out of room. */
+  flex-shrink: 0;
 }
 
 /* Neutral, slightly recessive so the kind-badge keeps visual primacy.
    The chip sits right next to it like a secondary tag. */
 .category-chip {
-  display: inline-flex;
-  align-items: center;
+  /* inline-block (not inline-flex) so the chip is a text container —
+     text-overflow: ellipsis applies to inline children's text content. */
+  display: inline-block;
+  vertical-align: middle;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -993,10 +1043,53 @@ onMounted(loadItems)
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.06);
   color: var(--ink-700);
-  max-width: 12ch;
+  /* Required for shrink-below-content inside .card-tags' flex row. */
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
+}
+
+/* Default state: inline so the chip's text-overflow ellipsis sees the
+   text as part of its own inline content and can clip with "…". */
+.category-chip-text {
+  display: inline;
+  white-space: nowrap;
+}
+
+/* While marqueeing both copies become inline-block so they're
+   transformable; ghost provides the loop seam via padding-left. */
+.category-chip.is-marqueeing {
+  text-overflow: clip;
+}
+
+.category-chip.is-marqueeing .category-chip-text {
+  display: inline-block;
+  animation: chip-marquee var(--marquee-duration, 6s) linear infinite;
+}
+
+.category-chip-text--ghost {
+  /* Gap between the primary copy and its ghost; the marquee distance
+     accounts for this so the ghost lands exactly where the primary
+     started, hiding the iteration boundary. */
+  padding-left: 24px;
+}
+
+@keyframes chip-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(var(--marquee-distance, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-chip.is-marqueeing .category-chip-text {
+    animation: none;
+  }
 }
 
 .kind-dot {
