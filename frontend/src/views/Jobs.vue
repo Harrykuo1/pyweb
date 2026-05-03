@@ -13,7 +13,6 @@ import {
   Briefcase,
   Calendar,
   Delete,
-  Edit,
   OfficeBuilding,
   Operation,
   Plus,
@@ -550,28 +549,6 @@ onMounted(loadItems)
           </span>
         </div>
 
-        <div v-if="auth.isAdmin" class="card-admin-actions" @click.stop>
-          <button
-            type="button"
-            class="card-admin-btn"
-            data-test="edit-job-button"
-            aria-label="編輯"
-            title="編輯"
-            @click="openEdit(i)"
-          >
-            <el-icon :size="14"><Edit /></el-icon>
-          </button>
-          <button
-            type="button"
-            class="card-admin-btn card-admin-btn--danger"
-            data-test="delete-job-button"
-            aria-label="刪除"
-            title="刪除"
-            @click="askDelete(i)"
-          >
-            <el-icon :size="14"><Delete /></el-icon>
-          </button>
-        </div>
       </article>
     </div>
 
@@ -1101,52 +1078,6 @@ onMounted(loadItems)
 
 .meta-date {
   margin-left: auto;
-}
-
-/* ----- Admin actions on card (hover-revealed) ----- */
-.card-admin-actions {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: inline-flex;
-  gap: 4px;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity var(--dur) var(--ease),
-    transform var(--dur) var(--ease);
-}
-
-.record-card:hover .card-admin-actions,
-.record-card:focus-within .card-admin-actions {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.card-admin-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(6px);
-  color: var(--ink-700);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), border-color var(--dur) var(--ease);
-}
-
-.card-admin-btn:hover {
-  background: #ffffff;
-  color: var(--card-accent-ink);
-  border-color: var(--card-accent-soft);
-}
-
-.card-admin-btn--danger:hover {
-  color: #b91c1c;
-  border-color: rgba(220, 38, 38, 0.3);
 }
 
 /* ============================================================

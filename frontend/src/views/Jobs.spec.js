@@ -403,15 +403,23 @@ describe('Jobs.vue — refresh button', () => {
 })
 
 describe('Jobs.vue — admin delete flow', () => {
-  it('hides delete button for viewers', async () => {
+  // Edit/delete moved off the card into JobDetailDialog's footer-extra
+  // slot (admin-only). These tests open the detail dialog first, then
+  // exercise the delete button there.
+
+  it('hides delete button for viewers inside the detail dialog', async () => {
     const { wrapper } = await mountPage(sample, sample.length, 'viewer')
-    expect(wrapper.find('[data-test="delete-job-button"]').exists())
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="detail-delete-button"]').exists())
       .toBe(false)
   })
 
-  it('shows delete button for admin and triggers the password dialog', async () => {
+  it('shows delete button for admin inside the detail dialog', async () => {
     const { wrapper } = await mountPage(sample, sample.length, 'admin')
-    expect(wrapper.find('[data-test="delete-job-button"]').exists())
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="detail-delete-button"]').exists())
       .toBe(true)
   })
 
@@ -419,11 +427,12 @@ describe('Jobs.vue — admin delete flow', () => {
     const remove = vi.spyOn(jobsApi, 'remove').mockResolvedValue()
     const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
 
-    // Click the delete affordance on the first card.
-    await wrapper.find('[data-test="delete-job-button"]').trigger('click')
+    // Open the first card's detail dialog, then click delete inside it.
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
     await flushPromises()
 
-    // Drive the confirm directly via the DeleteWithPasswordDialog's emit.
     const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
     expect(dialog.exists()).toBe(true)
     listSpy.mockClear()
@@ -440,7 +449,9 @@ describe('Jobs.vue — admin delete flow', () => {
     })
     const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
 
-    await wrapper.find('[data-test="delete-job-button"]').trigger('click')
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
     await flushPromises()
     const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
 
