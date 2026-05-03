@@ -307,12 +307,19 @@ function buildPayload() {
   // empty list goes through as []; the backend distinguishes [] (admin
   // chose no timeline) from null (legacy markdown-only job) and we
   // always send the structured form here.
+  //
+  // Sort by date asc on submit — the editor preserves entry order so
+  // the admin's caret never jumps mid-typing, but the persisted /
+  // displayed order is always chronological. ISO YYYY-MM-DD strings
+  // sort lexicographically = chronologically; V8's Array#sort is
+  // stable so same-date rows keep their entry order.
   const cleanedEvents = form.timeline_events
     .map((e) => ({
       date: typeof e.date === 'string' ? e.date : null,
       event: typeof e.event === 'string' ? e.event.trim() : '',
     }))
     .filter((e) => e.date !== null && e.event.length > 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
   return {
     kind: form.kind,
     job_year: form.job_year,

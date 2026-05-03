@@ -289,6 +289,41 @@ describe('JobFormDialog — submit', () => {
     expect(payload.timeline_md).toBeNull()
   })
 
+  it('sorts timeline_events by date ascending on submit (stable for same-date rows)', async () => {
+    // Editor preserves entry order so the admin's caret never jumps,
+    // but buildPayload sorts chronologically before sending. Same-date
+    // rows keep their entry order via Array#sort's stability.
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      job: {
+        id: 9,
+        kind: 'internship',
+        job_year: 2026,
+        job_month: 4,
+        company: 'Acme',
+        real_name: null,
+        experience_md: '## x',
+        timeline_md: null,
+        timeline_events: [
+          { date: '2026-04-17', event: '拿到 offer' },
+          { date: '2026-02-23', event: '投遞 (entry order 2)' },
+          { date: '2026-02-23', event: '投遞 (entry order 3)' },
+          { date: '2025-12-01', event: '初次接觸' },
+        ],
+      },
+    })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update.mock.calls[0][1].timeline_events).toEqual([
+      { date: '2025-12-01', event: '初次接觸' },
+      { date: '2026-02-23', event: '投遞 (entry order 2)' },
+      { date: '2026-02-23', event: '投遞 (entry order 3)' },
+      { date: '2026-04-17', event: '拿到 offer' },
+    ])
+  })
+
   it('drops timeline rows that are missing date or blank event before saving', async () => {
     // Inject partial rows through the job prop (the editor accepts
     // {date: null, event: ''} as the seed for a freshly-added row,

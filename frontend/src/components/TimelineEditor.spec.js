@@ -63,21 +63,13 @@ describe('TimelineEditor', () => {
     ])
   })
 
-  it('renders a drag handle on every row', () => {
-    const { wrapper } = mountEditor([
-      { date: '2025-02-23', event: 'a' },
-      { date: '2025-03-01', event: 'b' },
-    ])
-    const handles = wrapper.findAll('[data-test="timeline-row-handle"]')
-    expect(handles).toHaveLength(2)
-  })
-
   it('does not leak the internal _id key into emitted modelValue', async () => {
-    // The drag library needs a stable key per row, so the editor
-    // attaches a synthetic _id internally. That field must never
-    // surface in the model the parent (and ultimately the backend)
-    // sees — otherwise the backend's strict TimelineEvent schema
-    // would reject the extra property.
+    // Each row carries a synthetic _id internally so v-for's :key stays
+    // stable across add / remove (otherwise Vue reuses DOM by position
+    // and steals focus from a freshly-edited input). That field must
+    // never surface in the model the parent (and ultimately the
+    // backend) sees — the backend's strict TimelineEvent schema would
+    // reject the extra property.
     const { wrapper, getValue } = mountEditor([])
     await wrapper.find('[data-test="timeline-add"]').trigger('click')
     await wrapper.find('[data-test="timeline-add"]').trigger('click')

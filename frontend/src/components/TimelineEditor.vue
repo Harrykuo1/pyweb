@@ -1,17 +1,16 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElButton, ElDatePicker, ElIcon, ElInput } from 'element-plus'
-import { Delete, InfoFilled, Plus, Rank } from '@element-plus/icons-vue'
-import draggable from 'vuedraggable'
+import { Delete, InfoFilled, Plus } from '@element-plus/icons-vue'
 
 // Structured timeline editor: a vertical list of rows where each row
 // is { date: "YYYY-MM-DD" | null, event: string }.
 //
-// Storage / display order is the order the admin enters them. The
-// admin can re-order rows by dragging the handle on the left of each
-// row. The full ISO date is stored (not just M/D) so recruitment
-// processes that span the year boundary record honestly without
-// needing surrounding job context.
+// The editor preserves entry order so the admin's caret never jumps
+// mid-typing — the actual chronological sort happens in the parent
+// dialog at submit time. The full ISO date is stored (not just M/D)
+// so recruitment processes that span the year boundary record
+// honestly without needing surrounding job context.
 const props = defineProps({
   modelValue: {
     type: Array,
@@ -30,10 +29,10 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-// Local row state carries a synthetic _id per row so vuedraggable
-// has a stable list key during drag (the parent's clean payload
-// has no IDs). _id never leaves this component — emitToParent
-// strips it before bubbling up.
+// Local row state carries a synthetic _id per row so v-for's :key
+// stays stable across add/remove (Vue would otherwise reuse DOM by
+// position and steal focus from a freshly-edited input). _id never
+// leaves this component — emitToParent strips it before bubbling up.
 let _idCounter = 0
 function _newId() {
   _idCounter += 1
@@ -94,10 +93,6 @@ function patchRow(index, patch) {
   emitToParent()
 }
 
-function onDragEnd() {
-  emitToParent()
-}
-
 // When the admin clicks an empty row's date picker, anchor the
 // calendar at the most contextually useful month: the previous
 // row's date if any, otherwise the parent-supplied default
@@ -133,71 +128,51 @@ const accentForRow = computed(() => (index) => {
   <div class="timeline-editor" data-test="timeline-editor">
     <p class="timeline-helper">
       <el-icon :size="13"><InfoFilled /></el-icon>
-      點選或直接輸入日期，例：2025/03/15。可拖曳左側 ⠿ 圖示重新排序。
+      點選或直接輸入日期，例：2025/03/15。儲存時會自動依日期排序。
     </p>
 
-    <draggable
-      v-if="rows.length > 0"
-      :list="rows"
-      tag="ol"
-      class="timeline-rows"
-      handle=".timeline-row-handle"
-      item-key="_id"
-      :animation="180"
-      ghost-class="timeline-row-ghost"
-      drag-class="timeline-row-dragging"
-      @end="onDragEnd"
-    >
-      <template #item="{ element: entry, index }">
-        <li
-          class="timeline-row"
-          :class="`is-${accentForRow(index)}`"
-          data-test="timeline-row"
-        >
-          <span class="row-accent" aria-hidden="true" />
-          <button
-            type="button"
-            class="timeline-row-handle"
-            data-test="timeline-row-handle"
-            aria-label="拖曳排序"
-            title="拖曳排序"
-          >
-            <el-icon :size="16"><Rank /></el-icon>
-          </button>
-          <span class="row-index">{{ index + 1 }}</span>
-          <div class="row-date" data-test="timeline-row-date">
-            <el-date-picker
-              :model-value="entry.date"
-              type="date"
-              value-format="YYYY-MM-DD"
-              format="YYYY/MM/DD"
-              placeholder="YYYY/MM/DD"
-              :default-value="defaultPickerDateFor(index)"
-              class="row-date-picker"
-              @update:model-value="(d) => patchRow(index, { date: d ?? null })"
-            />
-          </div>
-          <div class="row-event" data-test="timeline-row-event">
-            <el-input
-              :model-value="entry.event"
-              maxlength="200"
-              placeholder="事件描述（例：投遞履歷 / 面試邀請 / 拿到 offer）"
-              @update:model-value="(v) => patchRow(index, { event: v })"
-            />
-          </div>
-          <el-button
-            type="danger"
-            text
-            :icon="Delete"
-            size="small"
-            class="row-remove"
-            data-test="timeline-row-remove"
-            aria-label="刪除這筆"
-            @click="removeRow(index)"
+    <ol v-if="rows.length > 0" class="timeline-rows">
+      <li
+        v-for="(entry, index) in rows"
+        :key="entry._id"
+        class="timeline-row"
+        :class="`is-${accentForRow(index)}`"
+        data-test="timeline-row"
+      >
+        <span class="row-accent" aria-hidden="true" />
+        <span class="row-index">{{ index + 1 }}</span>
+        <div class="row-date" data-test="timeline-row-date">
+          <el-date-picker
+            :model-value="entry.date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            format="YYYY/MM/DD"
+            placeholder="YYYY/MM/DD"
+            :default-value="defaultPickerDateFor(index)"
+            class="row-date-picker"
+            @update:model-value="(d) => patchRow(index, { date: d ?? null })"
           />
-        </li>
-      </template>
-    </draggable>
+        </div>
+        <div class="row-event" data-test="timeline-row-event">
+          <el-input
+            :model-value="entry.event"
+            maxlength="200"
+            placeholder="事件描述（例：投遞履歷 / 面試邀請 / 拿到 offer）"
+            @update:model-value="(v) => patchRow(index, { event: v })"
+          />
+        </div>
+        <el-button
+          type="danger"
+          text
+          :icon="Delete"
+          size="small"
+          class="row-remove"
+          data-test="timeline-row-remove"
+          aria-label="刪除這筆"
+          @click="removeRow(index)"
+        />
+      </li>
+    </ol>
     <p v-else class="timeline-empty">尚無時程紀錄，點下方「加一筆」開始。</p>
 
     <el-button
@@ -291,31 +266,6 @@ const accentForRow = computed(() => (index) => {
   background: linear-gradient(180deg, #10b981, #059669);
 }
 
-/* ------- Drag handle ------- */
-.timeline-row-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  color: #94a3b8;
-  cursor: grab;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.timeline-row-handle:hover {
-  background: rgba(99, 102, 241, 0.14);
-  color: #4f46e5;
-}
-
-.timeline-row-handle:active {
-  cursor: grabbing;
-}
-
 /* ------- Row index chip ------- */
 .row-index {
   display: inline-flex;
@@ -386,25 +336,6 @@ const accentForRow = computed(() => (index) => {
 .timeline-add-button {
   align-self: stretch;
   border-style: dashed;
-}
-
-/* ------- Drag states -------
-   Using sortablejs's HTML5 drag mode (no forceFallback): the browser
-   produces the drag image at the cursor while sortablejs reorders
-   the DOM in place. The :list binding (instead of v-model) means
-   sortablejs mutates the row array directly during drag, so Vue
-   does not re-render mid-drag — that was the source of the earlier
-   "row appears twice" residue. */
-.timeline-row-ghost {
-  opacity: 0.4;
-  background: rgba(99, 102, 241, 0.12);
-  border-style: dashed;
-}
-
-.timeline-row-dragging {
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
-  border-color: rgba(99, 102, 241, 0.45);
 }
 
 @media (max-width: 600px) {
