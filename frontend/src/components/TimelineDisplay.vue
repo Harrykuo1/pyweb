@@ -107,6 +107,10 @@ function _positionFor(index, total) {
 .timeline-display {
   --spine-x: 14px;
   --node-size: 14px;
+  /* Gap from the spine to each card's left edge. Used by both
+     .timeline-track (padding-left) and .timeline-node (left), so the
+     two stay aligned when the gap is overridden at smaller widths. */
+  --card-gap: 22px;
   position: relative;
   padding: 8px 4px 16px;
 }
@@ -122,7 +126,7 @@ function _positionFor(index, total) {
 .timeline-track {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 calc(var(--spine-x) + 22px);
+  padding: 0 0 0 calc(var(--spine-x) + var(--card-gap));
   position: relative;
   display: flex;
   flex-direction: column;
@@ -206,12 +210,18 @@ function _positionFor(index, total) {
 /* ------- Spine node ------- */
 .timeline-node {
   position: absolute;
-  left: calc(-1 * (22px + var(--spine-x)) + var(--spine-x) - var(--node-size) / 2 + 1px);
+  /* Dot sits on the spine: card's left edge is at `--card-gap` from the
+     spine, so shift the dot left by that gap, then by half the node so
+     the centre lands on the spine, plus 1px for the spine's 2px width. */
+  left: calc(-1 * var(--card-gap) - var(--node-size) / 2 + 1px);
   /* Centre on the card vertically, regardless of how many lines the
      event text takes — single-line vs wrapped events used to make
      the dots sit visibly above centre. */
   top: 50%;
   transform: translateY(-50%);
+  /* border-box keeps the rendered size at exactly --node-size; without
+     it the 3px border pushes the visual circle 3px right of the spine. */
+  box-sizing: border-box;
   width: var(--node-size);
   height: var(--node-size);
   border-radius: 50%;
@@ -319,8 +329,8 @@ function _positionFor(index, total) {
 }
 
 @media (max-width: 600px) {
-  .timeline-track {
-    padding-left: calc(var(--spine-x) + 16px);
+  .timeline-display {
+    --card-gap: 16px;
   }
   .timeline-event-card {
     padding: 12px 14px;
