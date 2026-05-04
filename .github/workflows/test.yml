@@ -66,9 +66,11 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
-  # Required secrets: SSH_HOST, SSH_USER, SSH_PORT, SSH_PRIVATE_KEY, DEPLOY_PATH.
+  # Required secrets: JENKINS_URL, JENKINS_USER, JENKINS_API_TOKEN.
+  # The actual deploy runs in Jenkins (Jenkinsfile at repo root); this job
+  # just kicks off pyweb-deploy via Jenkins's remote build API.
   deploy:
-    name: deploy to server
+    name: trigger Jenkins deploy
     needs: [backend, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -76,38 +78,17 @@ jobs:
       group: deploy-prod
       cancel-in-progress: false
     steps:
-      - name: Pull and rebuild on the server
+      - name: Trigger Jenkins build
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
         run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -T 15 -p "$SSH_PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
-          [ -s ~/.ssh/known_hosts ] || { echo "ssh-keyscan returned no host keys"; exit 1; }
-          echo "--- nc tcp probe ---"
-          nc -vz -w 10 "$SSH_HOST" "$SSH_PORT" || { echo "tcp probe failed"; exit 1; }
-          echo "--- nc tcp probe ok ---"
-          ssh -vvv \
-            -i ~/.ssh/id_deploy \
-            -o IdentitiesOnly=yes \
-            -o BatchMode=yes \
-            -o KexAlgorithms=-sntrup761x25519-sha512@openssh.com \
-            -o IPQoS=none \
-            -o ConnectTimeout=20 \
-            -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            DEPLOY_PATH="$DEPLOY_PATH" bash -se <<'REMOTE'
-              set -e
-              cd "$DEPLOY_PATH"
-              git fetch --prune origin
-              git pull --ff-only origin main
-              docker compose build
-              docker compose up -d
-              docker compose ps
-          REMOTE
+          set -eu
+          http_code=$(curl -sS -o /tmp/jenkins.out -w "%{http_code}" \
+            -X POST \
+            -u "$JENKINS_USER:$JENKINS_API_TOKEN" \
+            "$JENKINS_URL/job/pyweb-deploy/build")
+          echo "HTTP $http_code"
+          cat /tmp/jenkins.out 2>/dev/null || true
+          [ "$http_code" = "201" ]
