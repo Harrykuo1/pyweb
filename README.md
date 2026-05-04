@@ -245,3 +245,4 @@ SEED_VIEWER_PASSWORD=...
 > - **完全重置**：`rm backend/pyweb.db && cd backend && .venv/bin/python -m app.init_db`（會清掉所有資料，包含成員與求職紀錄；`init_db` 會自動 alembic upgrade 出新 schema）。
 
 登入只認密碼（不問 username），所以兩個帳號的密碼必須不同；UI 在改密碼時會擋住撞號。
+ 
