@@ -66,38 +66,38 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
-  # Auto-deploy is disabled until the server-side firewall situation is
-  # sorted out — GitHub Actions runner IPs can't currently reach the
-  # server's SSH port, so the job hangs forever instead of deploying.
-  # Re-enable once the firewall is opened (or once we move to a
-  # self-hosted runner). Required secrets when re-enabled:
-  # SSH_HOST, SSH_USER, SSH_PORT, SSH_PRIVATE_KEY, DEPLOY_PATH.
-  #
-  # deploy:
-  #   name: deploy to server
-  #   needs: [backend, frontend]
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  #   runs-on: ubuntu-latest
-  #   concurrency:
-  #     group: deploy-prod
-  #     cancel-in-progress: false
-  #   steps:
-  #     - name: Pull and rebuild on the server
-  #       uses: appleboy/ssh-action@v1.2.0
-  #       with:
-  #         host: ${{ secrets.SSH_HOST }}
-  #         username: ${{ secrets.SSH_USER }}
-  #         port: ${{ secrets.SSH_PORT }}
-  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
-  #         script_stop: true
-  #         envs: DEPLOY_PATH
-  #         script: |
-  #           set -e
-  #           cd "$DEPLOY_PATH"
-  #           git fetch --prune origin
-  #           git pull --ff-only origin main
-  #           docker compose build
-  #           docker compose up -d
-  #           docker compose ps
-  #       env:
-  #         DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+  # Required secrets: SSH_HOST, SSH_USER, SSH_PORT, SSH_PRIVATE_KEY, DEPLOY_PATH.
+  deploy:
+    name: deploy to server
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - name: Pull and rebuild on the server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -T 15 -p "$SSH_PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
+          [ -s ~/.ssh/known_hosts ] || { echo "ssh-keyscan returned no host keys"; exit 1; }
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            DEPLOY_PATH="$DEPLOY_PATH" bash -se <<'REMOTE'
+              set -e
+              cd "$DEPLOY_PATH"
+              git fetch --prune origin
+              git pull --ff-only origin main
+              docker compose build
+              docker compose up -d
+              docker compose ps
+          REMOTE
