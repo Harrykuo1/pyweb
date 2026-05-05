@@ -133,12 +133,12 @@ describe('ActivityFeed.vue', () => {
     expect(row.text()).toContain('正職')
   })
 
-  it('navigates to /members on member_joined click', async () => {
+  it('deep-links to /members?focus=<id> on member_joined click', async () => {
     const { wrapper } = await mountFeed([
       {
         type: 'member_joined',
         timestamp: ONE_HOUR_AGO,
-        member_id: 1,
+        member_id: 12,
         real_name: 'Alice',
         institution: 'NTU',
         position: null,
@@ -149,10 +149,13 @@ describe('ActivityFeed.vue', () => {
     await wrapper
       .find('[data-test="activity-row-member_joined"]')
       .trigger('click')
-    expect(pushMock).toHaveBeenCalledWith('/members')
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/members',
+      query: { focus: '12' },
+    })
   })
 
-  it('navigates to /jobs on job_created click', async () => {
+  it('deep-links to /jobs?detail=<id> on job_created click', async () => {
     const { wrapper } = await mountFeed([
       {
         type: 'job_created',
@@ -167,7 +170,10 @@ describe('ActivityFeed.vue', () => {
       },
     ])
     await wrapper.find('[data-test="activity-row-job_created"]').trigger('click')
-    expect(pushMock).toHaveBeenCalledWith('/jobs')
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/jobs',
+      query: { detail: '9' },
+    })
   })
 
   it('activates a row via Enter key for keyboard accessibility', async () => {
@@ -175,7 +181,7 @@ describe('ActivityFeed.vue', () => {
       {
         type: 'member_joined',
         timestamp: ONE_HOUR_AGO,
-        member_id: 1,
+        member_id: 12,
         real_name: 'Alice',
         institution: 'NTU',
         position: null,
@@ -186,7 +192,10 @@ describe('ActivityFeed.vue', () => {
     await wrapper
       .find('[data-test="activity-row-member_joined"]')
       .trigger('keydown', { key: 'Enter' })
-    expect(pushMock).toHaveBeenCalledWith('/members')
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/members',
+      query: { focus: '12' },
+    })
   })
 
   it('passes the limit prop through to the API', async () => {

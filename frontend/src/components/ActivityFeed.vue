@@ -18,6 +18,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import { activityApi } from '../api/activity'
+import { jobsApi } from '../api/jobs'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
 
@@ -70,10 +71,13 @@ function memberAvatarUrl(item) {
 }
 
 function handleClick(item) {
+  // Route shapes are owned by the destination api modules so the URL
+  // schema (query keys, path) lives next to the page that consumes it
+  // — see jobsApi.detailRoute / membersApi.focusRoute.
   if (item.type === 'member_joined') {
-    router.push('/members')
+    router.push(membersApi.focusRoute(item.member_id))
   } else if (item.type === 'job_created') {
-    router.push('/jobs')
+    router.push(jobsApi.detailRoute(item.job_id))
   }
 }
 
