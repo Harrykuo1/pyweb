@@ -55,12 +55,20 @@ trap 'rm -rf "$TMP"' EXIT
 # backend is mid-write — a plain `cp` could capture a torn file when a
 # transaction is in flight.
 #
-# -readonly opens the source without requesting a write lock. Required
-# whenever the user running the backup doesn't own the DB file (e.g.
-# pyweb.db owned by `jenkins` from a CI deploy, but cron runs as
-# another account). Without it, sqlite3 silently hangs trying to
-# acquire a write lock it can never get.
-sqlite3 -readonly "$DB_PATH" ".backup $TMP/pyweb.db"
+# ?immutable=1 tells SQLite to treat the DB as read-only media and
+# bypass the WAL/shm coordination protocol entirely. Without it, an
+# unprivileged user (e.g. cron user that doesn't own pyweb.db-shm)
+# silently hangs forever — WAL mode requires every connection,
+# readers included, to write to the -shm file, and `-readonly` alone
+# doesn't waive that requirement.
+#
+# Trade-off: the snapshot misses any rows still living in pyweb.db-wal
+# that haven't been checkpointed back into the main DB yet. SQLite
+# auto-checkpoints every ~1000 pages (~4 MB), so for a low-write
+# workload the WAL is usually empty at backup time. If you cannot
+# accept that gap, schedule a `docker compose stop backend` around
+# the backup instead and remove this flag.
+sqlite3 "file:$DB_PATH?immutable=1" ".backup $TMP/pyweb.db"
 
 # Compress in place; SQLite is highly compressible (lots of NULL padding,
 # repetitive BLOB headers), typically 3–5× smaller after gzip -9.
