@@ -52,9 +52,15 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 # Atomic SQLite snapshot. `.backup` copies pages safely even if the
-# backend is mid-write under WAL — a plain `cp` could capture a torn
-# file when a transaction is in flight.
-sqlite3 "$DB_PATH" ".backup $TMP/pyweb.db"
+# backend is mid-write — a plain `cp` could capture a torn file when a
+# transaction is in flight.
+#
+# -readonly opens the source without requesting a write lock. Required
+# whenever the user running the backup doesn't own the DB file (e.g.
+# pyweb.db owned by `jenkins` from a CI deploy, but cron runs as
+# another account). Without it, sqlite3 silently hangs trying to
+# acquire a write lock it can never get.
+sqlite3 -readonly "$DB_PATH" ".backup $TMP/pyweb.db"
 
 # Compress in place; SQLite is highly compressible (lots of NULL padding,
 # repetitive BLOB headers), typically 3–5× smaller after gzip -9.
