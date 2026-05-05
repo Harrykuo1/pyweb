@@ -58,7 +58,22 @@ beforeEach(() => {
       dispatchEvent: vi.fn(),
     })),
   )
-  vi.spyOn(activityApi, 'list').mockResolvedValue({ items: [] })
+  // ActivityFeed installs an IntersectionObserver on mount; jsdom
+  // doesn't provide one, so stub a no-op class. Home tests don't drive
+  // lazy-load behavior — that's covered in ActivityFeed.spec — they
+  // just need the constructor to exist.
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  )
+  vi.spyOn(activityApi, 'list').mockResolvedValue({
+    items: [],
+    has_more: false,
+  })
   vi.spyOn(statsApi, 'get').mockResolvedValue(SAMPLE_STATS)
   vi.spyOn(membersApi, 'list').mockResolvedValue(makeMembers(SAMPLE_STATS.total_members))
 })
@@ -249,5 +264,17 @@ describe('Home.vue — activity preview integration', () => {
     await flushPromises()
     expect(wrapper.find('[data-test="hero-feed"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="spotlight-card"]').exists()).toBe(true)
+  })
+
+  it('boots the standalone feed with the configured pageSize as the first batch', async () => {
+    // The full feed below the hero now lazy-loads via cursor pagination;
+    // its first request is just `limit=<pageSize>` (no `before` cursor).
+    // Subsequent batches are driven by the IntersectionObserver inside
+    // ActivityFeed itself and aren't asserted from here.
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'alice', role: 'admin' }
+    mount(Home)
+    await flushPromises()
+    expect(activityApi.list).toHaveBeenCalledWith({ limit: 20 })
   })
 })

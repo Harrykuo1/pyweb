@@ -271,7 +271,7 @@ function focusMember(id) {
     </section>
 
     <div id="activity-feed-section">
-      <ActivityFeed :limit="10" />
+      <ActivityFeed :page-size="20" />
     </div>
   </div>
 </template>

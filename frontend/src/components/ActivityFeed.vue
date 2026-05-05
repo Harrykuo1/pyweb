@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ElCollapseTransition,
@@ -12,6 +12,7 @@ import {
 import {
   ArrowDown,
   Calendar,
+  Loading,
   OfficeBuilding,
   Promotion,
   UserFilled,
@@ -23,12 +24,18 @@ import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
 
 const props = defineProps({
-  limit: { type: Number, default: 10 },
+  // Page size for the cursor-paginated fetch. Each request asks the
+  // server for this many rows starting from the current cursor; once
+  // the user scrolls near the bottom, an IntersectionObserver fires
+  // and we fetch the next batch with `before = lastItem.timestamp`.
+  pageSize: { type: Number, default: 20 },
 })
 
 const router = useRouter()
 const items = ref([])
-const loading = ref(false)
+const loading = ref(false)        // initial fetch only
+const loadingMore = ref(false)    // every fetch after the first
+const hasMore = ref(false)
 const errored = ref(false)
 
 // Always-expanded by default on every page load. We deliberately don't
@@ -38,28 +45,119 @@ const errored = ref(false)
 // real-estate reasons.
 const collapsed = ref(false)
 
+// Refs the IntersectionObserver needs: the scrollable container is the
+// observer root, the sentinel is the element we watch for intersection.
+const listRef = ref(null)
+const sentinelRef = ref(null)
+let observer = null
+
 const KIND_LABEL = {
   internship: '實習',
   fulltime: '正職',
 }
 
-async function load() {
+async function loadInitial() {
   loading.value = true
   errored.value = false
   try {
-    const data = await activityApi.list({ limit: props.limit })
+    const data = await activityApi.list({ limit: props.pageSize })
     items.value = data.items ?? []
+    hasMore.value = Boolean(data.has_more)
   } catch (err) {
     // Auth-redirect interceptor handles 401; any other failure should
     // degrade gracefully — the home page still has its hero + cards.
     errored.value = true
     items.value = []
+    hasMore.value = false
   } finally {
     loading.value = false
   }
 }
 
-onMounted(load)
+async function loadMore() {
+  // Three guards: don't double-fire, don't fetch past the end, don't
+  // run before the first batch (we have no cursor without items).
+  if (loadingMore.value || !hasMore.value || items.value.length === 0) return
+
+  // Disconnect during the in-flight fetch so a stale "still intersecting"
+  // event can't queue up another call. We rebind right after items
+  // change so the observer re-evaluates against the new layout — if the
+  // sentinel is still in view (e.g. fetched fewer rows than the visible
+  // window can show) it'll fire again and the cascade resolves itself.
+  teardownObserver()
+  loadingMore.value = true
+  try {
+    const cursor = items.value[items.value.length - 1].timestamp
+    const data = await activityApi.list({
+      limit: props.pageSize,
+      before: cursor,
+    })
+    items.value = [...items.value, ...(data.items ?? [])]
+    hasMore.value = Boolean(data.has_more)
+  } catch {
+    // Silent failure on lazy-load: keep what we have, hide the sentinel
+    // so the observer stops firing on every scroll. The user can refresh
+    // the page to retry — the standalone error surface is reserved for
+    // initial-load failures, where there's nothing to show at all.
+    hasMore.value = false
+  } finally {
+    loadingMore.value = false
+  }
+
+  await nextTick()
+  setupObserver()
+}
+
+function setupObserver() {
+  if (typeof IntersectionObserver === 'undefined') return
+  if (collapsed.value || !hasMore.value) return
+  if (!listRef.value || !sentinelRef.value) return
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          loadMore()
+        }
+      }
+    },
+    {
+      // The list itself is the scroll container, so intersection is
+      // measured against its viewport, not the page's.
+      root: listRef.value,
+      // Pre-fetch when the sentinel is within 200 px of the bottom edge
+      // — gives the network round-trip time to finish before the user
+      // actually hits the floor.
+      rootMargin: '200px 0px',
+      threshold: 0.01,
+    },
+  )
+  observer.observe(sentinelRef.value)
+}
+
+function teardownObserver() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+}
+
+onMounted(async () => {
+  await loadInitial()
+  await nextTick()
+  setupObserver()
+})
+
+onBeforeUnmount(teardownObserver)
+
+// React to state that changes whether the observer should be running:
+// collapsing hides the sentinel, has_more flipping false retires it,
+// loading→false brings the real list (and its refs) into the DOM.
+watch([collapsed, hasMore, loading], async () => {
+  teardownObserver()
+  await nextTick()
+  setupObserver()
+})
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
@@ -165,7 +263,12 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
           />
         </div>
 
-        <ul v-else class="feed-list" data-test="activity-list">
+        <ul
+          v-else
+          ref="listRef"
+          class="feed-list"
+          data-test="activity-list"
+        >
           <li
             v-for="item in items"
             :key="`${item.type}:${item.type === 'member_joined' ? item.member_id : item.job_id}`"
@@ -250,6 +353,29 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
               <el-icon class="row-time-icon" :size="12"><Calendar /></el-icon>
               {{ relativeTime(item.timestamp) }}
             </time>
+          </li>
+
+          <!-- Lazy-load sentinel: an empty row at the end of the list
+               that the IntersectionObserver watches. As soon as it
+               enters view (or gets within 200 px of it), we fetch the
+               next batch with `before = lastItem.timestamp`. We only
+               render it when there's actually more to fetch — once
+               `hasMore` flips false the sentinel disappears, the
+               observer disconnects, and the cascade ends silently. -->
+          <li
+            v-if="hasMore"
+            ref="sentinelRef"
+            class="feed-sentinel"
+            aria-hidden="true"
+            data-test="activity-sentinel"
+          >
+            <el-icon
+              v-if="loadingMore"
+              class="feed-sentinel-spinner"
+              :size="14"
+            >
+              <Loading />
+            </el-icon>
           </li>
         </ul>
       </div>
@@ -359,6 +485,62 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
   padding: 0;
   display: flex;
   flex-direction: column;
+  /* Cap the expanded feed at ~6 rows so the home page doesn't grow
+     with every new activity — anything beyond uses the inner scroll.
+     The cut-off lands mid-row to signal "more below" without needing
+     a separate fade overlay. */
+  max-height: 420px;
+  overflow-y: auto;
+  /* Setting overflow-y to a non-visible value forces overflow-x to
+     compute as `auto` per the CSS spec — without this explicit hidden,
+     a long company name + scrollbar-gutter shaving 6 px off the row
+     width is enough to spawn a horizontal scrollbar. min-width: 0 +
+     ellipsis already keep content visually contained, so clipping the
+     last sub-pixel is safe. */
+  overflow-x: hidden;
+  /* Reserve gutter so the row width doesn't twitch when the scrollbar
+     comes and goes (overlay-scrollbar systems). */
+  scrollbar-gutter: stable;
+  /* Slim, low-contrast scrollbar to match the dialog body style in
+     style.css so the feed doesn't sprout a chunky default bar. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 23, 42, 0.15) transparent;
+}
+
+.feed-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.feed-list::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 999px;
+}
+
+.feed-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- lazy-load sentinel ---------- */
+.feed-sentinel {
+  /* Quiet end-of-list footer that doubles as the IntersectionObserver
+     target. Just tall enough that it can intersect comfortably with
+     the 200 px rootMargin even when the list is nearly empty. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 8px 0;
+  pointer-events: none;
+}
+
+.feed-sentinel-spinner {
+  color: var(--ink-300);
+  animation: feed-sentinel-spin 0.9s linear infinite;
+}
+
+@keyframes feed-sentinel-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .feed-row {
@@ -665,6 +847,13 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 
   .row-main {
     flex-basis: calc(100% - 50px);
+  }
+
+  .feed-list {
+    /* On phones each row wraps the time below the text, so 420 px
+       only fits ~5 rows. Switch to vh so the cap scales with the
+       viewport instead of dominating very short screens. */
+    max-height: 60vh;
   }
 }
 </style>
