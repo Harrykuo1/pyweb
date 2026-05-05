@@ -18,6 +18,7 @@ from app.schemas.job import (
     ListResponse,
 )
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
+from app.schemas.stats import StatsResponse
 
 __all__ = [
     "ActivityItem",
@@ -33,6 +34,7 @@ __all__ = [
     "MemberResponse",
     "MemberUpdate",
     "PasswordConfirmRequest",
+    "StatsResponse",
     "UpdatePasswordRequest",
     "UpdateUsernameRequest",
     "UserResponse",

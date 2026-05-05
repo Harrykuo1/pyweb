@@ -11,6 +11,7 @@ from app.routers import auth as auth_router
 from app.routers import jobs as jobs_router
 from app.routers import members as members_router
 from app.routers import settings as settings_router
+from app.routers import stats as stats_router
 
 app = FastAPI(title="pyweb backend")
 
@@ -41,6 +42,7 @@ app.include_router(auth_router.router)
 app.include_router(members_router.router)
 app.include_router(jobs_router.router)
 app.include_router(activity_router.router)
+app.include_router(stats_router.router)
 app.include_router(settings_router.router)
 
 
