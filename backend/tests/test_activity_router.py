@@ -99,7 +99,7 @@ def test_list_activity_empty(client_factory):
     login_as("viewer")
     r = client.get("/api/activity")
     assert r.status_code == 200
-    assert r.json() == {"items": []}
+    assert r.json() == {"items": [], "has_more": False}
 
 
 def test_list_activity_only_members(client_factory, db_session):
@@ -252,3 +252,127 @@ def test_list_activity_rejects_limit_above_max(client_factory):
     login_as("viewer")
     r = client.get("/api/activity?limit=51")
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Cursor pagination via `before`
+# ---------------------------------------------------------------------------
+
+
+def test_list_activity_has_more_true_when_more_rows_exist(client_factory, db_session):
+    client, login_as = client_factory
+    # 8 total members, asking for 5 → 3 still older than the last one.
+    for idx in range(8):
+        _add_member(
+            db_session,
+            real_name=f"M{idx}",
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+        )
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/activity?limit=5")
+    body = r.json()
+    assert len(body["items"]) == 5
+    assert body["has_more"] is True
+
+
+def test_list_activity_has_more_false_when_exactly_limit_rows(client_factory, db_session):
+    client, login_as = client_factory
+    for idx in range(5):
+        _add_member(
+            db_session,
+            real_name=f"M{idx}",
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+        )
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/activity?limit=5")
+    body = r.json()
+    assert len(body["items"]) == 5
+    assert body["has_more"] is False
+
+
+def test_list_activity_paginates_via_before_cursor(client_factory, db_session):
+    client, login_as = client_factory
+    # Mix of members and jobs interleaved across days so the merged feed
+    # is genuinely sorted across both tables, not just members-then-jobs.
+    for idx in range(6):
+        _add_member(
+            db_session,
+            real_name=f"M{idx}",
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+        )
+    for idx in range(6):
+        _add_job(
+            db_session,
+            company=f"J{idx}",
+            created_at=datetime(2025, 1, 1 + idx, 12, tzinfo=timezone.utc),
+        )
+    db_session.commit()
+    login_as("viewer")
+
+    # First page: newest 4 across both tables.
+    page1 = client.get("/api/activity?limit=4").json()
+    assert len(page1["items"]) == 4
+    assert page1["has_more"] is True
+
+    # Cursor-walk: hand the last item's timestamp back as `before`.
+    cursor = page1["items"][-1]["timestamp"]
+    page2 = client.get(f"/api/activity?limit=4&before={cursor}").json()
+    assert len(page2["items"]) == 4
+    assert page2["has_more"] is True
+    # No overlap between the two pages — `before` is a strict <.
+    seen_keys_p1 = {(x["type"], x.get("member_id") or x.get("job_id")) for x in page1["items"]}
+    seen_keys_p2 = {(x["type"], x.get("member_id") or x.get("job_id")) for x in page2["items"]}
+    assert seen_keys_p1.isdisjoint(seen_keys_p2)
+
+    # Page 2's last item is older than page 1's last item.
+    assert page2["items"][-1]["timestamp"] < page1["items"][-1]["timestamp"]
+
+
+def test_list_activity_pagination_walks_to_end(client_factory, db_session):
+    client, login_as = client_factory
+    for idx in range(7):
+        _add_member(
+            db_session,
+            real_name=f"M{idx}",
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+        )
+    db_session.commit()
+    login_as("viewer")
+
+    # Walk until has_more flips false. With 7 rows, limit=3 → pages of
+    # 3, 3, 1, with the last page reporting has_more=False.
+    collected: list[str] = []
+    cursor = None
+    while True:
+        url = "/api/activity?limit=3"
+        if cursor is not None:
+            url += f"&before={cursor}"
+        body = client.get(url).json()
+        collected.extend(x["real_name"] for x in body["items"])
+        if not body["has_more"]:
+            break
+        cursor = body["items"][-1]["timestamp"]
+
+    # All 7 members reached, newest first, with no duplicates.
+    assert collected == [f"M{idx}" for idx in reversed(range(7))]
+
+
+def test_list_activity_before_with_no_older_rows_returns_empty(client_factory, db_session):
+    client, login_as = client_factory
+    _add_member(
+        db_session,
+        real_name="Alice",
+        joined_at=datetime(2025, 5, 1, tzinfo=timezone.utc),
+    )
+    db_session.commit()
+    login_as("viewer")
+
+    # Cursor older than the only row → empty + has_more=False.
+    body = client.get(
+        "/api/activity?before=2025-01-01T00:00:00%2B00:00"
+    ).json()
+    assert body == {"items": [], "has_more": False}

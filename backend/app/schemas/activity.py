@@ -37,3 +37,8 @@ ActivityItem = Annotated[
 
 class ActivityResponse(BaseModel):
     items: list[ActivityItem]
+    # Set by the cursor pagination path: True when at least one row exists
+    # strictly older than the last item in `items`. The frontend uses this
+    # to decide whether to keep fetching as the user scrolls; once it
+    # flips to False, the lazy-load sentinel stops triggering.
+    has_more: bool = False

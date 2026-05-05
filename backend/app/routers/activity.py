@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -19,17 +21,33 @@ ACTIVITY_LIMIT_MAX = 50
 @router.get("", response_model=ActivityResponse)
 def list_activity(
     limit: int = Query(default=ACTIVITY_LIMIT_DEFAULT, ge=1, le=ACTIVITY_LIMIT_MAX),
+    before: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
 ) -> ActivityResponse:
-    # Pull each table's own top N independently — the global top N can
-    # never include rows past either table's own top N (within a table
-    # the rows are already timestamp-sorted), so a limited Python merge
-    # is exact without having to scan the whole feed.
-    members = (
-        db.query(Member).order_by(Member.joined_at.desc()).limit(limit).all()
-    )
-    jobs = db.query(Job).order_by(Job.created_at.desc()).limit(limit).all()
+    # Cursor pagination: when `before` is supplied, return only rows
+    # strictly older than that timestamp. Frontend passes the timestamp
+    # of the last item it received to walk the feed backwards as the
+    # user scrolls.
+    #
+    # Pull `limit + 1` from each table so we can peek one past the
+    # requested page size — if the merged top (limit + 1) has more than
+    # `limit` rows, we know at least one older row exists and set
+    # has_more=True. This avoids a separate count query.
+    #
+    # The merge correctness argument is unchanged from the original
+    # endpoint: within a single table rows are timestamp-sorted, so the
+    # global top N (older than `before`) cannot include rows past either
+    # table's own top N.
+    members_q = db.query(Member).order_by(Member.joined_at.desc())
+    jobs_q = db.query(Job).order_by(Job.created_at.desc())
+    if before is not None:
+        members_q = members_q.filter(Member.joined_at < before)
+        jobs_q = jobs_q.filter(Job.created_at < before)
+
+    peek = limit + 1
+    members = members_q.limit(peek).all()
+    jobs = jobs_q.limit(peek).all()
 
     member_items: list[MemberJoinedActivity | JobCreatedActivity] = [
         MemberJoinedActivity(
@@ -61,5 +79,6 @@ def list_activity(
         member_items + job_items,
         key=lambda x: x.timestamp,
         reverse=True,
-    )[:limit]
-    return ActivityResponse(items=merged)
+    )[:peek]
+    has_more = len(merged) > limit
+    return ActivityResponse(items=merged[:limit], has_more=has_more)
