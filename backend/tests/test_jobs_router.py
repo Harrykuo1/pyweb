@@ -987,7 +987,10 @@ def test_delete_admin_with_correct_password(client_factory, db_session):
     assert client.get("/api/jobs/1").status_code == 404
 
 
-def test_delete_wrong_password_401(client_factory, db_session):
+def test_delete_wrong_password_returns_422(client_factory, db_session):
+    # 422 (not 401) so the frontend's global session-expired interceptor
+    # doesn't bounce the user back to /login — the session is still
+    # valid, only the body-supplied password is wrong.
     client, login_as = client_factory
     _seed(db_session, [{"company": "Acme"}])
     login_as("admin")
@@ -995,7 +998,7 @@ def test_delete_wrong_password_401(client_factory, db_session):
     r = client.request(
         "DELETE", "/api/jobs/1", json={"password": "nope"},
     )
-    assert r.status_code == 401
+    assert r.status_code == 422
     assert client.get("/api/jobs/1").status_code == 200
 
 

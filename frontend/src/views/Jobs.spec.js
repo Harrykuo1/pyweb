@@ -558,9 +558,9 @@ describe('Jobs.vue — admin delete flow', () => {
     expect(listSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('surfaces a 401 password-error message instead of refetching', async () => {
+  it('surfaces a 422 password-error message instead of refetching', async () => {
     const remove = vi.spyOn(jobsApi, 'remove').mockRejectedValue({
-      response: { status: 401 },
+      response: { status: 422 },
     })
     const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
 

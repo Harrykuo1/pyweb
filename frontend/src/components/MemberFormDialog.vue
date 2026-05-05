@@ -145,7 +145,7 @@ async function handleDeletePdf(password) {
     emit('saved')
   } catch (err) {
     const status = err?.response?.status
-    if (status === 401) pdfDeleteError.value = '密碼錯誤'
+    if (status === 422) pdfDeleteError.value = '密碼錯誤'
     else if (status === 403) pdfDeleteError.value = '權限不足'
     else pdfDeleteError.value = '移除失敗，請稍後再試'
   } finally {

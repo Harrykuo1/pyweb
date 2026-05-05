@@ -32,10 +32,17 @@ def _get_member_or_404(db: Session, member_id: int) -> Member:
 
 
 def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
-    """Re-authenticate the admin before a destructive action."""
+    """Re-authenticate the admin before a destructive action.
+
+    Returns 422 (not 401) on mismatch so the global axios auth-interceptor
+    doesn't treat a typo'd confirmation password as an expired session and
+    bounce the user back to /login. Session is still valid here — only
+    the body-supplied password is wrong, which is a request-validation
+    failure, not an auth failure.
+    """
     if not verify_password(payload.password, admin.password_hash):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Password is incorrect",
         )
 

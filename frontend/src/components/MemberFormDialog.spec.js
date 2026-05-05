@@ -277,9 +277,9 @@ describe('MemberFormDialog', () => {
     expect(wrapper.vm.pdfDeletedThisSession).toBe(true)
   })
 
-  it('handleDeletePdf on 401 keeps dialog open and surfaces 密碼錯誤', async () => {
+  it('handleDeletePdf on 422 keeps dialog open and surfaces 密碼錯誤', async () => {
     vi.spyOn(membersApi, 'deleteResumePdf').mockRejectedValue(
-      Object.assign(new Error('401'), { response: { status: 401 } }),
+      Object.assign(new Error('422'), { response: { status: 422 } }),
     )
 
     const wrapper = await mountDialog({

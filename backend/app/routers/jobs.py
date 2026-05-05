@@ -52,9 +52,15 @@ def _get_or_404(db: Session, job_id: int) -> Job:
 
 
 def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
+    """Re-authenticate the admin before a destructive action.
+
+    See members.py's matching helper for why this returns 422 — same
+    rationale: don't let a typo here trigger the global session-expired
+    redirect.
+    """
     if not verify_password(payload.password, admin.password_hash):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Password is incorrect",
         )
 

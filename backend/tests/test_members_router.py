@@ -268,7 +268,9 @@ def test_delete_member_admin(client_factory, db_session):
     assert r2.status_code == 404
 
 
-def test_delete_member_wrong_password_401(client_factory, db_session):
+def test_delete_member_wrong_password_returns_422(client_factory, db_session):
+    # 422 (not 401) so the frontend's global session-expired interceptor
+    # doesn't bounce the user back to /login on a typo'd confirmation.
     client, login_as = client_factory
     _seed_members(db_session, count=1)
     login_as("admin")
@@ -276,7 +278,7 @@ def test_delete_member_wrong_password_401(client_factory, db_session):
     r = client.request(
         "DELETE", "/api/members/1", json={"password": "not-the-admin-pw"},
     )
-    assert r.status_code == 401
+    assert r.status_code == 422
 
     # Member must NOT be deleted when the password check fails.
     r2 = client.get("/api/members/1")

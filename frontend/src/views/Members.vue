@@ -247,7 +247,7 @@ async function onPhotoDeleteConfirm(password) {
     loadMembers()
   } catch (err) {
     const status = err?.response?.status
-    if (status === 401) photoDeleteError.value = '密碼錯誤'
+    if (status === 422) photoDeleteError.value = '密碼錯誤'
     else if (status === 403) photoDeleteError.value = '權限不足'
     else photoDeleteError.value = '移除失敗，請稍後再試'
   } finally {
@@ -280,7 +280,7 @@ async function handleDeleteConfirm(password) {
     loadMembers()
   } catch (err) {
     const status = err?.response?.status
-    if (status === 401) deleteError.value = '密碼錯誤'
+    if (status === 422) deleteError.value = '密碼錯誤'
     else if (status === 403) deleteError.value = '權限不足'
     else deleteError.value = '刪除失敗，請稍後再試'
   } finally {

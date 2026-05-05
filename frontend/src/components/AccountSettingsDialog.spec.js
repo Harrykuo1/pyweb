@@ -151,10 +151,10 @@ describe('AccountSettingsDialog', () => {
     expect(inputBySelector('[data-test="password-new-admin"]').value).toBe('')
   })
 
-  it('password update with wrong current password (401) shows specific error', async () => {
+  it('password update with wrong current password (422) shows specific error', async () => {
     const auth = useAuthStore()
     vi.spyOn(auth, 'updatePassword').mockRejectedValue(
-      Object.assign(new Error('401'), { response: { status: 401 } }),
+      Object.assign(new Error('422'), { response: { status: 422 } }),
     )
 
     await mountDialog()

@@ -263,7 +263,10 @@ async function submitPassword(role) {
     ElMessage.success('密碼已更新')
   } catch (err) {
     const status = err?.response?.status
-    if (status === 401) {
+    // Backend returns 422 when the typed-in current password doesn't
+    // verify — see _require_admin_password / update_password rationale
+    // for why it's not 401 here.
+    if (status === 422) {
       ElMessage.error('目前管理員密碼不正確')
     } else if (status === 409) {
       ElMessage.error('新密碼與另一個帳號相同，請改用其他密碼')

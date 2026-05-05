@@ -360,13 +360,16 @@ def test_update_admin_password_then_relogin(client):
     assert ok.json()["role"] == "admin"
 
 
-def test_update_password_wrong_current_password(client):
+def test_update_password_wrong_current_returns_422(client):
+    # 422 (not 401) so the frontend's global session-expired interceptor
+    # doesn't bounce a typo'd current password back to /login while the
+    # admin session is still valid.
     _login_admin(client)
     r = client.patch(
         "/api/auth/users/viewer/password",
         json={"current_password": "WRONG", "new_password": "fresh-pw"},
     )
-    assert r.status_code == 401
+    assert r.status_code == 422
 
 
 def test_update_password_collision_with_other_account(client):

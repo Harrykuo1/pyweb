@@ -527,7 +527,7 @@ describe('Members.vue', () => {
   it('wrong password keeps the dialog open and sets deleteError to 密碼錯誤', async () => {
     const wrapper = await mountAsAdmin()
     vi.spyOn(membersApi, 'remove').mockRejectedValue(
-      Object.assign(new Error('401'), { response: { status: 401 } }),
+      Object.assign(new Error('422'), { response: { status: 422 } }),
     )
 
     await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
@@ -606,10 +606,10 @@ describe('Members.vue', () => {
     expect(wrapper.vm.photoDeleteTarget).toBeNull()
   })
 
-  it('photo delete on 401 keeps the dialog open and surfaces 密碼錯誤', async () => {
+  it('photo delete on 422 keeps the dialog open and surfaces 密碼錯誤', async () => {
     const wrapper = await mountAsAdmin()
     vi.spyOn(membersApi, 'deletePhoto').mockRejectedValue(
-      Object.assign(new Error('401'), { response: { status: 401 } }),
+      Object.assign(new Error('422'), { response: { status: 422 } }),
     )
 
     wrapper.vm.onPhotoDeleteRequest(sampleMembers[0])

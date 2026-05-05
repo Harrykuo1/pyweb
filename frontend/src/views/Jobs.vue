@@ -216,7 +216,7 @@ async function handleDeleteConfirm(password) {
     loadItems()
   } catch (err) {
     const status = err?.response?.status
-    if (status === 401) deleteError.value = '密碼錯誤'
+    if (status === 422) deleteError.value = '密碼錯誤'
     else if (status === 403) deleteError.value = '權限不足'
     else if (status === 404) deleteError.value = '紀錄已不存在'
     else deleteError.value = '刪除失敗，請稍後再試'

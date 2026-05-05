@@ -211,7 +211,8 @@ def test_delete_photo_admin(client_factory, db_session):
     assert member.photo_updated_at is None
 
 
-def test_delete_photo_wrong_password_401(client_factory, db_session):
+def test_delete_photo_wrong_password_returns_422(client_factory, db_session):
+    # See members router helper for why this is 422 instead of 401.
     client, login_as = client_factory
     member = db_session.query(Member).filter_by(id=1).one()
     member.photo = TINY_PNG
@@ -222,7 +223,7 @@ def test_delete_photo_wrong_password_401(client_factory, db_session):
     r = client.request(
         "DELETE", "/api/members/1/photo", json={"password": "wrong-pw"},
     )
-    assert r.status_code == 401
+    assert r.status_code == 422
 
     db_session.refresh(member)
     assert member.photo == TINY_PNG

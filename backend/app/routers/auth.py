@@ -122,8 +122,12 @@ def update_password(
     current_user: User = Depends(require_admin),
 ) -> Response:
     if not verify_password(payload.current_password, current_user.password_hash):
+        # 422, not 401, so the global axios auth-interceptor doesn't
+        # treat a typo'd current password as an expired session — the
+        # session is still valid here, only the body-supplied password
+        # didn't validate.
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Current password is incorrect",
         )
 

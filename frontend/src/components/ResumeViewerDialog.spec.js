@@ -227,11 +227,11 @@ describe('ResumeViewerDialog', () => {
     expect(secondSrc).toBe(firstSrc)
   })
 
-  it('handleDeletePdf on 401 surfaces 密碼錯誤 and does not emit changed', async () => {
+  it('handleDeletePdf on 422 surfaces 密碼錯誤 and does not emit changed', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
     vi.spyOn(membersApi, 'deleteResumePdf').mockRejectedValue(
-      Object.assign(new Error('401'), { response: { status: 401 } }),
+      Object.assign(new Error('422'), { response: { status: 422 } }),
     )
 
     const wrapper = await open(memberPdfOnly)
