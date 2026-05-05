@@ -8,6 +8,7 @@ import {
   UserFilled,
 } from '@element-plus/icons-vue'
 
+import ActivityFeed from '../components/ActivityFeed.vue'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -91,6 +92,8 @@ const router = useRouter()
         <span class="feature-status feature-status-mute">規劃中</span>
       </article>
     </section>
+
+    <ActivityFeed :limit="10" />
   </div>
 </template>
 

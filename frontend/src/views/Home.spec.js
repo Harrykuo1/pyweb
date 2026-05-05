@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
 import Home from './Home.vue'
+import { activityApi } from '../api/activity'
 
 const pushMock = vi.fn()
 
@@ -14,6 +15,9 @@ vi.mock('vue-router', () => ({
 beforeEach(() => {
   setActivePinia(createPinia())
   pushMock.mockClear()
+  // ActivityFeed mounts as a child of Home and fetches on mount; stub
+  // it so these tests don't reach the network or assert on feed copy.
+  vi.spyOn(activityApi, 'list').mockResolvedValue({ items: [] })
 })
 
 afterEach(() => {
