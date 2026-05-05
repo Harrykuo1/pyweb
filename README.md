@@ -245,4 +245,93 @@ SEED_VIEWER_PASSWORD=...
 > - **完全重置**：`rm backend/pyweb.db && cd backend && .venv/bin/python -m app.init_db`（會清掉所有資料，包含成員與求職紀錄；`init_db` 會自動 alembic upgrade 出新 schema）。
 
 登入只認密碼（不問 username），所以兩個帳號的密碼必須不同；UI 在改密碼時會擋住撞號。
+
+## 自動備份到雲端（rclone）
+
+一個排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 把 `data/pyweb.db` 做 atomic snapshot、gzip、丟到任何 rclone 支援的 remote（Google Drive、S3、Dropbox、OneDrive 等）。**腳本本身可以放公開 repo — secret 都在 `~/.config/rclone/rclone.conf` 不會被 commit**（已寫進 `.gitignore`）。
+
+### 一次性設定（host 端）
+
+```bash
+# 1. 安裝
+sudo apt install rclone sqlite3
+
+# 2. 設定 Drive OAuth（互動式，會跳瀏覽器一次拿到 refresh token）
+rclone config
+# - 選 New remote, 命名為 gdrive, 選 Google Drive
+# - 一路按預設, 在跳瀏覽器那步登入授權
+# 進階：再建一個 crypt remote 疊在 gdrive 上做 client-side 加密
+#   rclone config → New remote → crypt → 指向 gdrive:pyweb-encrypted
+
+# 3. 鎖緊 config 權限（內含 OAuth refresh token，等同永久存取權）
+chmod 600 ~/.config/rclone/rclone.conf
+```
+
+### 手動跑一次驗證
+
+```bash
+cd /path/to/pyweb
+PYWEB_DATA_DIR=./data RCLONE_REMOTE=gdrive:pyweb-backups bash scripts/pyweb-backup.sh
+```
+
+### 排程
+
+```cron
+# /etc/cron.d/pyweb-backup（替換使用者名稱與路徑）
+0 3 * * * youruser cd /home/youruser/pyweb && PYWEB_DATA_DIR=./data RCLONE_REMOTE=gdrive:pyweb-backups bash scripts/pyweb-backup.sh >> /var/log/pyweb-backup.log 2>&1
+```
+
+或 systemd timer（log 走 journalctl 更乾淨）：
+
+```ini
+# /etc/systemd/system/pyweb-backup.service
+[Service]
+Type=oneshot
+User=youruser
+WorkingDirectory=/home/youruser/pyweb
+Environment=PYWEB_DATA_DIR=./data
+Environment=RCLONE_REMOTE=gdrive:pyweb-backups
+ExecStart=/usr/bin/bash scripts/pyweb-backup.sh
+
+# /etc/systemd/system/pyweb-backup.timer
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+sudo systemctl enable --now pyweb-backup.timer
+```
+
+### 環境變數
+
+| 變數 | 預設 | 說明 |
+|---|---|---|
+| `PYWEB_DATA_DIR` | `./data` | 含 `pyweb.db` 的目錄 |
+| `RCLONE_REMOTE` | `gdrive:pyweb-backups` | rclone remote + 資料夾 |
+| `RETENTION_DAYS` | `30` | 保留幾天的備份；超過會被 `rclone delete` 清掉 |
+
+### 為什麼用 `sqlite3 .backup` 而不是 `cp` / `tar`
+
+backend 跑 SQLite WAL 模式，活著被寫入時直接 `cp` 可能拷到不一致狀態（torn write）。`.backup` 走 SQLite 內建的 page-by-page 拷貝，無論 transaction 是否進行中都保證原子一致。對 5 MB 的 DB 多花的時間可以忽略。
+
+### Restore
+
+`rclone copy` 把備份拉下來，`gunzip` 解開，停掉 backend container 後直接覆蓋 `data/pyweb.db`：
+
+```bash
+rclone copy gdrive:pyweb-backups/pyweb-20260101-030000.db.gz .
+gunzip pyweb-20260101-030000.db.gz
+docker compose stop backend
+mv pyweb-20260101-030000.db data/pyweb.db
+docker compose up -d backend
+```
+
+### Secret 守則
+
+- **絕對不要 commit `~/.config/rclone/rclone.conf`** — 內含 OAuth refresh token，外洩等同 Drive 永久存取權；萬一外洩到 console.cloud.google.com 撤銷該 client、重跑 `rclone config`
+- 若用了 `crypt` remote，密碼也在同一個檔案裡（rclone 用 `obscure` 編碼，**不是加密**）
+- public repo 可用 `gitleaks` / `trufflehog` 掃 history 確認沒有歷史 commit 不小心混進 token
  
