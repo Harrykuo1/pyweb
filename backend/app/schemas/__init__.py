@@ -1,3 +1,9 @@
+from app.schemas.activity import (
+    ActivityItem,
+    ActivityResponse,
+    JobCreatedActivity,
+    MemberJoinedActivity,
+)
 from app.schemas.auth import (
     LoginRequest,
     PasswordConfirmRequest,
@@ -14,12 +20,16 @@ from app.schemas.job import (
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
 
 __all__ = [
+    "ActivityItem",
+    "ActivityResponse",
     "JobCreate",
+    "JobCreatedActivity",
     "JobResponse",
     "JobUpdate",
     "ListResponse",
     "LoginRequest",
     "MemberCreate",
+    "MemberJoinedActivity",
     "MemberResponse",
     "MemberUpdate",
     "PasswordConfirmRequest",
