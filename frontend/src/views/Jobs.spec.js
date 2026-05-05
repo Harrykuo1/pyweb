@@ -406,6 +406,107 @@ describe('Jobs.vue — company multi-select', () => {
   })
 })
 
+describe('Jobs.vue — ?detail=<id> deep-link', () => {
+  it('fetches the targeted job and opens the detail dialog on mount', async () => {
+    routeQuery.value = { detail: '7' }
+    const getSpy = vi
+      .spyOn(jobsApi, 'get')
+      .mockResolvedValue({
+        id: 7,
+        job_year: 2025,
+        job_month: 5,
+        company: 'Linked',
+        kind: 'internship',
+        real_name: 'Eve',
+        timeline_md: null,
+        experience_md: 'deep-linked',
+        created_at: '2025-05-01T00:00:00+00:00',
+      })
+    const { wrapper } = await mountPage()
+    await flushPromises()
+
+    expect(getSpy).toHaveBeenCalledWith(7)
+    const dialog = wrapper.findComponent({ name: 'JobDetailDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('modelValue')).toBe(true)
+    expect(dialog.props('job')).toMatchObject({ id: 7, company: 'Linked' })
+  })
+
+  it('ignores a non-numeric ?detail value and never fetches', async () => {
+    routeQuery.value = { detail: 'abc' }
+    const getSpy = vi.spyOn(jobsApi, 'get')
+    await mountPage()
+    expect(getSpy).not.toHaveBeenCalled()
+  })
+
+  it('swallows a 404 silently when the deep-linked record was deleted', async () => {
+    routeQuery.value = { detail: '999' }
+    vi.spyOn(jobsApi, 'get').mockRejectedValue({ response: { status: 404 } })
+    const { wrapper } = await mountPage()
+    await flushPromises()
+    const dialog = wrapper.findComponent({ name: 'JobDetailDialog' })
+    expect(dialog.props('modelValue')).toBe(false)
+  })
+
+  it('clears ?detail from the URL when the dialog is closed', async () => {
+    routeQuery.value = { detail: '7', sort: 'company', order: 'asc' }
+    vi.spyOn(jobsApi, 'get').mockResolvedValue({
+      id: 7,
+      job_year: 2025,
+      job_month: 5,
+      company: 'Linked',
+      kind: 'internship',
+      real_name: null,
+      timeline_md: null,
+      experience_md: 'x',
+      created_at: '2025-05-01T00:00:00+00:00',
+    })
+    const { wrapper } = await mountPage()
+    await flushPromises()
+    replaceMock.mockClear()
+
+    const dialog = wrapper.findComponent({ name: 'JobDetailDialog' })
+    dialog.vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    // detail key dropped, other filter keys retained.
+    expect(replaceMock).toHaveBeenCalled()
+    const lastCall = replaceMock.mock.calls.at(-1)[0]
+    expect(lastCall.query).not.toHaveProperty('detail')
+    expect(lastCall.query).toMatchObject({ sort: 'company', order: 'asc' })
+  })
+
+  it('preserves ?detail across filter edits', async () => {
+    routeQuery.value = { detail: '7' }
+    vi.spyOn(jobsApi, 'get').mockResolvedValue({
+      id: 7,
+      job_year: 2025,
+      job_month: 5,
+      company: 'Linked',
+      kind: 'internship',
+      real_name: null,
+      timeline_md: null,
+      experience_md: 'x',
+      created_at: '2025-05-01T00:00:00+00:00',
+    })
+    const { wrapper } = await mountPage()
+    await flushPromises()
+    replaceMock.mockClear()
+
+    await wrapper.find('[data-test="sort-company"]').trigger('click')
+    await flushPromises()
+
+    // Filter sync re-writes the URL but must keep the deep-link key.
+    expect(replaceMock).toHaveBeenLastCalledWith({
+      query: expect.objectContaining({
+        sort: 'company',
+        order: 'asc',
+        detail: '7',
+      }),
+    })
+  })
+})
+
 describe('Jobs.vue — refresh button', () => {
   it('refetches when the refresh button is clicked', async () => {
     const { wrapper, listSpy } = await mountPage()

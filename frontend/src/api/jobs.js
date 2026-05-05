@@ -62,4 +62,15 @@ export const jobsApi = {
     const { data } = await client.get('/jobs/categories', { params })
     return data
   },
+
+  // ---- routing ----
+  // Single source of truth for the "open this job's detail dialog" URL
+  // shape. Callers that want to deep-link from elsewhere (e.g. the
+  // home-page activity feed) should go through this helper rather than
+  // hand-building the query, so renaming the param later only touches
+  // one place. Returns a vue-router location object usable with
+  // router.push() / router.replace().
+  detailRoute(id) {
+    return { path: '/jobs', query: { detail: String(id) } }
+  },
 }

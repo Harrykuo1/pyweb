@@ -157,3 +157,18 @@ describe('jobsApi.listCategories', () => {
     })
   })
 })
+
+describe('jobsApi.detailRoute', () => {
+  it('returns a router location object pointing at /jobs with detail=<id>', () => {
+    expect(jobsApi.detailRoute(12)).toEqual({
+      path: '/jobs',
+      query: { detail: '12' },
+    })
+  })
+
+  it('coerces numeric ids to string for query consistency', () => {
+    // route.query values are always strings — keep our shape consistent
+    // so callers can compare against route.query.detail directly.
+    expect(jobsApi.detailRoute(7).query.detail).toBe('7')
+  })
+})
