@@ -165,4 +165,75 @@ describe('ActivityFeedPreview.vue', () => {
     await wrapper.find('[data-test="hero-feed-link"]').trigger('click')
     expect(target.scrollIntoView).toHaveBeenCalled()
   })
+
+  it('renders an <img> inside the avatar when a member has a photo', async () => {
+    const wrapper = await mountPreview([
+      {
+        type: 'member_joined',
+        timestamp: ONE_HOUR_AGO,
+        member_id: 7,
+        real_name: 'Alice',
+        institution: 'NTU',
+        position: null,
+        has_photo: true,
+        photo_updated_at: '2026-05-04T00:00:00Z',
+      },
+    ])
+    const row = wrapper.find('[data-test="hero-feed-row-member_joined"]')
+    const img = row.find('img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toContain('/api/members/7/photo')
+    expect(img.attributes('src')).toContain('v=')
+  })
+
+  it('falls back to a letter circle when the member has no photo', async () => {
+    const wrapper = await mountPreview([
+      {
+        type: 'member_joined',
+        timestamp: ONE_HOUR_AGO,
+        member_id: 8,
+        real_name: 'Bob',
+        institution: 'NTU',
+        position: null,
+        has_photo: false,
+        photo_updated_at: null,
+      },
+    ])
+    const row = wrapper.find('[data-test="hero-feed-row-member_joined"]')
+    expect(row.find('img').exists()).toBe(false)
+    expect(row.text()).toContain('B')
+  })
+
+  it('tints job_created avatars by kind so internship vs fulltime is visible', async () => {
+    const wrapper = await mountPreview([
+      {
+        type: 'job_created',
+        timestamp: ONE_HOUR_AGO,
+        job_id: 1,
+        company: 'Acme',
+        kind: 'internship',
+        category: null,
+        real_name: 'Carol',
+        job_year: 2026,
+        job_month: 5,
+      },
+      {
+        type: 'job_created',
+        timestamp: ONE_HOUR_AGO,
+        job_id: 2,
+        company: 'Globex',
+        kind: 'fulltime',
+        category: null,
+        real_name: 'Dave',
+        job_year: 2026,
+        job_month: 5,
+      },
+    ])
+    const rows = wrapper.findAll('[data-test="hero-feed-row-job_created"]')
+    expect(rows.length).toBe(2)
+    const firstAvatar = rows[0].find('.hero-feed-avatar')
+    const secondAvatar = rows[1].find('.hero-feed-avatar')
+    expect(firstAvatar.classes()).toContain('hero-feed-avatar--kind-internship')
+    expect(secondAvatar.classes()).toContain('hero-feed-avatar--kind-fulltime')
+  })
 })

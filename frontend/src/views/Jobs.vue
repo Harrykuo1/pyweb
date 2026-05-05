@@ -830,11 +830,11 @@ onMounted(loadItems)
 }
 
 .kind-chip--internship.is-active {
-  color: #4f46e5;
+  color: var(--kind-internship-ink);
 }
 
 .kind-chip--fulltime.is-active {
-  color: #047857;
+  color: var(--kind-fulltime-ink);
 }
 
 .filter-year {
@@ -976,17 +976,17 @@ onMounted(loadItems)
 }
 
 .record-card--internship {
-  --card-accent-from: #6366f1;
-  --card-accent-to: #8b5cf6;
-  --card-accent-soft: rgba(99, 102, 241, 0.18);
-  --card-accent-ink: #4f46e5;
+  --card-accent-from: var(--kind-internship-from);
+  --card-accent-to: var(--kind-internship-to);
+  --card-accent-soft: var(--kind-internship-soft);
+  --card-accent-ink: var(--kind-internship-ink);
 }
 
 .record-card--fulltime {
-  --card-accent-from: #10b981;
-  --card-accent-to: #06b6d4;
-  --card-accent-soft: rgba(16, 185, 129, 0.18);
-  --card-accent-ink: #047857;
+  --card-accent-from: var(--kind-fulltime-from);
+  --card-accent-to: var(--kind-fulltime-to);
+  --card-accent-soft: var(--kind-fulltime-soft);
+  --card-accent-ink: var(--kind-fulltime-ink);
 }
 
 .record-card::before {

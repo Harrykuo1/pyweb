@@ -248,25 +248,25 @@ function focusMember(id) {
         data-test="card-jobs"
         @click="router.push('/jobs')"
       >
-        <span class="feature-accent feature-accent-violet"></span>
-        <div class="feature-icon-wrap feature-icon-violet">
+        <span class="feature-accent feature-accent-career"></span>
+        <div class="feature-icon-wrap feature-icon-career">
           <el-icon :size="22"><OfficeBuilding /></el-icon>
         </div>
         <h3 class="feature-title">求職紀錄</h3>
         <p class="feature-desc">分享實習與正職的求職心得、面試經驗與時程表。</p>
-        <span class="feature-cta">
+        <span class="feature-cta feature-cta--career">
           查看清單 <span aria-hidden="true">→</span>
         </span>
       </article>
 
       <article class="feature-card is-disabled">
-        <span class="feature-accent feature-accent-mute"></span>
-        <div class="feature-icon-wrap feature-icon-mute">
+        <span class="feature-accent feature-accent-warm"></span>
+        <div class="feature-icon-wrap feature-icon-warm">
           <el-icon :size="22"><Calendar /></el-icon>
         </div>
         <h3 class="feature-title">活動紀錄</h3>
         <p class="feature-desc">未來規劃中，記錄社群聚會、講座與工作坊。</p>
-        <span class="feature-status feature-status-mute">規劃中</span>
+        <span class="feature-status feature-status-warm">規劃中</span>
       </article>
     </section>
 
@@ -331,13 +331,17 @@ function focusMember(id) {
   opacity: 0.55;
 }
 
+/* Inject the career (teal) and warm (amber) accents into the hero
+   gradient so the background carries the same three-hue language as
+   the cards below — not just monochrome purple. Opacities tuned so
+   the new hues read as accents, not as a competing centre. */
 .mesh-blob-c {
   top: 30%;
   left: -100px;
   width: 360px;
   height: 360px;
-  background: radial-gradient(closest-side, #6366f1 0%, transparent 70%);
-  opacity: 0.55;
+  background: radial-gradient(closest-side, #06b6d4 0%, transparent 70%);
+  opacity: 0.45;
 }
 
 .mesh-blob-d {
@@ -345,8 +349,8 @@ function focusMember(id) {
   left: 30%;
   width: 280px;
   height: 280px;
-  background: radial-gradient(closest-side, #ec4899 0%, transparent 70%);
-  opacity: 0.35;
+  background: radial-gradient(closest-side, #f59e0b 0%, transparent 70%);
+  opacity: 0.3;
 }
 
 .mesh-grain {
@@ -696,12 +700,24 @@ function focusMember(id) {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
 }
 
+/* mini-stat-icon colours map to the three semantic accents:
+   jobs → career (teal), activities → warm (muted amber for the
+   placeholder slot — bright enough to read as "future event",
+   dampened by the parent .mini-stat--placeholder opacity). */
 .mini-stat-icon--jobs {
-  background: linear-gradient(135deg, #8b5cf6, #d946ef);
+  background: linear-gradient(
+    135deg,
+    var(--accent-career-from),
+    var(--accent-career-to)
+  );
 }
 
 .mini-stat-icon--activities {
-  background: linear-gradient(135deg, #475569, #64748b);
+  background: linear-gradient(
+    135deg,
+    var(--accent-warm-from),
+    var(--accent-warm-to)
+  );
   box-shadow: none;
 }
 
@@ -782,14 +798,29 @@ function focusMember(id) {
   border-radius: 0 4px 4px 0;
   transition: height var(--dur) var(--ease);
 }
+/* Per-card accent strip. Each card gets a different hue family so the
+   feature grid below the hero reads as three distinct "sections of
+   the app" instead of three repetitions of the same purple ribbon. */
 .feature-accent-indigo {
-  background: linear-gradient(180deg, #6366f1, #8b5cf6);
+  background: linear-gradient(
+    180deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
 }
-.feature-accent-violet {
-  background: linear-gradient(180deg, #8b5cf6, #d946ef);
+.feature-accent-career {
+  background: linear-gradient(
+    180deg,
+    var(--accent-career-from),
+    var(--accent-career-to)
+  );
 }
-.feature-accent-mute {
-  background: var(--ink-300);
+.feature-accent-warm {
+  background: linear-gradient(
+    180deg,
+    var(--accent-warm-from),
+    var(--accent-warm-to)
+  );
 }
 
 .feature-icon-wrap {
@@ -803,16 +834,28 @@ function focusMember(id) {
   margin-bottom: var(--sp-xs);
 }
 .feature-icon-indigo {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
 }
-.feature-icon-violet {
-  background: linear-gradient(135deg, #8b5cf6, #d946ef);
-  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
+.feature-icon-career {
+  background: linear-gradient(
+    135deg,
+    var(--accent-career-from),
+    var(--accent-career-to)
+  );
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
 }
-.feature-icon-mute {
-  background: var(--surface-2);
-  color: var(--ink-500);
+.feature-icon-warm {
+  background: linear-gradient(
+    135deg,
+    var(--accent-warm-from),
+    var(--accent-warm-to)
+  );
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.28);
 }
 
 .feature-title {
@@ -839,6 +882,14 @@ function focusMember(id) {
 .feature-card:hover .feature-cta {
   color: var(--brand-primary-hover);
 }
+/* Career-themed CTA inherits the teal ink so the link colour matches
+   the card's accent strip + icon, not the default indigo brand. */
+.feature-cta--career {
+  color: var(--accent-career-ink);
+}
+.feature-card:hover .feature-cta--career {
+  color: var(--accent-career-ink);
+}
 
 .feature-status {
   margin-top: var(--sp-sm);
@@ -849,13 +900,9 @@ function focusMember(id) {
   border-radius: 999px;
   letter-spacing: 0.02em;
 }
-.feature-status-soon {
-  background: rgba(139, 92, 246, 0.12);
-  color: #7c3aed;
-}
-.feature-status-mute {
-  background: var(--surface-2);
-  color: var(--ink-500);
+.feature-status-warm {
+  background: var(--accent-warm-soft);
+  color: var(--accent-warm-ink);
 }
 
 .feature-card.is-disabled {

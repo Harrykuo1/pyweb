@@ -187,17 +187,17 @@ function formatJobYearMonth(j) {
 }
 
 .detail-header--internship {
-  --header-from: #6366f1;
-  --header-to: #8b5cf6;
-  --header-soft: rgba(99, 102, 241, 0.16);
-  --header-ink: #4f46e5;
+  --header-from: var(--kind-internship-from);
+  --header-to: var(--kind-internship-to);
+  --header-soft: var(--kind-internship-soft);
+  --header-ink: var(--kind-internship-ink);
 }
 
 .detail-header--fulltime {
-  --header-from: #10b981;
-  --header-to: #06b6d4;
-  --header-soft: rgba(16, 185, 129, 0.16);
-  --header-ink: #047857;
+  --header-from: var(--kind-fulltime-from);
+  --header-to: var(--kind-fulltime-to);
+  --header-soft: var(--kind-fulltime-soft);
+  --header-ink: var(--kind-fulltime-ink);
 }
 
 .header-row-1 {

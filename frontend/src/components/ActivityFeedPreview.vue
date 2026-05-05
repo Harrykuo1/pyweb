@@ -1,12 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElIcon } from 'element-plus'
+import { ElIcon, ElImage } from 'element-plus'
 import {
   ArrowRight,
   Briefcase,
   Promotion,
-  UserFilled,
 } from '@element-plus/icons-vue'
 
 import { activityApi } from '../api/activity'
@@ -67,6 +66,16 @@ function scrollToFullFeed() {
   }
 }
 
+function memberPhotoSrc(item) {
+  if (!item?.has_photo) return null
+  return membersApi.photoUrl(item.member_id, item.photo_updated_at ?? '')
+}
+
+function memberInitial(item) {
+  const name = item?.real_name ?? ''
+  return name.charAt(0) || '?'
+}
+
 const skeletonRows = computed(() => Array.from({ length: props.limit }))
 </script>
 
@@ -123,16 +132,38 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
         @click="handleRowClick(item)"
         @keydown="handleKey($event, item)"
       >
+        <!-- Avatar branches:
+             1. member with photo  → real headshot via <el-image>
+             2. member without photo → gradient circle + first letter
+             3. job_created → gradient square tinted by kind, so the
+                preview's icon colour echoes the kind chip on /jobs
+                even though the chip itself isn't shown here. -->
+        <el-image
+          v-if="item.type === 'member_joined' && item.has_photo"
+          :src="memberPhotoSrc(item)"
+          fit="cover"
+          class="hero-feed-avatar hero-feed-avatar--photo"
+          :alt="`${item.real_name} 的頭像`"
+        />
         <span
-          :class="['hero-feed-avatar', `hero-feed-avatar--${item.type}`]"
+          v-else-if="item.type === 'member_joined'"
+          class="hero-feed-avatar hero-feed-avatar--member_joined"
           aria-hidden="true"
         >
-          <el-icon :size="11" v-if="item.type === 'member_joined'">
-            <UserFilled />
-          </el-icon>
-          <el-icon :size="11" v-else>
-            <Briefcase />
-          </el-icon>
+          <span class="hero-feed-avatar-letter">
+            {{ memberInitial(item) }}
+          </span>
+        </span>
+        <span
+          v-else
+          :class="[
+            'hero-feed-avatar',
+            'hero-feed-avatar--job_created',
+            `hero-feed-avatar--kind-${item.kind}`,
+          ]"
+          aria-hidden="true"
+        >
+          <el-icon :size="11"><Briefcase /></el-icon>
         </span>
         <span class="hero-feed-text">
           <span class="hero-feed-line">
@@ -143,16 +174,21 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
                   : (item.real_name || '匿名成員')
               }}
             </strong>
-            <span class="hero-feed-verb">
-              <template v-if="item.type === 'member_joined'">
-                加入了社群
-              </template>
-              <template v-else>
-                · 新增了
+            <template v-if="item.type === 'member_joined'">
+              <span class="hero-feed-verb">加入了社群</span>
+            </template>
+            <template v-else>
+              <!-- A styled circle, not a · glyph: font-rendered middle
+                   dots sit on the Latin baseline and read as "low"
+                   between CJK characters. A pure box-shape with
+                   vertical-align lets us centre exactly. -->
+              <span class="hero-feed-dot" aria-hidden="true"></span>
+              <span class="hero-feed-verb">
+                新增了
                 <span class="hero-feed-company">{{ item.company }}</span>
                 的紀錄
-              </template>
-            </span>
+              </span>
+            </template>
           </span>
         </span>
         <time
@@ -320,12 +356,57 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
 }
 
 .hero-feed-avatar--member_joined {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
 }
 
+.hero-feed-avatar-letter {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.hero-feed-avatar--photo {
+  background: linear-gradient(135deg, #eef2ff, #f3e8ff);
+  border-radius: 50%;
+}
+
+.hero-feed-avatar--photo :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* job_created is shape-coded (rounded square, vs member's circle) so
+   the type stays disambiguated; kind only paints in the colour. */
 .hero-feed-avatar--job_created {
-  background: linear-gradient(135deg, #8b5cf6, #d946ef);
   border-radius: 8px;
+  background: linear-gradient(
+    135deg,
+    var(--accent-career-from),
+    var(--accent-career-to)
+  );
+}
+
+.hero-feed-avatar--kind-internship {
+  background: linear-gradient(
+    135deg,
+    var(--kind-internship-from),
+    var(--kind-internship-to)
+  );
+}
+
+.hero-feed-avatar--kind-fulltime {
+  background: linear-gradient(
+    135deg,
+    var(--kind-fulltime-from),
+    var(--kind-fulltime-to)
+  );
 }
 
 .hero-feed-avatar--ghost {
@@ -361,6 +442,28 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
   color: rgba(255, 255, 255, 0.7);
   font-weight: 400;
   margin-left: 4px;
+}
+
+/* When the dot precedes the verb (job_created rows), it already
+   carries the side-spacing — zero out the verb's leading margin
+   so the gaps on either side of the dot stay symmetric. */
+.hero-feed-dot + .hero-feed-verb {
+  margin-left: 0;
+}
+
+.hero-feed-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  /* Symmetric horizontal padding around the dot — both sides equal. */
+  margin: 0 8px;
+  /* vertical-align: middle aligns the dot's centre with the line's
+     x-height midpoint. CJK glyphs sit slightly above that, so we
+     lift by 1px more for optical centring between 王 / 新. */
+  vertical-align: middle;
+  transform: translateY(-1px);
 }
 
 .hero-feed-company {

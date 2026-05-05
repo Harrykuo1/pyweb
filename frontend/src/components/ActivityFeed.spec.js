@@ -114,6 +114,41 @@ describe('ActivityFeed.vue', () => {
     expect(row.text()).toContain('Backend')
   })
 
+  it('tints the job avatar by kind so internship vs fulltime is visible', async () => {
+    const { wrapper } = await mountFeed([
+      {
+        type: 'job_created',
+        timestamp: ONE_HOUR_AGO,
+        job_id: 1,
+        company: 'Acme',
+        kind: 'internship',
+        category: null,
+        real_name: 'Carol',
+        job_year: 2026,
+        job_month: 5,
+      },
+      {
+        type: 'job_created',
+        timestamp: TWO_HOURS_AGO,
+        job_id: 2,
+        company: 'Globex',
+        kind: 'fulltime',
+        category: null,
+        real_name: 'Dave',
+        job_year: 2026,
+        job_month: 5,
+      },
+    ])
+    const rows = wrapper.findAll('[data-test="activity-row-job_created"]')
+    expect(rows.length).toBe(2)
+    expect(rows[0].find('.row-avatar--job').classes()).toContain(
+      'row-avatar--kind-internship',
+    )
+    expect(rows[1].find('.row-avatar--job').classes()).toContain(
+      'row-avatar--kind-fulltime',
+    )
+  })
+
   it('renders an anonymous job_created row as 匿名成員', async () => {
     const { wrapper } = await mountFeed([
       {

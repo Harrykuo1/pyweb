@@ -196,7 +196,11 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
             </template>
             <span
               v-else
-              class="row-avatar row-avatar--job"
+              :class="[
+                'row-avatar',
+                'row-avatar--job',
+                `row-avatar--kind-${item.kind}`,
+              ]"
               aria-hidden="true"
             >
               <el-icon :size="18"><OfficeBuilding /></el-icon>
@@ -442,14 +446,39 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 }
 
 .row-avatar--member {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 3px 8px rgba(99, 102, 241, 0.25);
 }
 
+/* Job avatars are shape-coded via the rounded-square radius (vs the
+   member avatar's circle) so type stays disambiguated; the gradient
+   below is then tinted by kind to mirror the chip colour beside it.
+   Internship → indigo, Fulltime → career teal — matches the Jobs
+   page card accents and ActivityFeedPreview's avatar tints. */
 .row-avatar--job {
-  background: linear-gradient(135deg, #8b5cf6, #d946ef);
-  box-shadow: 0 3px 8px rgba(139, 92, 246, 0.25);
   border-radius: 12px;
+}
+
+.row-avatar--kind-internship {
+  background: linear-gradient(
+    135deg,
+    var(--kind-internship-from),
+    var(--kind-internship-to)
+  );
+  box-shadow: 0 3px 8px rgba(99, 102, 241, 0.25);
+}
+
+.row-avatar--kind-fulltime {
+  background: linear-gradient(
+    135deg,
+    var(--kind-fulltime-from),
+    var(--kind-fulltime-to)
+  );
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.25);
 }
 
 .row-avatar--photo {
@@ -508,13 +537,13 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 }
 
 .row-kind--internship {
-  background: rgba(99, 102, 241, 0.12);
-  color: #4f46e5;
+  background: var(--kind-internship-soft);
+  color: var(--kind-internship-ink);
 }
 
 .row-kind--fulltime {
-  background: rgba(217, 70, 239, 0.12);
-  color: #a21caf;
+  background: var(--kind-fulltime-soft);
+  color: var(--kind-fulltime-ink);
 }
 
 .row-line-2 {

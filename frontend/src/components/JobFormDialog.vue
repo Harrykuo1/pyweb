@@ -643,11 +643,11 @@ async function handleSubmit() {
 }
 
 .kind-option--internship.is-active {
-  color: #4f46e5;
+  color: var(--kind-internship-ink);
 }
 
 .kind-option--fulltime.is-active {
-  color: #047857;
+  color: var(--kind-fulltime-ink);
 }
 
 /* ---------- Markdown editor tabs ---------- */

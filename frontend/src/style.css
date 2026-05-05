@@ -23,6 +23,37 @@
   --brand-accent: #8b5cf6;
   --brand-deep: #1e1b4b;
 
+  /* ---- Semantic accent palette ----
+     Three hue families with distinct meanings, applied with restraint:
+       - members / community → indigo (uses --brand-* above)
+       - careers / jobs      → emerald-cyan (--accent-career-*)
+       - future / placeholder→ amber-rose (--accent-warm-*)
+     New surfaces should pick the family that matches their meaning,
+     not whichever colour looks fresh — that's how we get variety
+     without chaos. */
+  --accent-career-from: #10b981;
+  --accent-career-to: #06b6d4;
+  --accent-career-soft: rgba(16, 185, 129, 0.18);
+  --accent-career-ink: #047857;
+
+  --accent-warm-from: #f59e0b;
+  --accent-warm-to: #f43f5e;
+  --accent-warm-soft: rgba(245, 158, 11, 0.18);
+  --accent-warm-ink: #b45309;
+
+  /* Job-kind palette — single source of truth for the indigo (實習) /
+     emerald (正職) chip / card / header colour the Jobs page uses.
+     Fulltime aliases the career accent so they shift together. */
+  --kind-internship-from: #6366f1;
+  --kind-internship-to: #8b5cf6;
+  --kind-internship-soft: rgba(99, 102, 241, 0.18);
+  --kind-internship-ink: #4f46e5;
+
+  --kind-fulltime-from: var(--accent-career-from);
+  --kind-fulltime-to: var(--accent-career-to);
+  --kind-fulltime-soft: var(--accent-career-soft);
+  --kind-fulltime-ink: var(--accent-career-ink);
+
   /* Neutrals */
   --ink-900: #0f172a;
   --ink-700: #334155;
