@@ -139,3 +139,16 @@ describe('membersApi.deleteResumePdf', () => {
     expect(del).toHaveBeenCalledWith('/members/9/resume.pdf', { data: { password: 'pw-3' } })
   })
 })
+
+describe('membersApi.focusRoute', () => {
+  it('returns a router location object pointing at /members with focus=<id>', () => {
+    expect(membersApi.focusRoute(12)).toEqual({
+      path: '/members',
+      query: { focus: '12' },
+    })
+  })
+
+  it('coerces numeric ids to string for query consistency', () => {
+    expect(membersApi.focusRoute(7).query.focus).toBe('7')
+  })
+})

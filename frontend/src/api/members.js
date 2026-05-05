@@ -57,4 +57,13 @@ export const membersApi = {
   async deleteResumePdf(id, password) {
     await client.delete(`/members/${id}/resume.pdf`, { data: { password } })
   },
+
+  // ---- routing ----
+  // Single source of truth for "scroll to and highlight this member" URLs.
+  // Members has no detail dialog, so we deep-link via a transient ?focus=
+  // param that Members.vue consumes to scroll and flash the row, then
+  // strips from the URL. See jobsApi.detailRoute for the analogous helper.
+  focusRoute(id) {
+    return { path: '/members', query: { focus: String(id) } }
+  },
 }

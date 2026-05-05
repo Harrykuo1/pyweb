@@ -20,6 +20,18 @@ vi.mock('element-plus', async (importOriginal) => {
   }
 })
 
+const replaceMock = vi.fn()
+const routeQuery = { value: {} }
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    get query() {
+      return routeQuery.value
+    },
+  }),
+  useRouter: () => ({ replace: replaceMock }),
+}))
+
 const sampleMembers = [
   {
     id: 1,
@@ -103,6 +115,8 @@ let pendingTeardowns = []
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  routeQuery.value = {}
+  replaceMock.mockClear()
   try {
     localStorage.removeItem('pyweb.members.viewMode')
   } catch {
@@ -619,5 +633,76 @@ describe('Members.vue', () => {
     expect(wrapper.vm.photoCropOpen).toBe(true)
     expect(wrapper.vm.photoCropTarget?.id).toBe(1)
     expect(wrapper.vm.photoCropFile?.name).toBe(file.name)
+  })
+})
+
+describe('Members.vue — ?focus=<id> deep-link', () => {
+  it('adds the is-flash class to the matching member-card on mount', async () => {
+    routeQuery.value = { focus: '1' }
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+    // Watcher on members.length re-attempts focus once the cards are
+    // rendered; nudge the queue once more for that pass.
+    await flushPromises()
+
+    const focused = wrapper.find('.member-anchor-1')
+    expect(focused.exists()).toBe(true)
+    expect(focused.classes()).toContain('is-flash')
+
+    const other = wrapper.find('.member-anchor-2')
+    expect(other.classes()).not.toContain('is-flash')
+  })
+
+  it('strips ?focus= from the URL after consuming it', async () => {
+    routeQuery.value = { focus: '1' }
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+
+    expect(replaceMock).toHaveBeenCalled()
+    const lastCall = replaceMock.mock.calls.at(-1)[0]
+    expect(lastCall.query).not.toHaveProperty('focus')
+  })
+
+  it('ignores a non-numeric focus value and adds no flash', async () => {
+    routeQuery.value = { focus: 'abc' }
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+    await flushPromises()
+
+    const cards = wrapper.findAll('[data-test="member-card"]')
+    for (const card of cards) {
+      expect(card.classes()).not.toContain('is-flash')
+    }
+    expect(replaceMock).not.toHaveBeenCalled()
+  })
+
+  it('does not crash when ?focus points at a member not in the loaded list', async () => {
+    routeQuery.value = { focus: '999' }
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+    await flushPromises()
+
+    // Page still renders the cards normally; nothing is flashed.
+    const cards = wrapper.findAll('[data-test="member-card"]')
+    expect(cards.length).toBe(sampleMembers.length)
+    for (const card of cards) {
+      expect(card.classes()).not.toContain('is-flash')
+    }
   })
 })
