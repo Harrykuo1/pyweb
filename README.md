@@ -248,7 +248,7 @@ SEED_VIEWER_PASSWORD=...
 
 ## 自動備份到雲端（rclone）
 
-一個排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 把 `data/pyweb.db` 做 atomic snapshot、gzip、丟到任何 rclone 支援的 remote（Google Drive、S3、Dropbox、OneDrive 等）。**腳本本身可以放公開 repo — secret 都在 `~/.config/rclone/rclone.conf` 不會被 commit**（已寫進 `.gitignore`）。
+排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 走「**停 backend → atomic snapshot → 啟 backend → gzip → 上傳 → 清舊**」流程。停服務這幾秒讓 SQLite 自動 checkpoint WAL 並釋放所有 lock，所以拿到的快照保證 100% 完整、絕不會 corrupt。**腳本本身可以放公開 repo — secret 都在 `~/.config/rclone/rclone.conf` 不會被 commit**（已寫進 `.gitignore`）。
 
 ### 一次性設定（host 端）
 
@@ -258,27 +258,43 @@ sudo apt install rclone sqlite3
 
 # 2. 設定 Drive OAuth（互動式，會跳瀏覽器一次拿到 refresh token）
 rclone config
-# - 選 New remote, 命名為 gdrive, 選 Google Drive
+# - 選 New remote, 命名 e.g. pyweb_backup, 選 Google Drive
 # - 一路按預設, 在跳瀏覽器那步登入授權
-# 進階：再建一個 crypt remote 疊在 gdrive 上做 client-side 加密
-#   rclone config → New remote → crypt → 指向 gdrive:pyweb-encrypted
+# 進階：再建一個 crypt remote 疊在 pyweb_backup 上做 client-side 加密
+#   rclone config → New remote → crypt → 指向 pyweb_backup:pyweb-encrypted
 
 # 3. 鎖緊 config 權限（內含 OAuth refresh token，等同永久存取權）
 chmod 600 ~/.config/rclone/rclone.conf
+
+# 4. 確保跑備份的 user 在 docker group（要能下 docker compose stop / start）
+sudo usermod -aG docker $USER
+# 重新登入或 `newgrp docker` 讓 group 生效
 ```
 
 ### 手動跑一次驗證
 
 ```bash
 cd /path/to/pyweb
-PYWEB_DATA_DIR=./data RCLONE_REMOTE=gdrive:pyweb-backups bash scripts/pyweb-backup.sh
+PYWEB_DATA_DIR=./data RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pyweb-backup.sh
+```
+
+預期輸出（順利的話 ~10 秒內結束）：
+
+```
+[20260505-070000] Stopping backend for clean snapshot...
+[20260505-070000] Snapshotting...
+[20260505-070000] Restarting backend...
+[20260505-070000] Verifying integrity...
+[20260505-070000] Uploading 3.2M → pyweb_backup:pyweb-backups/
+[20260505-070000] Pruning archives older than 30d
+[20260505-070000] Backup complete
 ```
 
 ### 排程
 
 ```cron
 # /etc/cron.d/pyweb-backup（替換使用者名稱與路徑）
-0 3 * * * youruser cd /home/youruser/pyweb && PYWEB_DATA_DIR=./data RCLONE_REMOTE=gdrive:pyweb-backups bash scripts/pyweb-backup.sh >> /var/log/pyweb-backup.log 2>&1
+0 3 * * * youruser cd /home/youruser/pyweb && RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pyweb-backup.sh >> /home/youruser/pyweb-backup.log 2>&1
 ```
 
 或 systemd timer（log 走 journalctl 更乾淨）：
@@ -289,8 +305,7 @@ PYWEB_DATA_DIR=./data RCLONE_REMOTE=gdrive:pyweb-backups bash scripts/pyweb-back
 Type=oneshot
 User=youruser
 WorkingDirectory=/home/youruser/pyweb
-Environment=PYWEB_DATA_DIR=./data
-Environment=RCLONE_REMOTE=gdrive:pyweb-backups
+Environment=RCLONE_REMOTE=pyweb_backup:pyweb-backups
 ExecStart=/usr/bin/bash scripts/pyweb-backup.sh
 
 # /etc/systemd/system/pyweb-backup.timer
@@ -312,10 +327,19 @@ sudo systemctl enable --now pyweb-backup.timer
 | `PYWEB_DATA_DIR` | `./data` | 含 `pyweb.db` 的目錄 |
 | `RCLONE_REMOTE` | `gdrive:pyweb-backups` | rclone remote + 資料夾 |
 | `RETENTION_DAYS` | `30` | 保留幾天的備份；超過會被 `rclone delete` 清掉 |
+| `COMPOSE_SERVICE` | `backend` | docker-compose.yml 裡 backend 的 service 名稱 |
+| `COMPOSE_PROJECT_DIR` | 當下目錄 | `docker compose` 要在哪個目錄執行 |
 
-### 為什麼用 `sqlite3 .backup` 而不是 `cp` / `tar`
+### 為什麼要停服務
 
-backend 跑 SQLite WAL 模式，活著被寫入時直接 `cp` 可能拷到不一致狀態（torn write）。`.backup` 走 SQLite 內建的 page-by-page 拷貝，無論 transaction 是否進行中都保證原子一致。對 5 MB 的 DB 多花的時間可以忽略。
+SQLite WAL 模式下，活著被寫入的 DB 任何形式的「外部讀」都有風險：
+- `cp` / `tar` 會撞 torn page（transaction 寫到一半）
+- `sqlite3 .backup` 在 read 端**仍然需要寫 `-shm` 檔**做 reader/writer 協調（這就是先前卡住的原因）
+- `?immutable=1` 雖然能 bypass 鎖協調，但會跳過 `-wal` 內未 checkpoint 的資料
+
+唯一無懈可擊的做法：讓 backend 完整下線，SQLite 在最後一個 connection 關閉時會自動 `wal_checkpoint(TRUNCATE)`，把 WAL 全部 merge 回主檔並刪掉 `-wal` / `-shm` 檔。這時候做的快照（不論用 `sqlite3 .backup` 還是 `cp`）都是 100% 完整。代價只有 3–8 秒的 downtime，半夜執行對社群網站幾乎無感。
+
+腳本還做了 **trap-based 復原**：snapshot 或上傳失敗時 `EXIT` trap 仍會把 backend 重新拉起來，不會留下你的服務在停機狀態。
 
 ### Restore
 
