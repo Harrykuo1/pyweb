@@ -33,8 +33,18 @@ from app.models import Job, JobAttachment, User
 from app.schemas import JobAttachmentResponse
 
 
+def job_uploads_dir(uploads_root: Path, job_id: int) -> Path:
+    """Per-job attachment directory.
+
+    Sitting under a "jobs/" subtree leaves the top of uploads_root
+    free for future upload categories (members/, projects/, ...)
+    without fighting for the numeric-id namespace at the root.
+    """
+    return uploads_root / "jobs" / str(job_id)
+
+
 def _preview_path(uploads_root: Path, job_id: int, filename: str) -> Path:
-    return uploads_root / str(job_id) / f"{filename}.preview.pdf"
+    return job_uploads_dir(uploads_root, job_id) / f"{filename}.preview.pdf"
 
 
 def _serialize(
@@ -117,7 +127,7 @@ async def upload_attachment(
     # case doesn't waste bandwidth re-uploading on every retry. The
     # frontend should preflight against the attachment list, but a
     # 409 here is the authoritative fallback.
-    upload_dir = uploads_root / str(job_id)
+    upload_dir = job_uploads_dir(uploads_root, job_id)
     target_path = upload_dir / clean_name
     existing_row = (
         db.query(JobAttachment)
@@ -271,7 +281,7 @@ def download_attachment(
 ) -> FileResponse:
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
-    file_path = uploads_root / str(job_id) / attachment.filename
+    file_path = job_uploads_dir(uploads_root, job_id) / attachment.filename
     if not file_path.exists():
         # DB row points at a missing file — surface a clean 404 instead
         # of a 500 from FileResponse trying to stat a non-existent path.
@@ -331,7 +341,8 @@ def delete_attachment(
 ) -> Response:
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
-    file_path = uploads_root / str(job_id) / attachment.filename
+    job_dir = job_uploads_dir(uploads_root, job_id)
+    file_path = job_dir / attachment.filename
     preview_path = _preview_path(uploads_root, job_id, attachment.filename)
     # Remove on-disk artefacts before the DB row so a successful DB
     # delete can't leave orphan blobs behind. If a file is already
@@ -345,7 +356,6 @@ def delete_attachment(
     # directory up so the host filesystem doesn't accumulate empty
     # shells. rmdir refuses non-empty dirs, so a stray file (e.g. a
     # manual drop) keeps the directory alive on purpose.
-    job_dir = uploads_root / str(job_id)
     try:
         job_dir.rmdir()
     except OSError:

@@ -103,7 +103,7 @@ def test_upload_admin_success_stores_row_and_file(client, job, db_session, uploa
     assert len(rows) == 1
     assert rows[0].filename == "report.pdf"
 
-    on_disk = uploads_dir / str(job.id) / "report.pdf"
+    on_disk = uploads_dir / "jobs" / str(job.id) / "report.pdf"
     assert on_disk.exists()
     assert on_disk.read_bytes() == TINY_PDF
 
@@ -202,7 +202,7 @@ def test_upload_conflict_with_rename_appends_suffix(client, job, db_session, upl
         .all()
     )
     assert [row.filename for row in rows] == ["report.pdf", "report (1).pdf"]
-    assert (uploads_dir / str(job.id) / "report (1).pdf").exists()
+    assert (uploads_dir / "jobs" / str(job.id) / "report (1).pdf").exists()
 
 
 def test_upload_rename_keeps_climbing_on_repeated_conflicts(client, job, uploads_dir):
@@ -218,7 +218,7 @@ def test_upload_conflict_with_overwrite_replaces_in_place(client, job, db_sessio
     _login_admin(client)
     first = _upload(client, job.id, filename="report.pdf")
     original_id = first.json()["id"]
-    original_path = uploads_dir / str(job.id) / "report.pdf"
+    original_path = uploads_dir / "jobs" / str(job.id) / "report.pdf"
     assert original_path.read_bytes() == TINY_PDF
 
     new_body = b"%PDF-1.7\n%new\n"

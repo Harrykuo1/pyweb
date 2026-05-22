@@ -68,8 +68,40 @@ def seed_runtime_config(db: Session) -> None:
     db.commit()
 
 
+def migrate_uploads_layout() -> None:
+    """Move legacy ``uploads/<job_id>/`` directories into the new
+    ``uploads/jobs/<job_id>/`` subtree.
+
+    Earlier versions parked every job's attachments directly under
+    uploads_root, which would collide with future upload types
+    (members/, projects/, ...) trying to share the same numeric-id
+    namespace. The nested layout reserves the top level for
+    category buckets.
+
+    Idempotent: subsequent runs see no numeric-named dir at the top
+    and quietly exit. Existing on-disk targets in jobs/ are left
+    untouched on purpose so a half-completed run doesn't clobber a
+    newly-uploaded file.
+    """
+    uploads_root = Path(settings.uploads_dir)
+    if not uploads_root.exists():
+        return
+    jobs_root = uploads_root / "jobs"
+    for child in uploads_root.iterdir():
+        if not child.is_dir():
+            continue
+        if not child.name.isdigit():
+            continue
+        jobs_root.mkdir(parents=True, exist_ok=True)
+        target = jobs_root / child.name
+        if target.exists():
+            continue
+        child.rename(target)
+
+
 def main() -> None:
     run_migrations()
+    migrate_uploads_layout()
     with SessionLocal() as db:
         seed_accounts(db)
         seed_runtime_config(db)

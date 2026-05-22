@@ -149,7 +149,7 @@ def test_download_404_when_disk_file_missing(client, job, uploads_dir):
     attachment_id = up.json()["id"]
 
     # Simulate disk-side cleanup that the DB doesn't know about.
-    (uploads_dir / str(job.id) / "report.pdf").unlink()
+    (uploads_dir / "jobs" / str(job.id) / "report.pdf").unlink()
 
     r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}")
     assert r.status_code == 404
@@ -211,7 +211,7 @@ def test_delete_removes_row_and_disk_file(client, job, db_session, uploads_dir):
     up = _upload(client, job.id, filename="report.pdf")
     attachment_id = up.json()["id"]
 
-    on_disk = uploads_dir / str(job.id) / "report.pdf"
+    on_disk = uploads_dir / "jobs" / str(job.id) / "report.pdf"
     assert on_disk.exists()
 
     r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
@@ -228,7 +228,7 @@ def test_delete_when_disk_file_already_gone_still_clears_row(client, job, db_ses
     up = _upload(client, job.id, filename="report.pdf")
     attachment_id = up.json()["id"]
 
-    (uploads_dir / str(job.id) / "report.pdf").unlink()
+    (uploads_dir / "jobs" / str(job.id) / "report.pdf").unlink()
 
     r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
     assert r.status_code == 204
@@ -247,7 +247,7 @@ def test_delete_last_attachment_removes_job_directory(
     _login_admin(client)
     up = _upload(client, job.id, filename="report.pdf")
     attachment_id = up.json()["id"]
-    job_dir = uploads_dir / str(job.id)
+    job_dir = uploads_dir / "jobs" / str(job.id)
     assert job_dir.exists()
 
     client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
@@ -261,7 +261,7 @@ def test_delete_keeps_directory_when_other_attachments_remain(
     _login_admin(client)
     a = _upload(client, job.id, filename="a.pdf").json()["id"]
     _upload(client, job.id, filename="b.pdf")
-    job_dir = uploads_dir / str(job.id)
+    job_dir = uploads_dir / "jobs" / str(job.id)
 
     client.delete(f"/api/jobs/{job.id}/attachments/{a}")
 
@@ -452,7 +452,7 @@ def test_delete_also_removes_preview_pdf(
     _login_admin(client)
     up = _upload_pptx(client, job.id, filename="deck.pptx")
     attachment_id = up.json()["id"]
-    preview_path = uploads_dir / str(job.id) / "deck.pptx.preview.pdf"
+    preview_path = uploads_dir / "jobs" / str(job.id) / "deck.pptx.preview.pdf"
     assert preview_path.exists()
 
     r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")

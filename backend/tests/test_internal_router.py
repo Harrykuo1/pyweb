@@ -31,7 +31,7 @@ def client(db_session, uploads_dir):
 
 
 def _seed_file(uploads_dir, job_id, filename, body=b"hello"):
-    job_dir = uploads_dir / str(job_id)
+    job_dir = uploads_dir / "jobs" / str(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / filename).write_bytes(body)
 

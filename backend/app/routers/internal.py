@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
-from app.routers.job_attachments import get_uploads_root
+from app.routers.job_attachments import get_uploads_root, job_uploads_dir
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -35,7 +35,7 @@ def serve_source(
     if safe != filename or safe in {"", ".", ".."}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    file_path = uploads_root / str(job_id) / safe
+    file_path = job_uploads_dir(uploads_root, job_id) / safe
     if not file_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
