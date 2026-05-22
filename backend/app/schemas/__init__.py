@@ -18,11 +18,19 @@ from app.schemas.job import (
     ListResponse,
 )
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
+from app.schemas.setting import (
+    ConfigFieldResponse,
+    ConfigResponse,
+    ConfigUpdateRequest,
+)
 from app.schemas.stats import StatsResponse
 
 __all__ = [
     "ActivityItem",
     "ActivityResponse",
+    "ConfigFieldResponse",
+    "ConfigResponse",
+    "ConfigUpdateRequest",
     "JobCreate",
     "JobCreatedActivity",
     "JobResponse",

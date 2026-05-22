@@ -29,6 +29,12 @@ const routes = [
         name: 'jobs',
         component: () => import('../views/Jobs.vue'),
       },
+      {
+        path: 'admin/settings',
+        name: 'admin-settings',
+        component: () => import('../views/AdminSettings.vue'),
+        meta: { requiresAdmin: true },
+      },
     ],
   },
   {
@@ -51,6 +57,13 @@ export function createAuthGuard() {
     }
 
     if (to.path === '/login' && auth.isAuthenticated) {
+      return { path: '/' }
+    }
+
+    // Admin-only routes use isAdmin (not isActuallyAdmin) so the
+    // preview-as-viewer toggle also hides them, matching how other
+    // admin affordances (CRUD buttons) behave.
+    if (to.meta.requiresAdmin && !auth.isAdmin) {
       return { path: '/' }
     }
 

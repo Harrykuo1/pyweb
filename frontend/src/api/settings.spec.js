@@ -53,3 +53,31 @@ describe('settingsApi.deleteImage', () => {
     expect(del).toHaveBeenCalledWith('/settings/login_logo/image')
   })
 })
+
+describe('settingsApi.getConfig', () => {
+  it('GETs /settings/config and returns the response body', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({
+      data: { fields: [{ key: 'max_attachments_per_job', value: 10, type: 'int' }] },
+    })
+
+    const result = await settingsApi.getConfig()
+
+    expect(get).toHaveBeenCalledWith('/settings/config')
+    expect(result.fields[0].key).toBe('max_attachments_per_job')
+  })
+})
+
+describe('settingsApi.updateConfig', () => {
+  it('PUTs /settings/config with {values}', async () => {
+    const put = vi.spyOn(client, 'put').mockResolvedValue({
+      data: { fields: [{ key: 'max_attachments_per_job', value: 15, type: 'int' }] },
+    })
+
+    const result = await settingsApi.updateConfig({ max_attachments_per_job: 15 })
+
+    expect(put).toHaveBeenCalledWith('/settings/config', {
+      values: { max_attachments_per_job: 15 },
+    })
+    expect(result.fields[0].value).toBe(15)
+  })
+})

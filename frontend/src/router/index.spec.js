@@ -15,6 +15,11 @@ afterEach(() => {
 const homeRoute = { path: '/', fullPath: '/', meta: { requiresAuth: true } }
 const loginRoute = { path: '/login', fullPath: '/login', meta: { requiresAuth: false } }
 const membersRoute = { path: '/members', fullPath: '/members', meta: { requiresAuth: true } }
+const adminSettingsRoute = {
+  path: '/admin/settings',
+  fullPath: '/admin/settings',
+  meta: { requiresAuth: true, requiresAdmin: true },
+}
 
 describe('auth guard', () => {
   it('redirects unauthenticated users from protected routes to /login with redirect query', async () => {
@@ -83,5 +88,36 @@ describe('auth guard', () => {
     await guard(homeRoute)
 
     expect(fetchMe).not.toHaveBeenCalled()
+  })
+
+  it('allows admin into requiresAdmin routes', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+
+    const guard = createAuthGuard()
+    const result = await guard(adminSettingsRoute)
+
+    expect(result).toBe(true)
+  })
+
+  it('redirects viewer away from requiresAdmin routes to /', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 2, username: 'viewer', role: 'viewer' }
+
+    const guard = createAuthGuard()
+    const result = await guard(adminSettingsRoute)
+
+    expect(result).toEqual({ path: '/' })
+  })
+
+  it('treats admin previewing as viewer as not-admin for requiresAdmin routes', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    auth.setViewAsViewer(true)
+
+    const guard = createAuthGuard()
+    const result = await guard(adminSettingsRoute)
+
+    expect(result).toEqual({ path: '/' })
   })
 })

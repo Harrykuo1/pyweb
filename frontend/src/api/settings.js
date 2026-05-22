@@ -23,4 +23,12 @@ export const settingsApi = {
   async deleteImage(key) {
     await client.delete(`/settings/${encodeURIComponent(key)}/image`)
   },
+  async getConfig() {
+    const { data } = await client.get('/settings/config')
+    return data
+  },
+  async updateConfig(values) {
+    const { data } = await client.put('/settings/config', { values })
+    return data
+  },
 }

@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_admin
+from app.core.deps import get_current_user, require_admin
+from app.core.runtime_config import CONFIG_BY_KEY, CONFIG_FIELDS
 from app.database import get_db
-from app.models import SiteSetting, User
+from app.models import AppConfig, SiteSetting, User
+from app.schemas import ConfigResponse, ConfigUpdateRequest
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -26,6 +28,76 @@ def _check_key(key: str) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown setting key '{key}'",
         )
+
+
+# ---------- Scalar runtime config (app_configs table) ----------
+
+
+def _read_config(db: Session) -> ConfigResponse:
+    rows = {r.key: r.value for r in db.query(AppConfig).all()}
+    fields = []
+    for field in CONFIG_FIELDS:
+        raw = rows.get(field.key, field.default)
+        # Fields only contain int types today; cast accordingly.
+        fields.append(
+            {
+                "key": field.key,
+                "value": int(raw),
+                "type": field.type,
+                "min": field.min_value,
+                "max": field.max_value,
+            }
+        )
+    return ConfigResponse.model_validate({"fields": fields})
+
+
+@router.get("/config", response_model=ConfigResponse)
+def get_runtime_config(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> ConfigResponse:
+    return _read_config(db)
+
+
+@router.put("/config", response_model=ConfigResponse)
+def update_runtime_config(
+    payload: ConfigUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> ConfigResponse:
+    # Reject unknown keys outright — the table is a closed allowlist so
+    # the admin UI cannot turn it into a free-form key/value store.
+    unknown = set(payload.values) - set(CONFIG_BY_KEY)
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown config keys: {sorted(unknown)}",
+        )
+
+    for key, value in payload.values.items():
+        field = CONFIG_BY_KEY[key]
+        if field.min_value is not None and value < field.min_value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{key} must be >= {field.min_value}",
+            )
+        if field.max_value is not None and value > field.max_value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{key} must be <= {field.max_value}",
+            )
+
+        row = db.query(AppConfig).filter_by(key=key).one_or_none()
+        if row is None:
+            db.add(AppConfig(key=key, value=str(value)))
+        else:
+            row.value = str(value)
+
+    db.commit()
+    return _read_config(db)
+
+
+# ---------- Binary image assets (site_settings table) ----------
 
 
 @router.get("/{key}/image")

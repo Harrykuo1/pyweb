@@ -56,6 +56,14 @@ async function handleLogout() {
         <router-link to="/" class="nav-link">首頁</router-link>
         <router-link to="/members" class="nav-link">成員</router-link>
         <router-link to="/jobs" class="nav-link">求職</router-link>
+        <router-link
+          v-if="auth.isAdmin"
+          to="/admin/settings"
+          class="nav-link"
+          data-test="nav-admin-settings"
+        >
+          系統設定
+        </router-link>
       </nav>
 
       <el-button

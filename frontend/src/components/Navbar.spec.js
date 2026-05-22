@@ -213,4 +213,31 @@ describe('Navbar.vue', () => {
       wrapper.find('[data-test="account-dialog-stub"]').exists(),
     ).toBe(false)
   })
+
+  it('admin sees the 系統設定 link', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const link = wrapper.find('[data-test="nav-admin-settings"]')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toBe('/admin/settings')
+  })
+
+  it('viewer does not see the 系統設定 link', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 2, username: 'bob', role: 'viewer' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(wrapper.find('[data-test="nav-admin-settings"]').exists()).toBe(false)
+  })
+
+  it('admin previewing as viewer does not see the 系統設定 link', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    auth.setViewAsViewer(true)
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(wrapper.find('[data-test="nav-admin-settings"]').exists()).toBe(false)
+  })
 })
