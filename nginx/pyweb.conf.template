@@ -23,9 +23,12 @@ http {
     sendfile      on;
     keepalive_timeout 65;
 
-    # Photo cap is 5 MB and PDF cap is 10 MB on the backend; allow some
-    # multipart overhead.
-    client_max_body_size 12m;
+    # Upper bound is set to cover the largest configurable per-file
+    # attachment limit (200MB in app_configs.max_attachment_mb). The
+    # backend's runtime check is what actually enforces the admin's
+    # configured value — nginx is just a static safety net so that
+    # bumping the admin setting doesn't silently fail at the proxy.
+    client_max_body_size 256m;
 
     # gzip text-y responses. Image / PDF blobs are already compressed and
     # are intentionally absent from gzip_types. text/html is compressed by
