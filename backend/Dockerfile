@@ -2,8 +2,9 @@
 FROM python:3.13-slim
 
 # bcrypt and a few transitive deps prefer wheels but fall back to sdist
-# builds, which need a C toolchain. Keep the layer slim by removing apt
-# caches afterwards.
+# builds, which need a C toolchain. Office-format conversion now runs
+# in the dedicated onlyoffice service, so we don't ship LibreOffice or
+# its fonts in the backend image anymore.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
     && rm -rf /var/lib/apt/lists/*

@@ -4,6 +4,15 @@ services:
       context: ./backend
     env_file:
       - .env
+    environment:
+      # Where the backend reaches OnlyOffice's conversion API. Hostname
+      # is the compose-network DNS name of the onlyoffice service.
+      ONLYOFFICE_INTERNAL_URL: http://onlyoffice
+      # Reverse direction: where OnlyOffice fetches source files from
+      # when backend asks it to convert. The /internal/convert-source
+      # endpoint is token-gated, so even though there's no session auth
+      # the URL itself is unguessable (256-bit random per request).
+      BACKEND_INTERNAL_URL: http://backend:8000
     # SQLite path is fixed by the Dockerfile (DATABASE_URL=/data/pyweb.db).
     # Bind-mount ./data on the host so the file is editable / inspectable
     # with normal host tools (sqlite3, DBeaver, scp, ...). The container's
@@ -13,6 +22,26 @@ services:
       - ./data:/data
     expose:
       - "8000"
+    restart: unless-stopped
+    depends_on:
+      - onlyoffice
+
+  # OnlyOffice Document Server — used headlessly by the backend for
+  # docx/pptx/doc/ppt -> PDF preview conversion. Image is hefty (~1.4GB)
+  # but gives much better Microsoft format fidelity than LibreOffice
+  # headless, which mangled fonts and SmartArt layouts even after we
+  # piled on every available CJK / Calibri-equivalent font.
+  #
+  # The expose-only ports keep OnlyOffice off the host network — only
+  # the backend service inside the compose network reaches it.
+  onlyoffice:
+    image: onlyoffice/documentserver:8.2
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+      JWT_HEADER: Authorization
+    expose:
+      - "80"
     restart: unless-stopped
 
   frontend:

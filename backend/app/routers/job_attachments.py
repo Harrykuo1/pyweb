@@ -15,6 +15,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.attachments import (
     ALLOWED_EXTENSIONS,
@@ -25,10 +26,31 @@ from app.core.attachments import (
 )
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
+from app.core import office_convert
 from app.core.runtime_config import get_int
 from app.database import get_db
 from app.models import Job, JobAttachment, User
 from app.schemas import JobAttachmentResponse
+
+
+def _preview_path(uploads_root: Path, job_id: int, filename: str) -> Path:
+    return uploads_root / str(job_id) / f"{filename}.preview.pdf"
+
+
+def _serialize(
+    attachment: JobAttachment, uploads_root: Path
+) -> JobAttachmentResponse:
+    return JobAttachmentResponse(
+        id=attachment.id,
+        job_id=attachment.job_id,
+        filename=attachment.filename,
+        mime_type=attachment.mime_type,
+        size_bytes=attachment.size_bytes,
+        uploaded_at=attachment.uploaded_at,
+        preview_available=_preview_path(
+            uploads_root, attachment.job_id, attachment.filename
+        ).exists(),
+    )
 
 router = APIRouter(prefix="/api/jobs", tags=["job_attachments"])
 
@@ -146,6 +168,23 @@ async def upload_attachment(
     final_path = upload_dir / final_filename
     final_path.write_bytes(data)
 
+    # Re-generate the on-disk PDF preview alongside the saved file so
+    # the in-page Office viewer doesn't depend on a separate job. The
+    # overwrite case explicitly nukes the stale preview first; a failed
+    # conversion just leaves preview_available=False and the frontend
+    # falls back to a download link.
+    preview_target = _preview_path(uploads_root, job_id, final_filename)
+    if preview_target.exists():
+        preview_target.unlink()
+    if office_convert.is_convertible(final_filename):
+        # Push the blocking subprocess+polling work off the event loop
+        # — otherwise OnlyOffice's source-fetch GET ends up waiting on
+        # the same uvicorn loop that's busy polling OnlyOffice, and the
+        # whole pipeline deadlocks until OnlyOffice times out.
+        await run_in_threadpool(
+            office_convert.convert_to_pdf, job_id, final_path, preview_target
+        )
+
     now = datetime.now(timezone.utc)
     if has_conflict and conflict_strategy == "overwrite" and existing_row is not None:
         existing_row.mime_type = file.content_type or existing_row.mime_type
@@ -153,7 +192,7 @@ async def upload_attachment(
         existing_row.uploaded_at = now
         db.commit()
         db.refresh(existing_row)
-        return JobAttachmentResponse.model_validate(existing_row)
+        return _serialize(existing_row, uploads_root)
 
     new_row = JobAttachment(
         job_id=job_id,
@@ -165,7 +204,7 @@ async def upload_attachment(
     db.add(new_row)
     db.commit()
     db.refresh(new_row)
-    return JobAttachmentResponse.model_validate(new_row)
+    return _serialize(new_row, uploads_root)
 
 
 def _content_disposition(filename: str, disposition: str = "inline") -> str:
@@ -209,6 +248,7 @@ def _get_attachment_or_404(
 def list_attachments(
     job_id: int,
     db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
     _: User = Depends(get_current_user),
 ) -> list[JobAttachmentResponse]:
     _get_job_or_404(db, job_id)
@@ -218,7 +258,7 @@ def list_attachments(
         .order_by(JobAttachment.uploaded_at.asc(), JobAttachment.id.asc())
         .all()
     )
-    return [JobAttachmentResponse.model_validate(r) for r in rows]
+    return [_serialize(r, uploads_root) for r in rows]
 
 
 @router.get("/{job_id}/attachments/{attachment_id}")
@@ -250,6 +290,34 @@ def download_attachment(
     )
 
 
+@router.get("/{job_id}/attachments/{attachment_id}/preview")
+def preview_attachment(
+    job_id: int,
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
+    _: User = Depends(get_current_user),
+) -> FileResponse:
+    attachment = _get_attachment_or_404(db, job_id, attachment_id)
+
+    preview_path = _preview_path(uploads_root, job_id, attachment.filename)
+    if not preview_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="此附件沒有可預覽的版本",
+        )
+
+    return FileResponse(
+        preview_path,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": _content_disposition(
+                f"{attachment.filename}.pdf"
+            )
+        },
+    )
+
+
 @router.delete(
     "/{job_id}/attachments/{attachment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -264,11 +332,14 @@ def delete_attachment(
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     file_path = uploads_root / str(job_id) / attachment.filename
-    # Remove the disk file first so a successful DB delete can't leave
-    # an orphan blob behind. If the file is already gone (manual
-    # cleanup, partial crash), keep going.
+    preview_path = _preview_path(uploads_root, job_id, attachment.filename)
+    # Remove on-disk artefacts before the DB row so a successful DB
+    # delete can't leave orphan blobs behind. If a file is already
+    # gone (manual cleanup, partial crash), keep going.
     if file_path.exists():
         file_path.unlink()
+    if preview_path.exists():
+        preview_path.unlink()
 
     # If that was the last file in the per-job directory, clean the
     # directory up so the host filesystem doesn't accumulate empty

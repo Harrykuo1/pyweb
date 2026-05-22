@@ -268,3 +268,193 @@ def test_delete_keeps_directory_when_other_attachments_remain(
     # b.pdf is still there so the directory must survive.
     assert job_dir.exists()
     assert (job_dir / "b.pdf").exists()
+
+
+# ---------- PREVIEW (OnlyOffice-converted PDF) ----------
+
+
+FAKE_PDF = b"%PDF-1.4\nFAKE PREVIEW\n"
+
+
+def _upload_pptx(client, job_id, filename="deck.pptx"):
+    files = {
+        "file": (
+            filename,
+            BytesIO(b"PK\x03\x04 fake pptx"),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ),
+    }
+    return client.post(f"/api/jobs/{job_id}/attachments", files=files)
+
+
+def _stub_convert(monkeypatch, *, succeed: bool):
+    """Replace office_convert.convert_to_pdf so the upload handler doesn't
+    spawn OnlyOffice during the test. Returns the call count so tests
+    can assert it was invoked exactly once."""
+    from app.routers import job_attachments as router_mod
+
+    calls = []
+
+    def fake_convert(_job_id, source, output, *_a, **_kw):
+        calls.append((source, output))
+        if succeed:
+            output.write_bytes(FAKE_PDF)
+            return True
+        return False
+
+    monkeypatch.setattr(router_mod.office_convert, "convert_to_pdf", fake_convert)
+    return calls
+
+
+def test_upload_pptx_marks_preview_available_when_conversion_succeeds(
+    client, job, monkeypatch
+):
+    _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+
+    r = _upload_pptx(client, job.id)
+    assert r.status_code == 201
+    assert r.json()["preview_available"] is True
+
+
+def test_upload_pptx_marks_preview_unavailable_when_conversion_fails(
+    client, job, monkeypatch
+):
+    _stub_convert(monkeypatch, succeed=False)
+    _login_admin(client)
+
+    r = _upload_pptx(client, job.id)
+    assert r.status_code == 201
+    assert r.json()["preview_available"] is False
+
+
+def test_upload_non_office_does_not_call_converter(client, job, monkeypatch):
+    calls = _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+
+    files = {"file": ("a.pdf", BytesIO(TINY_PDF), "application/pdf")}
+    r = client.post(f"/api/jobs/{job.id}/attachments", files=files)
+    assert r.status_code == 201
+    assert r.json()["preview_available"] is False
+    assert calls == []
+
+
+def test_list_attachments_surfaces_preview_availability(
+    client, job, monkeypatch, uploads_dir
+):
+    _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+    _upload_pptx(client, job.id, filename="deck.pptx")
+    _upload(client, job.id, filename="report.pdf")
+
+    r = client.get(f"/api/jobs/{job.id}/attachments")
+    rows = {row["filename"]: row for row in r.json()}
+    assert rows["deck.pptx"]["preview_available"] is True
+    assert rows["report.pdf"]["preview_available"] is False
+
+
+def test_preview_endpoint_returns_pdf_when_available(
+    client, job, monkeypatch, uploads_dir
+):
+    _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+    up = _upload_pptx(client, job.id)
+    attachment_id = up.json()["id"]
+    client.cookies.clear()
+
+    _login_viewer(client)
+    r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}/preview")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/pdf")
+    assert r.content == FAKE_PDF
+
+
+def test_preview_endpoint_404_when_no_preview_was_generated(
+    client, job, monkeypatch
+):
+    _stub_convert(monkeypatch, succeed=False)
+    _login_admin(client)
+    up = _upload_pptx(client, job.id)
+    attachment_id = up.json()["id"]
+
+    r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}/preview")
+    assert r.status_code == 404
+
+
+def test_preview_endpoint_requires_auth(client, job, monkeypatch):
+    _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+    up = _upload_pptx(client, job.id)
+    attachment_id = up.json()["id"]
+    client.cookies.clear()
+
+    r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}/preview")
+    assert r.status_code == 401
+
+
+def test_overwrite_regenerates_preview(
+    client, job, monkeypatch, uploads_dir
+):
+    succeed = True
+    pdfs = [b"%PDF-1.4\nFIRST", b"%PDF-1.4\nSECOND"]
+    from app.routers import job_attachments as router_mod
+
+    invocations = {"n": 0}
+
+    def fake_convert(_job_id, source, output, *_a, **_kw):
+        if not succeed:
+            return False
+        output.write_bytes(pdfs[invocations["n"]])
+        invocations["n"] += 1
+        return True
+
+    monkeypatch.setattr(router_mod.office_convert, "convert_to_pdf", fake_convert)
+
+    _login_admin(client)
+    up = _upload_pptx(client, job.id, filename="deck.pptx")
+    attachment_id = up.json()["id"]
+
+    # Confirm the first preview is what we expect.
+    assert (
+        client.get(
+            f"/api/jobs/{job.id}/attachments/{attachment_id}/preview"
+        ).content
+        == pdfs[0]
+    )
+
+    # Overwrite the .pptx and expect a fresh preview body.
+    files = {
+        "file": (
+            "deck.pptx",
+            BytesIO(b"PK\x03\x04 second"),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ),
+    }
+    r = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=files,
+        data={"conflict_strategy": "overwrite"},
+    )
+    assert r.status_code == 201
+
+    assert (
+        client.get(
+            f"/api/jobs/{job.id}/attachments/{attachment_id}/preview"
+        ).content
+        == pdfs[1]
+    )
+
+
+def test_delete_also_removes_preview_pdf(
+    client, job, monkeypatch, uploads_dir
+):
+    _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+    up = _upload_pptx(client, job.id, filename="deck.pptx")
+    attachment_id = up.json()["id"]
+    preview_path = uploads_dir / str(job.id) / "deck.pptx.preview.pdf"
+    assert preview_path.exists()
+
+    r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    assert r.status_code == 204
+    assert not preview_path.exists()

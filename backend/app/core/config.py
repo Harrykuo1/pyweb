@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     # on the same bind-mounted volume as the SQLite file.
     uploads_dir: str = "./data/uploads"
 
+    # OnlyOffice Document Server endpoints. Empty string disables the
+    # Office-preview pipeline (the upload handler then leaves
+    # preview_available=False instead of crashing). Compose populates
+    # these so the backend never has to know about the public host.
+    onlyoffice_internal_url: str = ""
+    backend_internal_url: str = ""
+    onlyoffice_jwt_secret: str = ""
+    onlyoffice_convert_timeout_seconds: float = 240.0
+
     seed_admin_username: str
     seed_admin_password: str
     seed_viewer_username: str
