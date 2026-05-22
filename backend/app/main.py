@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.routers import activity as activity_router
 from app.routers import auth as auth_router
+from app.routers import job_attachments as job_attachments_router
 from app.routers import jobs as jobs_router
 from app.routers import members as members_router
 from app.routers import settings as settings_router
@@ -41,6 +42,7 @@ app.add_middleware(
 app.include_router(auth_router.router)
 app.include_router(members_router.router)
 app.include_router(jobs_router.router)
+app.include_router(job_attachments_router.router)
 app.include_router(activity_router.router)
 app.include_router(stats_router.router)
 app.include_router(settings_router.router)

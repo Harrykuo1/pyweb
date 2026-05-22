@@ -17,6 +17,7 @@ from app.schemas.job import (
     JobUpdate,
     ListResponse,
 )
+from app.schemas.job_attachment import JobAttachmentResponse
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
 from app.schemas.setting import (
     ConfigFieldResponse,
@@ -31,6 +32,7 @@ __all__ = [
     "ConfigFieldResponse",
     "ConfigResponse",
     "ConfigUpdateRequest",
+    "JobAttachmentResponse",
     "JobCreate",
     "JobCreatedActivity",
     "JobResponse",

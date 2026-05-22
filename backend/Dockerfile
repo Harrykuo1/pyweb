@@ -21,6 +21,9 @@ COPY alembic/ ./alembic/
 # SQLite file lives on a Compose-managed volume so it survives container
 # restarts. The path is also reflected in DATABASE_URL below.
 ENV DATABASE_URL=sqlite:////data/pyweb.db
+# Job-attachment files share the same bind-mounted /data volume so they
+# survive container rebuilds alongside the SQLite database.
+ENV UPLOADS_DIR=/data/uploads
 
 RUN useradd --create-home --uid 1000 pyweb \
     && mkdir -p /data \
