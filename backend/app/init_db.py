@@ -5,9 +5,10 @@ from alembic.config import Config
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.runtime_config import CONFIG_FIELDS
 from app.core.security import hash_password
 from app.database import SessionLocal
-from app.models import User, UserRole
+from app.models import AppConfig, User, UserRole
 
 ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
@@ -54,10 +55,24 @@ def seed_accounts(db: Session) -> None:
     db.commit()
 
 
+def _upsert_seed_config(db: Session, key: str, value: str) -> None:
+    existing = db.query(AppConfig).filter_by(key=key).one_or_none()
+    if existing is not None:
+        return
+    db.add(AppConfig(key=key, value=value))
+
+
+def seed_runtime_config(db: Session) -> None:
+    for field in CONFIG_FIELDS:
+        _upsert_seed_config(db, field.key, field.default)
+    db.commit()
+
+
 def main() -> None:
     run_migrations()
     with SessionLocal() as db:
         seed_accounts(db)
+        seed_runtime_config(db)
     print("Database initialized and seeded.")
 
 
