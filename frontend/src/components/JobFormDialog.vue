@@ -26,6 +26,7 @@ import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
 import { jobsApi } from '../api/jobs'
+import JobAttachmentsManager from './JobAttachmentsManager.vue'
 import TimelineEditor from './TimelineEditor.vue'
 
 const props = defineProps({
@@ -266,12 +267,19 @@ function resetForm(job) {
   formRef.value?.clearValidate()
 }
 
+// Bumped on every dialog open so the attachments manager's :key
+// changes, forcing a fresh GET — otherwise the manager keeps showing
+// whatever it loaded the first time this dialog ever rendered, even
+// after attachments are added or deleted elsewhere in the session.
+const openCounter = ref(0)
+
 watch(
   () => [props.modelValue, props.job],
   ([open]) => {
     if (open) {
       resetForm(props.job)
       wireAllPreviewSync()
+      openCounter.value += 1
     }
   },
   { immediate: true },
@@ -528,6 +536,21 @@ async function handleSubmit() {
               v-model="form.timeline_events"
               :default-date="timelineDefaultDate"
               data-test="form-timeline-editor"
+            />
+          </el-tab-pane>
+          <el-tab-pane
+            v-if="isEdit"
+            label="附件"
+            name="attachments"
+            data-test="tab-attachments"
+          >
+            <!-- :key forces a fresh manager (and a fresh GET) every
+                 time the dialog opens, so the manager picks up server
+                 state added between sessions — including the previous
+                 job's attachments not bleeding through. -->
+            <JobAttachmentsManager
+              :key="`${props.job.id}-${openCounter}`"
+              :job-id="props.job.id"
             />
           </el-tab-pane>
         </el-tabs>
