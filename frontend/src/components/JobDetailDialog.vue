@@ -6,6 +6,7 @@ import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
 import { useAuthStore } from '../stores/auth'
+import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
 import TimelineDisplay from './TimelineDisplay.vue'
 
 const props = defineProps({
@@ -24,6 +25,12 @@ const KIND_META = {
 
 const tab = ref('experience')
 
+// Bumped on every dialog open so the attachments viewer's :key
+// changes, forcing a fresh GET. Without this the lazy-rendered tab
+// pane caches its first list and the user has to F5 after uploading
+// an attachment from the edit form to see it appear here.
+const openCounter = ref(0)
+
 // New jobs use timeline_events (structured rows). hasTimelineEvents is
 // the preferred path; the legacy timeline_md branch only matters for
 // rows that haven't been re-saved through the structured editor since
@@ -41,7 +48,10 @@ const hasTimeline = computed(
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) tab.value = 'experience'
+    if (open) {
+      tab.value = 'experience'
+      openCounter.value += 1
+    }
   },
 )
 
@@ -149,6 +159,22 @@ function formatJobYearMonth(j) {
               preview-theme="default"
             />
           </div>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane
+        label="附件"
+        name="attachments"
+        lazy
+        data-test="detail-tab-attachments"
+      >
+        <div class="md-frame" data-test="detail-attachments">
+          <!-- :key forces a fresh component (and a fresh GET) every
+               time the dialog opens, so attachments uploaded in the
+               edit form between opens appear without a manual F5. -->
+          <JobAttachmentsViewer
+            :key="`${job.id}-${openCounter}`"
+            :job-id="job.id"
+          />
         </div>
       </el-tab-pane>
     </el-tabs>

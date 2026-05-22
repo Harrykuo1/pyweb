@@ -7,6 +7,14 @@ export function attachmentUrl(jobId, attachmentId) {
   return `/api/jobs/${jobId}/attachments/${attachmentId}`
 }
 
+// Companion URL for Office documents that the backend has converted to
+// PDF via OnlyOffice. Only resolves to a real PDF when the row's
+// preview_available flag is true; the frontend falls back to a plain
+// download link otherwise.
+export function attachmentPreviewUrl(jobId, attachmentId) {
+  return `/api/jobs/${jobId}/attachments/${attachmentId}/preview`
+}
+
 export const jobAttachmentsApi = {
   async list(jobId) {
     const { data } = await client.get(`/jobs/${jobId}/attachments`)

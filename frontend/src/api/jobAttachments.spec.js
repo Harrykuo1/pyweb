@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import client from './client'
-import { attachmentUrl, jobAttachmentsApi } from './jobAttachments'
+import {
+  attachmentPreviewUrl,
+  attachmentUrl,
+  jobAttachmentsApi,
+} from './jobAttachments'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -10,6 +14,12 @@ afterEach(() => {
 describe('attachmentUrl', () => {
   it('builds the inline-preview path', () => {
     expect(attachmentUrl(7, 42)).toBe('/api/jobs/7/attachments/42')
+  })
+})
+
+describe('attachmentPreviewUrl', () => {
+  it('builds the office-preview PDF path', () => {
+    expect(attachmentPreviewUrl(7, 42)).toBe('/api/jobs/7/attachments/42/preview')
   })
 })
 
