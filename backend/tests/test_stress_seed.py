@@ -14,6 +14,9 @@ is kept at 3 — assertions only need a handful to be meaningful and
 the photos / PDFs are not cheap to produce.
 """
 
+from pathlib import Path
+
+import pytest
 from sqlalchemy import create_engine, text
 
 from scripts import stress_seed
@@ -23,10 +26,16 @@ def _connect(db_url):
     return create_engine(db_url, future=True).connect()
 
 
-def test_seed_inserts_requested_counts(tmp_path):
+@pytest.fixture
+def uploads_dir(tmp_path) -> Path:
+    return tmp_path / "uploads"
+
+
+def test_seed_inserts_requested_counts(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     summary = stress_seed.seed(
-        db_url=db_url, members=3, jobs=3, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=3, batch=3,
         needle_every=0, seed_value=42,
     )
 
@@ -38,14 +47,16 @@ def test_seed_inserts_requested_counts(tmp_path):
         assert conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar() == 3
 
 
-def test_seed_reset_clears_tables_before_inserting(tmp_path):
+def test_seed_reset_clears_tables_before_inserting(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, members=3, jobs=3, batch=3, needle_every=0, seed_value=1,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=3, batch=3, needle_every=0, seed_value=1,
     )
     # Re-run with reset=True; expect the second invocation's count, not 6.
     stress_seed.seed(
-        db_url=db_url, members=1, jobs=1, batch=1,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=1, jobs=1, batch=1,
         needle_every=0, reset=True, seed_value=2,
     )
 
@@ -54,11 +65,12 @@ def test_seed_reset_clears_tables_before_inserting(tmp_path):
         assert conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar() == 1
 
 
-def test_seed_injects_needles_at_expected_cadence(tmp_path):
+def test_seed_injects_needles_at_expected_cadence(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     # needle_every=2 with N=3 → idx 0 and 2 get needles → 2 each.
     stress_seed.seed(
-        db_url=db_url, members=3, jobs=3, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=3, batch=3,
         needle_every=2, seed_value=42,
     )
 
@@ -73,61 +85,68 @@ def test_seed_injects_needles_at_expected_cadence(tmp_path):
         assert job_needles == 2
 
 
-def test_seed_writes_real_jpeg_photos(tmp_path):
+def test_seed_writes_real_jpeg_photos(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, members=3, jobs=0, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=0, batch=3,
         needle_every=0, seed_value=42,
     )
 
     with _connect(db_url) as conn:
-        photos = [
-            r[0]
-            for r in conn.execute(
-                text("SELECT photo FROM members WHERE photo IS NOT NULL")
+        paths = [
+            r[0] for r in conn.execute(
+                text(
+                    "SELECT photo_path FROM members "
+                    "WHERE photo_path IS NOT NULL"
+                )
             ).all()
         ]
-        # Every seeded member must have a photo now.
-        assert len(photos) == 3
-        for blob in photos:
-            assert blob[:3] == b"\xff\xd8\xff", "photo BLOB is not a valid JPEG"
-            # The gradient + confetti + avatar circle compresses to
-            # roughly 10-30 KB; sanity-check we're in the right ballpark.
-            assert 5_000 < len(blob) < 200_000
+    assert len(paths) == 3
+    for rel in paths:
+        blob = (uploads_dir / rel).read_bytes()
+        assert blob[:3] == b"\xff\xd8\xff", f"{rel} is not a valid JPEG"
+        # The gradient + confetti + avatar circle compresses to
+        # roughly 10-30 KB; sanity-check we're in the right ballpark.
+        assert 5_000 < len(blob) < 200_000
 
 
-def test_seed_writes_real_pdf_resumes(tmp_path):
+def test_seed_writes_real_pdf_resumes(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, members=3, jobs=0, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=0, batch=3,
         needle_every=0, seed_value=42,
     )
 
     with _connect(db_url) as conn:
-        pdfs = [
-            r[0]
-            for r in conn.execute(
-                text("SELECT resume_pdf FROM members WHERE resume_pdf IS NOT NULL")
+        paths = [
+            r[0] for r in conn.execute(
+                text(
+                    "SELECT resume_pdf_path FROM members "
+                    "WHERE resume_pdf_path IS NOT NULL"
+                )
             ).all()
         ]
-        # Every seeded member must have a PDF now.
-        assert len(pdfs) == 3
-        for blob in pdfs:
-            assert blob[:5] == b"%PDF-", "resume_pdf BLOB is not a valid PDF"
-            assert b"%%EOF" in blob[-32:]
-            assert 5_000 < len(blob) < 200_000
+    assert len(paths) == 3
+    for rel in paths:
+        blob = (uploads_dir / rel).read_bytes()
+        assert blob[:5] == b"%PDF-", f"{rel} is not a valid PDF"
+        assert b"%%EOF" in blob[-32:]
+        assert 5_000 < len(blob) < 200_000
 
 
-def test_seed_populates_required_member_fields(tmp_path):
+def test_seed_populates_required_member_fields(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, members=3, jobs=0, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=0, batch=3,
         needle_every=0, seed_value=42,
     )
 
     with _connect(db_url) as conn:
-        # Required (non-null) columns must always be set, plus photo +
-        # resume_pdf which are now mandatory for every seeded member.
+        # Required (non-null) columns must always be set, plus the path
+        # columns which are now mandatory for every seeded member.
         nulls = conn.execute(text(
             "SELECT COUNT(*) FROM members "
             "WHERE real_name IS NULL OR real_name = '' "
@@ -135,16 +154,17 @@ def test_seed_populates_required_member_fields(tmp_path):
             "   OR graduation_year IS NULL "
             "   OR joined_at IS NULL "
             "   OR resume_md IS NULL OR resume_md = '' "
-            "   OR photo IS NULL "
-            "   OR resume_pdf IS NULL"
+            "   OR photo_path IS NULL "
+            "   OR resume_pdf_path IS NULL"
         )).scalar()
         assert nulls == 0
 
 
-def test_seed_writes_structured_timeline_events(tmp_path):
+def test_seed_writes_structured_timeline_events(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, members=0, jobs=3, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=0, jobs=3, batch=3,
         needle_every=0, seed_value=42,
     )
 
@@ -177,10 +197,11 @@ def test_seed_writes_structured_timeline_events(tmp_path):
         engine.dispose()
 
 
-def test_seed_disables_needles_when_rate_is_zero(tmp_path):
+def test_seed_disables_needles_when_rate_is_zero(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, members=3, jobs=3, batch=3,
+        db_url=db_url, uploads_dir=uploads_dir,
+        members=3, jobs=3, batch=3,
         needle_every=0, seed_value=1,
     )
 

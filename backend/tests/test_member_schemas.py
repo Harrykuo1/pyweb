@@ -89,24 +89,26 @@ def test_member_response_from_orm_object():
 
 def test_member_response_omits_binary_fields():
     # has_photo / has_resume_pdf read the companion non-deferred
-    # columns; mirror the upload invariant by setting them together
-    # with the BLOBs.
+    # columns; mirror the upload invariant by setting the paths and
+    # companion fields together (binary content itself lives on disk).
     now = datetime.now(timezone.utc)
     m = Member(
         id=2,
         graduation_year=2022,
         real_name="Bob",
         institution="SWE",
-        photo=b"\x00\x01\x02-secret-bytes",
+        photo_path="members/2/photo.png",
         photo_content_type="image/png",
         photo_updated_at=now,
-        resume_pdf=b"%PDF-1.4 secret",
+        resume_pdf_path="members/2/resume.pdf",
         resume_pdf_updated_at=now,
         joined_at=now,
     )
     dumped = MemberResponse.model_validate(m).model_dump()
     assert "photo" not in dumped
     assert "resume_pdf" not in dumped
+    assert "photo_path" not in dumped
+    assert "resume_pdf_path" not in dumped
     assert "photo_content_type" not in dumped
     assert dumped["has_photo"] is True
     assert dumped["has_resume_pdf"] is True

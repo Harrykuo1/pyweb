@@ -94,7 +94,8 @@ def test_list_excludes_photo_field(client_factory, db_session):
             graduation_year=2024,
             real_name="x",
             institution="y",
-            photo=b"\x00\x01",
+            photo_path="members/1/photo.png",
+            photo_content_type="image/png",
             joined_at=datetime.now(timezone.utc),
         )
     )
@@ -103,7 +104,9 @@ def test_list_excludes_photo_field(client_factory, db_session):
 
     r = client.get("/api/members")
     assert r.status_code == 200
-    assert "photo" not in r.json()[0]
+    body = r.json()[0]
+    assert "photo" not in body
+    assert "photo_path" not in body
 
 
 # ---------- detail ----------

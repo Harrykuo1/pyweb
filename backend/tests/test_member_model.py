@@ -18,30 +18,9 @@ def test_create_member_with_required_fields(db_session):
     fetched = db_session.query(Member).one()
     assert fetched.graduation_year == 2024
     assert fetched.real_name == "Alice Wang"
-    assert fetched.photo is None
+    assert fetched.photo_path is None
     assert fetched.resume_md is None
     assert fetched.joined_at is not None
-
-
-def test_create_member_with_photo_blob_and_resume(db_session):
-    blob = b"\x89PNG\r\n\x1a\nfake-image-bytes"
-    m = Member(
-        graduation_year=2023,
-        real_name="Bob",
-        institution="MS student",
-        photo=blob,
-        photo_content_type="image/png",
-        resume_md="# Bob\n\nResume in markdown.",
-        resume_pdf=b"%PDF-1.4 stub",
-    )
-    db_session.add(m)
-    db_session.commit()
-
-    fetched = db_session.query(Member).one()
-    assert fetched.photo == blob
-    assert fetched.photo_content_type == "image/png"
-    assert fetched.resume_pdf == b"%PDF-1.4 stub"
-    assert "markdown" in fetched.resume_md
 
 
 def test_member_has_flags_default_false(db_session):
@@ -57,20 +36,20 @@ def test_member_has_flags_default_false(db_session):
 
 def test_member_has_flags_when_populated(db_session):
     # has_photo / has_resume_pdf read the small companion columns
-    # (photo_content_type, resume_pdf_updated_at) so list queries don't
-    # trigger a load of the deferred BLOB. Production upload endpoints
-    # always set the BLOB and its companion in lockstep, so we mirror
-    # that invariant here.
+    # (photo_content_type, resume_pdf_updated_at) — the binary assets
+    # themselves live on disk via photo_path / resume_pdf_path. Upload
+    # endpoints set the companion columns in lockstep with writing the
+    # file, so we mirror that invariant here.
     now = datetime.now(timezone.utc)
     m = Member(
         graduation_year=2024,
         real_name="A",
         institution="B",
-        photo=b"\x89PNG",
+        photo_path="members/1/photo.png",
         photo_content_type="image/png",
         photo_updated_at=now,
         resume_md="# heading",
-        resume_pdf=b"%PDF",
+        resume_pdf_path="members/1/resume.pdf",
         resume_pdf_updated_at=now,
     )
     db_session.add(m)
