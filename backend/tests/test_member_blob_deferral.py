@@ -13,12 +13,12 @@ These tests guard against two regressions:
      column, which would trigger a per-row SELECT during response
      serialization — turning the optimisation into a real N+1.
 
-Photo storage has since moved to the filesystem (photo_path), so the
-GET endpoint never touches the BLOB column either — the deferral
-optimisation is now strictly a safety net while the column itself is
-on its way out. The seeding here mirrors a post-FS-rollout row:
-photo_path set, photo BLOB NULL. Resume PDFs still live in the BLOB
-column until their own router migration lands.
+Both photo and resume_pdf storage have since moved to the filesystem
+(photo_path / resume_pdf_path), so the binary endpoints never touch
+the BLOB columns either — the deferral optimisation is now strictly
+a safety net while the columns themselves are on their way out. The
+seeding here mirrors a post-FS-rollout row: paths set, BLOB columns
+NULL.
 """
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,28 +49,30 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def populated(db_session, uploads_dir):
-    """Seed admin + 5 members each with a photo (FS-backed) and a
-    resume_pdf BLOB so the 'real' list query has multiple rows to
-    potentially N+1 over."""
+    """Seed admin + 5 members each with an FS-backed photo and an
+    FS-backed resume PDF so the 'real' list query has multiple rows
+    to potentially N+1 over."""
     db_session.add(
         User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN)
     )
     for i in range(5):
         member_id = i + 1
-        relpath = f"members/{member_id}/photo.png"
-        on_disk = uploads_dir / relpath
-        on_disk.parent.mkdir(parents=True, exist_ok=True)
-        on_disk.write_bytes(TINY_PNG)
+        photo_rel = f"members/{member_id}/photo.png"
+        pdf_rel = f"members/{member_id}/resume.pdf"
+        for relpath, body in ((photo_rel, TINY_PNG), (pdf_rel, TINY_PDF)):
+            on_disk = uploads_dir / relpath
+            on_disk.parent.mkdir(parents=True, exist_ok=True)
+            on_disk.write_bytes(body)
         db_session.add(
             Member(
                 id=member_id,
                 graduation_year=2020 + i,
                 real_name=f"Member {i}",
                 institution="SWE",
-                photo_path=relpath,
+                photo_path=photo_rel,
                 photo_content_type="image/png",
                 photo_updated_at=datetime.now(timezone.utc),
-                resume_pdf=TINY_PDF,
+                resume_pdf_path=pdf_rel,
                 resume_pdf_updated_at=datetime.now(timezone.utc),
                 joined_at=datetime.now(timezone.utc),
             )
@@ -201,7 +203,7 @@ def test_has_photo_property_correct_with_and_without_photo(populated, db_session
     with_photo.photo_path = None
     with_photo.photo_content_type = None
     with_photo.photo_updated_at = None
-    with_photo.resume_pdf = None
+    with_photo.resume_pdf_path = None
     with_photo.resume_pdf_updated_at = None
     db_session.commit()
     db_session.refresh(with_photo)

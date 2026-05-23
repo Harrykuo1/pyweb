@@ -253,19 +253,26 @@ def delete_member_photo(
 async def get_member_resume_pdf(
     member_id: int,
     db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
     _: object = Depends(get_current_user),
 ) -> Response:
     member = _get_member_or_404(db, member_id)
-    if member.resume_pdf is None:
+    if not member.resume_pdf_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No resume pdf")
-    return Response(
-        content=member.resume_pdf,
+    file_path = uploads_root / member.resume_pdf_path
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Resume file missing"
+        )
+    return FileResponse(
+        file_path,
         media_type=RESUME_PDF_TYPE,
         headers={
             # URL is content-addressed via ?v=<resume_pdf_updated_at>;
             # see the photo endpoint above for the rationale.
             "Cache-Control": "private, max-age=31536000, immutable",
             "Content-Disposition": f'inline; filename="member-{member_id}-resume.pdf"',
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
@@ -275,6 +282,7 @@ async def upload_member_resume_pdf(
     member_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
     _: object = Depends(require_admin),
 ) -> Member:
     if file.content_type != RESUME_PDF_TYPE:
@@ -290,7 +298,12 @@ async def upload_member_resume_pdf(
         )
 
     member = _get_member_or_404(db, member_id)
-    member.resume_pdf = data
+    relpath = f"members/{member_id}/resume.pdf"
+    target = uploads_root / relpath
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+
+    member.resume_pdf_path = relpath
     member.resume_pdf_updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(member)
@@ -302,10 +315,16 @@ def delete_member_resume_pdf(
     member_id: int,
     payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
     admin: User = Depends(require_admin),
 ) -> None:
     _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
-    member.resume_pdf = None
+    if member.resume_pdf_path:
+        file_path = uploads_root / member.resume_pdf_path
+        if file_path.exists():
+            file_path.unlink()
+    member.resume_pdf_path = None
     member.resume_pdf_updated_at = None
     db.commit()
+    _try_remove_member_dir(uploads_root, member_id)
