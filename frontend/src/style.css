@@ -249,6 +249,18 @@ body > .el-overlay .el-dialog__body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(15, 23, 42, 0.15) transparent;
+  /* Element Plus puts the dialog's 16px padding on .el-dialog itself
+     (not on __body — checked the compiled theme-chalk). That meant the
+     scrollbar inside __body floated 16px from the dialog's right edge.
+     Stretch the body past the parent's right padding with a negative
+     right margin so the scrollbar lands flush against the dialog edge,
+     then give the breathing back to direct children below. */
+  margin-right: calc(-1 * var(--el-dialog-padding-primary, 16px));
+}
+
+.el-overlay-dialog .el-dialog__body > *,
+body > .el-overlay .el-dialog__body > * {
+  margin-right: var(--el-dialog-padding-primary, 16px);
 }
 
 /* Phone-class breakpoint. Anything narrower than this gets the compact
