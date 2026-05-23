@@ -677,7 +677,7 @@ onMounted(loadItems)
           data-test="detail-delete-button"
           @click="askDelete(detailJob)"
         >
-          刪除
+          刪除整筆紀錄
         </el-button>
       </template>
     </JobDetailDialog>
@@ -692,7 +692,7 @@ onMounted(loadItems)
       v-model="deleteDialogOpen"
       title="刪除求職紀錄"
       :item-name="deleteTarget?.company ?? ''"
-      warning="將永久刪除這筆求職紀錄，包含心得與時程表。此操作無法復原。"
+      warning="將永久刪除這筆求職紀錄，包含心得、時程表與所有附件。此操作無法復原。"
       :loading="deleteSubmitting"
       :error-message="deleteError"
       @confirm="handleDeleteConfirm"
