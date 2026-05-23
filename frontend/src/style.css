@@ -203,6 +203,24 @@ h4 {
 .el-overlay-dialog .el-dialog,
 body > .el-overlay .el-dialog {
   max-width: 95vw;
+  /* Pin the dialog inside the viewport. Combined with the flex layout
+     below, this forces the body slot to shrink and scroll instead of
+     letting the dialog stretch past the viewport (which triggered the
+     overlay-dialog scrollbar to coexist with the page scrollbar
+     underneath). 88vh leaves room for top:6vh + a 6vh bottom margin. */
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.el-overlay-dialog .el-dialog__body,
+body > .el-overlay .el-dialog__body {
+  /* In the flex-column dialog, body claims the leftover space between
+     the (auto-height) header and footer, then scrolls internally. The
+     min-height:0 is required to let flex actually shrink the body
+     below its natural content height. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Slim, low-contrast scrollbar so when a dialog body does need to
@@ -224,6 +242,11 @@ body > .el-overlay .el-dialog__body::-webkit-scrollbar-track {
 }
 .el-overlay-dialog .el-dialog__body,
 body > .el-overlay .el-dialog__body {
+  /* When the body's natural content exceeds the flex slot, scroll
+     inside the body rather than letting the dialog push past the
+     viewport (which produced a duplicate scrollbar on the right when
+     teleported=false dialogs sat over an already-tall page). */
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(15, 23, 42, 0.15) transparent;
 }
@@ -243,13 +266,10 @@ body > .el-overlay .el-dialog__body {
     margin-top: 5vh !important;
   }
 
-  /* Cap the body height on phones so a long form's footer stays in
-     reach above the keyboard / address bar. Desktops let the whole
-     dialog scroll within the overlay instead — much less visual
-     noise than an internal scrollbar on a wide editor. */
-  .el-overlay-dialog .el-dialog__body,
-  body > .el-overlay .el-dialog__body {
-    max-height: calc(85vh - 110px);
-    overflow-y: auto;
+  /* Tighter cap on phones so the dialog footer stays above the
+     on-screen keyboard / address bar — overrides the desktop 88vh. */
+  .el-overlay-dialog .el-dialog,
+  body > .el-overlay .el-dialog {
+    max-height: 85vh;
   }
 }

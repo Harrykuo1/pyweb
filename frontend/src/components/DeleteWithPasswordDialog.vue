@@ -67,7 +67,7 @@ function submit() {
       </div>
     </div>
 
-    <el-form @submit.prevent="submit">
+    <el-form label-position="top" @submit.prevent="submit">
       <el-form-item label="管理員密碼">
         <el-input
           ref="inputRef"
