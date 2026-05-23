@@ -50,3 +50,21 @@ def test_seed_accounts_skips_existing_user_without_overwriting(db_session):
 
     admin = db_session.query(User).filter_by(username=settings.seed_admin_username).one()
     assert admin.password_hash == "pre-existing-hash"
+
+
+def test_seed_accounts_does_not_duplicate_renamed_seed_user(db_session):
+    # Regression: previously, _upsert_seed_user keyed on username, so
+    # once an admin renamed the seeded "viewer" → "PY!", the next
+    # init_db run treated the slot as empty and inserted a duplicate
+    # viewer row. Now the probe is by role, so a renamed seed account
+    # blocks re-creation.
+    seed_accounts(db_session)
+    viewer = db_session.query(User).filter_by(role=UserRole.VIEWER).one()
+    viewer.username = "PY!"
+    db_session.commit()
+
+    seed_accounts(db_session)
+
+    viewers = db_session.query(User).filter_by(role=UserRole.VIEWER).all()
+    assert len(viewers) == 1
+    assert viewers[0].username == "PY!"

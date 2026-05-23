@@ -27,7 +27,12 @@ def run_migrations() -> None:
 
 
 def _upsert_seed_user(db: Session, username: str, password: str, role: UserRole) -> None:
-    existing = db.query(User).filter_by(username=username).one_or_none()
+    # Probe by role, not username. The seed represents the initial slot
+    # for that role; once any user of the role exists we've moved past
+    # initialization. Looking up by the original username would treat a
+    # renamed seed account ("viewer" → "PY!") as missing and insert a
+    # duplicate viewer on the next container restart.
+    existing = db.query(User).filter_by(role=role).first()
     if existing is not None:
         return
     db.add(
