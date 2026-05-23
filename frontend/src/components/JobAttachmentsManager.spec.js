@@ -98,7 +98,7 @@ describe('JobAttachmentsManager.vue', () => {
     wrapper.vm.handleFileSelected({ raw: file })
     await flushPromises()
 
-    expect(upload).toHaveBeenCalledWith(7, file, null, file.name)
+    expect(upload).toHaveBeenCalledWith(7, file, null, file.name, expect.any(Function))
     expect(wrapper.vm.attachments.some((a) => a.id === 2)).toBe(true)
   })
 
@@ -125,7 +125,13 @@ describe('JobAttachmentsManager.vue', () => {
     dialog.vm.$emit('resolved', { 'report.pdf': 'overwrite' })
     await flushPromises()
 
-    expect(upload).toHaveBeenCalledWith(7, file, 'overwrite', file.name)
+    expect(upload).toHaveBeenCalledWith(
+      7,
+      file,
+      'overwrite',
+      file.name,
+      expect.any(Function),
+    )
   })
 
   it('skips files when the user picks "skip" in the conflict dialog', async () => {
@@ -761,5 +767,194 @@ describe('JobAttachmentsManager.vue', () => {
 
     expect(wrapper.find('[data-test="attachment-uploader"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('已達上限')
+  })
+
+  describe('capacity precheck', () => {
+    it('warns before uploading when the batch would exceed the cap', async () => {
+      // Cap = 5, already have 4 → 1 free slot. User picks 3 files →
+      // ask for confirmation, accept ⇒ upload only first 1.
+      const list = Array.from({ length: 4 }, (_, i) => ({
+        id: i + 1,
+        job_id: 7,
+        filename: `f${i + 1}.pdf`,
+        mime_type: 'application/pdf',
+        size_bytes: 100,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+      }))
+      jobAttachmentsApi.list.mockResolvedValue(list)
+      vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+      const upload = vi.spyOn(jobAttachmentsApi, 'upload').mockImplementation(
+        async (jobId, file) =>
+          ({
+            id: 100,
+            job_id: 7,
+            filename: file.name,
+            mime_type: 'application/pdf',
+            size_bytes: 1,
+            uploaded_at: '2026-05-02T00:00:00+00:00',
+            preview_available: false,
+          }),
+      )
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+
+      for (let i = 0; i < 3; i += 1) {
+        wrapper.vm.handleFileSelected({
+          raw: new File([new Uint8Array([i + 1])], `extra-${i}.pdf`, {
+            type: 'application/pdf',
+          }),
+        })
+      }
+      await flushPromises()
+
+      // Only the first of three files made it past the precheck.
+      expect(upload).toHaveBeenCalledTimes(1)
+      expect(upload.mock.calls[0][1].name).toBe('extra-0.pdf')
+    })
+
+    it('cancelling the precheck dialog aborts the whole batch', async () => {
+      const list = Array.from({ length: 5 }, (_, i) => ({
+        id: i + 1,
+        job_id: 7,
+        filename: `f${i + 1}.pdf`,
+        mime_type: 'application/pdf',
+        size_bytes: 100,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+      }))
+      jobAttachmentsApi.list.mockResolvedValue(list)
+      vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
+      const upload = vi.spyOn(jobAttachmentsApi, 'upload')
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+
+      wrapper.vm.handleFileSelected({
+        raw: new File([new Uint8Array([1])], 'one-too-many.pdf', {
+          type: 'application/pdf',
+        }),
+      })
+      await flushPromises()
+
+      expect(upload).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('per-file upload progress', () => {
+    it('updates uploadProgressPercent from the onUploadProgress callback', async () => {
+      // Capture the callback the manager passes to api.upload, then
+      // invoke it ourselves to simulate axios firing progress events.
+      let onProgress
+      vi.spyOn(jobAttachmentsApi, 'upload').mockImplementation(
+        async (_jobId, _file, _strat, _rel, cb) => {
+          onProgress = cb
+          return {
+            id: 99,
+            job_id: 7,
+            filename: 'foo.pdf',
+            mime_type: 'application/pdf',
+            size_bytes: 1,
+            uploaded_at: '2026-05-02T00:00:00+00:00',
+            preview_available: false,
+          }
+        },
+      )
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+      wrapper.vm.handleFileSelected({
+        raw: new File([new Uint8Array([1])], 'foo.pdf', {
+          type: 'application/pdf',
+        }),
+      })
+      // Run the microtask that calls api.upload but not the
+      // post-upload bookkeeping — we want to inspect mid-upload state.
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(typeof onProgress).toBe('function')
+      onProgress(42)
+      expect(wrapper.vm.uploadProgressPercent).toBe(42)
+    })
+  })
+
+  describe('bulk download', () => {
+    it('POSTs the selected ids and triggers a browser download for the zip', async () => {
+      const blob = new Blob([new Uint8Array([0x50, 0x4b])], {
+        type: 'application/zip',
+      })
+      const bulkDownload = vi
+        .spyOn(jobAttachmentsApi, 'bulkDownload')
+        .mockResolvedValue(blob)
+      // Stub URL.createObjectURL since happy-dom doesn't ship it.
+      const createObjectURL = vi.fn(() => 'blob:fake-url')
+      const revokeObjectURL = vi.fn()
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: createObjectURL,
+      })
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: revokeObjectURL,
+      })
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+
+      wrapper.vm.toggleFileSelection(1, true)
+      await flushPromises()
+      await wrapper.find('[data-test="bulk-download"]').trigger('click')
+      await flushPromises()
+
+      expect(bulkDownload).toHaveBeenCalledWith(7, [1])
+      expect(createObjectURL).toHaveBeenCalledWith(blob)
+      expect(revokeObjectURL).toHaveBeenCalled()
+    })
+  })
+
+  describe('auto-reconcile path after delete', () => {
+    const NESTED = [
+      {
+        id: 1,
+        job_id: 7,
+        filename: 'top.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 2,
+        job_id: 7,
+        filename: 'src/lonely.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+    ]
+
+    it('returns to nearest surviving ancestor when current folder is emptied', async () => {
+      jobAttachmentsApi.list.mockResolvedValue([...NESTED])
+      vi.spyOn(jobAttachmentsApi, 'remove').mockResolvedValue()
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+      // Drill into src/, then delete the lone file inside.
+      await wrapper.find('[data-test="manager-folder-src"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.vm.currentPath).toBe('src')
+
+      await wrapper.find('[data-test="delete-2"]').trigger('click')
+      await flushPromises()
+      wrapper
+        .findComponent(DeleteWithPasswordDialog)
+        .vm.$emit('confirm', 'admin-pw')
+      await flushPromises()
+
+      // src/ no longer has any descendants → reconciler walks back to
+      // root, which still has top.pdf.
+      expect(wrapper.vm.currentPath).toBe('')
+    })
   })
 })

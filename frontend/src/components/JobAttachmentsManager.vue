@@ -15,6 +15,7 @@ import {
   Close,
   Delete,
   Document,
+  Download,
   Folder,
   FolderAdd,
   FolderOpened,
@@ -62,6 +63,9 @@ const loading = ref(true)
 const uploading = ref(false)
 // Human-readable status line shown while a batch is in flight.
 const uploadStatus = ref('')
+// 0–100, populated from axios's onUploadProgress for the currently
+// in-flight file. Drives the progress bar inside the status banner.
+const uploadProgressPercent = ref(0)
 const maxAttachments = ref(null)
 const maxMb = ref(null)
 
@@ -196,6 +200,25 @@ function toggleSelectAllVisible(checked) {
 function clearSelection() {
   selectedFileIds.value = new Set()
   selectedFolderPaths.value = new Set()
+}
+
+// After any delete, the currentPath may now point at a folder that
+// no longer contains anything. Walk up to the nearest ancestor with
+// surviving descendants so the user isn't stranded looking at a
+// blank list with a stale breadcrumb.
+function reconcileCurrentPath() {
+  if (!currentPath.value) return
+  let path = currentPath.value
+  while (path) {
+    if (attachmentsUnder(attachments.value, path).length > 0) {
+      if (path !== currentPath.value) currentPath.value = path
+      return
+    }
+    const slash = path.lastIndexOf('/')
+    path = slash >= 0 ? path.slice(0, slash) : ''
+  }
+  currentPath.value = ''
+  ElMessage.info('資料夾已清空，自動返回上層')
 }
 
 // Reset selection on navigation: a folder selected at root would
@@ -358,11 +381,78 @@ function onDragLeave(event) {
   }
 }
 
-function onDrop(event) {
+async function onDrop(event) {
   isDragOver.value = false
+  const items = event.dataTransfer?.items
+  // Modern path: walk DataTransferItems with webkitGetAsEntry so a
+  // dropped folder expands recursively. Falls back to dataTransfer.files
+  // (flat) if the items API isn't available (very old browsers).
+  if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = []
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry()
+      if (entry) entries.push(entry)
+    }
+    const files = []
+    for (const entry of entries) {
+      const collected = await readFilesFromEntry(entry, '')
+      files.push(...collected)
+    }
+    for (const file of files) pushPending(file)
+    return
+  }
   const files = event.dataTransfer?.files
   if (!files || files.length === 0) return
   for (const file of files) pushPending(file)
+}
+
+async function readFilesFromEntry(entry, pathPrefix) {
+  // FileSystemEntry tree walker. For files we stamp a synthetic
+  // webkitRelativePath so the existing relpathOf() helper can pick
+  // up the folder structure — matches what the <input webkitdirectory>
+  // path produces, no other code in pushPending needs to change.
+  if (entry.isFile) {
+    return new Promise((resolve, reject) => {
+      entry.file(
+        (file) => {
+          try {
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: pathPrefix + entry.name,
+              configurable: true,
+            })
+          } catch {
+            /* Some browsers seal File; harmless — relpathOf falls back
+               to file.name and we lose folder structure for that one
+               file, which is the best we can do. */
+          }
+          resolve([file])
+        },
+        reject,
+      )
+    })
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader()
+    // readEntries returns at most 100 per call — loop until exhausted.
+    const directChildren = []
+    let batch
+    do {
+      batch = await new Promise((resolve, reject) => {
+        reader.readEntries(resolve, reject)
+      })
+      directChildren.push(...batch)
+    } while (batch.length > 0)
+    const all = []
+    for (const child of directChildren) {
+      const collected = await readFilesFromEntry(
+        child,
+        pathPrefix + entry.name + '/',
+      )
+      all.push(...collected)
+    }
+    return all
+  }
+  return []
 }
 
 function handleFolderPicked(event) {
@@ -377,8 +467,40 @@ function handleFolderPicked(event) {
 
 async function processBatch() {
   batchScheduled = false
-  const batch = pendingFiles.value
+  let batch = pendingFiles.value
   pendingFiles.value = []
+  if (batch.length === 0) return
+
+  // Capacity precheck: estimate worst case = every queued file
+  // becomes a new row (conflict resolutions haven't been chosen yet,
+  // so we can't subtract overwrites). If that exceeds the per-job
+  // cap, ask the user up front rather than letting the first N
+  // succeed and the rest 409 individually.
+  if (maxAttachments.value != null) {
+    const remaining = Math.max(
+      0,
+      maxAttachments.value - attachments.value.length,
+    )
+    if (batch.length > remaining) {
+      const keep = remaining
+      try {
+        await ElMessageBox.confirm(
+          `你選了 ${batch.length} 個檔案，但目前只剩 ${remaining} 個名額。要先上傳前 ${keep} 個，其餘略過嗎？`,
+          '附件名額不足',
+          {
+            type: 'warning',
+            confirmButtonText: keep > 0 ? `只上傳前 ${keep} 個` : '了解',
+            cancelButtonText: '取消整批',
+          },
+        )
+      } catch {
+        ElMessage.info('已取消上傳')
+        return
+      }
+      batch = batch.slice(0, keep)
+      if (batch.length === 0) return
+    }
+  }
 
   const conflicts = batch.filter((entry) =>
     existingNames.value.has(entry.relpath),
@@ -408,11 +530,13 @@ async function processBatch() {
         : ''
       uploadStatus.value =
         `正在上傳 ${i + 1}/${queue.length}：${relpath}${officeHint}`
+      uploadProgressPercent.value = 0
       await uploadOne(file, relpath, resolutions[relpath] ?? null)
     }
   } finally {
     uploading.value = false
     uploadStatus.value = ''
+    uploadProgressPercent.value = 0
   }
 }
 
@@ -436,6 +560,9 @@ async function uploadOne(file, relpath, strategy) {
       file,
       strategy,
       relpath,
+      (percent) => {
+        uploadProgressPercent.value = percent
+      },
     )
     // If overwrite, replace the existing row by id; otherwise append.
     const existingIdx = attachments.value.findIndex(
@@ -521,6 +648,28 @@ function handleBulkDelete() {
   })
 }
 
+async function handleBulkDownload() {
+  const ids = [...selectedAttachmentIds.value]
+  if (ids.length === 0) return
+  try {
+    const blob = await jobAttachmentsApi.bulkDownload(props.jobId, ids)
+    // Synthesise a download link — same pattern as per-row anchors,
+    // just driven from JS so the server can stream a freshly-built
+    // archive without us hardcoding any of its bytes in the page.
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `job-${props.jobId}-attachments.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success(`已下載 ${ids.length} 個檔案的壓縮檔`)
+  } catch {
+    ElMessage.error('下載失敗，請稍後再試')
+  }
+}
+
 async function onDeleteConfirm(password) {
   const pending = pendingDelete.value
   if (!pending) return
@@ -544,6 +693,9 @@ async function onDeleteConfirm(password) {
     // For bulk deletes triggered from the toolbar, the user clearly
     // meant "wipe my selection"; clear the rest too.
     if (pending.mode === 'bulk') clearSelection()
+    // If the user just emptied the folder they were standing in,
+    // climb back to the nearest ancestor that still has content.
+    reconcileCurrentPath()
     ElMessage.success(pending.successMsg)
     deleteDialogOpen.value = false
     pendingDelete.value = null
@@ -581,7 +733,25 @@ async function onDeleteConfirm(password) {
         data-test="upload-status"
       >
         <el-icon class="status-spinner" :size="22"><Loading /></el-icon>
-        <span class="status-text">{{ uploadStatus }}</span>
+        <div class="status-body">
+          <span class="status-text">{{ uploadStatus }}</span>
+          <div
+            class="status-progress-track"
+            :aria-valuenow="uploadProgressPercent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            role="progressbar"
+          >
+            <div
+              class="status-progress-fill"
+              :style="{ width: `${uploadProgressPercent}%` }"
+              data-test="upload-progress-fill"
+            />
+          </div>
+        </div>
+        <span class="status-percent" data-test="upload-progress-percent">
+          {{ uploadProgressPercent }}%
+        </span>
       </div>
 
       <Transition name="bulk-bar">
@@ -604,6 +774,13 @@ async function onDeleteConfirm(password) {
             </span>
           </span>
           <div class="bulk-bar-actions">
+            <el-button
+              :icon="Download"
+              data-test="bulk-download"
+              @click="handleBulkDownload"
+            >
+              下載 zip
+            </el-button>
             <el-button
               type="danger"
               :icon="Delete"
@@ -892,12 +1069,14 @@ async function onDeleteConfirm(password) {
   animation: pyweb-rotate 1.2s linear infinite;
 }
 
-/* High-contrast banner: gradient brand surface + clear motion. Light
-   el-alert was too easy to miss during the 5–15s Office conversion. */
+/* High-contrast banner: gradient brand surface + a determinate
+   progress bar driven by axios's upload events. Light el-alert was
+   too easy to miss during the 5–15s Office conversion; the per-file
+   % gives operators something concrete to wait on. */
 .upload-status {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 14px 18px;
   border-radius: 12px;
   background: linear-gradient(
@@ -907,20 +1086,6 @@ async function onDeleteConfirm(password) {
   );
   color: #ffffff;
   box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
-  position: relative;
-  overflow: hidden;
-}
-
-.upload-status::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 3px;
-  width: 40%;
-  background: rgba(255, 255, 255, 0.85);
-  border-top-right-radius: 3px;
-  animation: pyweb-upload-progress 1.6s ease-in-out infinite;
 }
 
 .status-spinner {
@@ -928,24 +1093,50 @@ async function onDeleteConfirm(password) {
   animation: pyweb-rotate 1.2s linear infinite;
 }
 
+.status-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .status-text {
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.status-progress-fill {
+  height: 100%;
+  background: #ffffff;
+  border-radius: 999px;
+  transition: width 0.15s ease;
+}
+
+.status-percent {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 38px;
+  text-align: right;
 }
 
 @keyframes pyweb-rotate {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes pyweb-upload-progress {
-  0% {
-    left: -40%;
-  }
-  100% {
-    left: 100%;
   }
 }
 
