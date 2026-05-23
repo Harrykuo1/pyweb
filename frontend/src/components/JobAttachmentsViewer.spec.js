@@ -329,6 +329,145 @@ describe('JobAttachmentsViewer.vue', () => {
     })
   })
 
+  describe('text / markdown preview', () => {
+    const TEXTY = [
+      {
+        id: 30,
+        job_id: 7,
+        filename: 'NOTES.md',
+        mime_type: 'text/markdown',
+        size_bytes: 1024,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 31,
+        job_id: 7,
+        filename: 'app.log',
+        mime_type: 'text/plain',
+        size_bytes: 2048,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 32,
+        job_id: 7,
+        filename: 'huge.txt',
+        // 3 MB, over the 2 MB inline-preview cap — must degrade to a
+        // download link rather than try to render in the page.
+        mime_type: 'text/plain',
+        size_bytes: 3 * 1024 * 1024,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+    ]
+
+    function mockFetchText(body) {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue(body),
+      })
+    }
+
+    afterEach(() => {
+      delete globalThis.fetch
+    })
+
+    it('text file (.log) under 2 MB renders inside a <pre> source block', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(TEXTY)
+      mockFetchText('line one\nline two\n')
+
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+
+      await wrapper.find('[data-test="viewer-open-31"]').trigger('click')
+      await flushPromises()
+
+      const src = wrapper.find('[data-test="viewer-text-source"]')
+      expect(src.exists()).toBe(true)
+      expect(src.text()).toContain('line one')
+      expect(src.text()).toContain('line two')
+      // Plain text never gets the source/render toggle.
+      expect(wrapper.find('[data-test="viewer-text-toggle"]').exists()).toBe(false)
+    })
+
+    it('markdown preview defaults to rendered view + offers source toggle', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(TEXTY)
+      mockFetchText('# Hello\n\nbody text.')
+
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="viewer-open-30"]').trigger('click')
+      await flushPromises()
+
+      // Rendered mode initially: MdPreview component is mounted.
+      expect(wrapper.find('[data-test="viewer-text-rendered"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(false)
+
+      // Toggle button flips the view to raw source.
+      await wrapper.find('[data-test="viewer-text-toggle"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-text-source"]').text()).toContain('# Hello')
+    })
+
+    it('files larger than 2 MB degrade to a download link instead of inline preview', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(TEXTY)
+
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+
+      // huge.txt → over cap → "點擊下載" anchor, no preview hijack.
+      expect(wrapper.find('[data-test="viewer-download-32"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-open-32"]').exists()).toBe(false)
+    })
+
+    it('shows an error banner when the text body fails to load', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(TEXTY)
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 })
+
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="viewer-open-31"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-test="viewer-text-error"]').exists()).toBe(true)
+    })
+
+    it('text/markdown preview offers the same fullscreen button as PDFs', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(TEXTY)
+      mockFetchText('# heading')
+
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="viewer-open-30"]').trigger('click')
+      await flushPromises()
+
+      // Fullscreen affordance applies to text/markdown too — long markdown
+      // is exactly the case where 480px feels cramped, so the same toggle
+      // that PDFs and images use should be available here.
+      expect(wrapper.find('[data-test="viewer-fullscreen"]').exists()).toBe(true)
+    })
+
+    it('back button clears the previously loaded text', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(TEXTY)
+      mockFetchText('hello')
+
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="viewer-open-31"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-test="viewer-text-source"]').text()).toContain('hello')
+
+      await wrapper.find('[data-test="viewer-back"]').trigger('click')
+      await flushPromises()
+
+      // We're back at the list, and re-entering must not show stale text
+      // — re-open should refetch.
+      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(false)
+    })
+  })
+
   describe('fullscreen preview', () => {
     let requestFullscreenSpy
     let exitFullscreenSpy

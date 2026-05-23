@@ -327,8 +327,9 @@ function formatJobYearMonth(j) {
 }
 
 .md-frame {
-  max-height: 60vh;
-  overflow-y: auto;
+  /* The outer .el-dialog__body now caps height and scrolls internally
+     (see style.css). A second scroll container here just produced a
+     nested scrollbar inside the dialog. */
   padding: 12px 4px;
 }
 
@@ -383,10 +384,6 @@ function formatJobYearMonth(j) {
 @media (max-width: 640px) {
   .detail-company {
     font-size: 18px;
-  }
-
-  .md-frame {
-    max-height: 55vh;
   }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElAlert, ElEmpty, ElIcon, ElMessage, ElSkeleton } from 'element-plus'
 import {
   ArrowLeft,
@@ -10,7 +10,10 @@ import {
   Folder,
   FullScreen,
   Picture,
+  View,
 } from '@element-plus/icons-vue'
+import { MdPreview } from 'md-editor-v3'
+import 'md-editor-v3/lib/preview.css'
 
 import {
   attachmentPreviewUrl,
@@ -28,6 +31,26 @@ const props = defineProps({
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 const OFFICE_EXTS = new Set(['.doc', '.docx', '.ppt', '.pptx'])
+const MARKDOWN_EXTS = new Set(['.md', '.markdown'])
+// Plain-text extensions we'll render inside a <pre> block. Source-code
+// files belong here too, just without syntax highlighting — readable
+// monospace is enough to preview a config / log / snippet without
+// reaching for a download. md sits in MARKDOWN_EXTS because it has a
+// rendered alternative; everything else is source-only.
+const TEXT_EXTS = new Set([
+  '.txt', '.log', '.json', '.csv', '.xml',
+  '.yml', '.yaml', '.ini', '.toml', '.env',
+  '.html', '.htm', '.css', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+  '.vue', '.svelte',
+  '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift',
+  '.c', '.h', '.cc', '.cpp', '.hpp',
+  '.sh', '.bash', '.zsh', '.fish',
+  '.sql', '.php', '.lua', '.r', '.scala',
+  '.dockerfile', '.gitignore', '.editorconfig',
+])
+// 2 MB hard cap on inline text preview. A 50 MB log file rendered as
+// one giant <pre> nukes the page; force a download instead.
+const TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 
 const attachments = ref([])
 const loading = ref(true)
@@ -38,6 +61,14 @@ const currentPath = ref('')
 const selected = ref(null)
 const previewSurfaceRef = ref(null)
 const isFullscreen = ref(false)
+
+// Text-preview state — populated when a markdown/plain-text file is
+// selected, cleared on back/navigate-away. textMode toggles between
+// 'rendered' (MdPreview) and 'source' (raw) for markdown files only.
+const textContent = ref('')
+const textLoading = ref(false)
+const textError = ref('')
+const textMode = ref('rendered')
 
 function extOf(name) {
   const dot = name.lastIndexOf('.')
@@ -59,11 +90,32 @@ function isOffice(a) {
   return OFFICE_EXTS.has(extOf(a.filename))
 }
 
+function isMarkdown(a) {
+  return MARKDOWN_EXTS.has(extOf(a.filename))
+}
+
+function isTextFile(a) {
+  const ext = extOf(a.filename)
+  return MARKDOWN_EXTS.has(ext) || TEXT_EXTS.has(ext)
+}
+
+function canPreviewText(a) {
+  // Anything over the cap falls back to download — rendering a 50 MB
+  // log inline freezes the page and helps no one.
+  return isTextFile(a) && a.size_bytes <= TEXT_PREVIEW_MAX_BYTES
+}
+
 function canPreview(a) {
   // Native: browser PDF viewer / <img>. Office: only when OnlyOffice
   // successfully produced a companion PDF, which the API surfaces as
-  // preview_available.
-  return isPdf(a) || isImage(a) || (isOffice(a) && a.preview_available)
+  // preview_available. Text/markdown: fetched and rendered inline, but
+  // only under the 2 MB guardrail.
+  return (
+    isPdf(a)
+    || isImage(a)
+    || (isOffice(a) && a.preview_available)
+    || canPreviewText(a)
+  )
 }
 
 function iconFor(a) {
@@ -97,6 +149,9 @@ function onFileClick(a, event) {
     // the dialog instead of letting the browser navigate away.
     event.preventDefault()
     selected.value = a
+    if (isTextFile(a)) {
+      loadTextPreview(a)
+    }
     return
   }
   // For non-previewable types the anchor's `download` attribute already
@@ -105,7 +160,38 @@ function onFileClick(a, event) {
 
 function back() {
   selected.value = null
+  textContent.value = ''
+  textError.value = ''
+  textMode.value = 'rendered'
 }
+
+async function loadTextPreview(a) {
+  textLoading.value = true
+  textError.value = ''
+  textContent.value = ''
+  textMode.value = isMarkdown(a) ? 'rendered' : 'source'
+  try {
+    // Fetch via the same /api/jobs/{id}/attachments/{id} endpoint as
+    // download — Content-Disposition: attachment doesn't matter for
+    // body bytes, so a single download URL serves both flows.
+    const response = await fetch(attachmentUrl(props.jobId, a.id), {
+      credentials: 'same-origin',
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    textContent.value = await response.text()
+  } catch {
+    textError.value = '載入文字內容失敗，請改用「下載」按鈕。'
+  } finally {
+    textLoading.value = false
+  }
+}
+
+// Reset text mode whenever the user picks a fresh attachment.
+watch(selected, (next, prev) => {
+  if (!next || next?.id !== prev?.id) {
+    textMode.value = next && isMarkdown(next) ? 'rendered' : 'source'
+  }
+})
 
 async function load() {
   loading.value = true
@@ -198,6 +284,19 @@ onBeforeUnmount(() => {
           {{ selected.filename }}
         </span>
         <button
+          v-if="isMarkdown(selected)"
+          type="button"
+          class="preview-action"
+          data-test="viewer-text-toggle"
+          :title="textMode === 'rendered' ? '查看原始碼' : '回到渲染畫面'"
+          @click="textMode = textMode === 'rendered' ? 'source' : 'rendered'"
+        >
+          <el-icon :size="14">
+            <component :is="textMode === 'rendered' ? Document : View" />
+          </el-icon>
+          {{ textMode === 'rendered' ? '原始碼' : '渲染' }}
+        </button>
+        <button
           type="button"
           class="preview-action"
           data-test="viewer-fullscreen"
@@ -247,6 +346,37 @@ onBeforeUnmount(() => {
           class="pdf-embed"
           :data-test="`viewer-office-${selected.id}`"
         />
+        <div
+          v-else-if="isTextFile(selected)"
+          class="text-preview"
+          :data-test="`viewer-text-${selected.id}`"
+        >
+          <el-skeleton
+            v-if="textLoading"
+            :rows="6"
+            animated
+            data-test="viewer-text-loading"
+          />
+          <el-alert
+            v-else-if="textError"
+            type="error"
+            :closable="false"
+            :title="textError"
+            show-icon
+            data-test="viewer-text-error"
+          />
+          <MdPreview
+            v-else-if="isMarkdown(selected) && textMode === 'rendered'"
+            :model-value="textContent"
+            theme="light"
+            data-test="viewer-text-rendered"
+          />
+          <pre
+            v-else
+            class="text-source"
+            data-test="viewer-text-source"
+          >{{ textContent }}</pre>
+        </div>
       </div>
     </div>
 
@@ -587,9 +717,62 @@ onBeforeUnmount(() => {
   border-radius: 0;
 }
 
+/* ---------- Text / Markdown preview ---------- */
+.text-preview {
+  width: 100%;
+  max-height: 480px;
+  overflow: auto;
+  padding: 14px 16px;
+  background: #fff;
+}
+
+.text-source {
+  margin: 0;
+  font-family: var(--font-mono, 'JetBrains Mono', Menlo, Consolas, monospace);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-900, #0f172a);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* md-editor-v3's preview container forces its own padding & background.
+   Strip them so the surface frame from .text-preview wins, otherwise
+   the markdown body has a doubled inner border. */
+.text-preview :deep(.md-editor-preview-wrapper) {
+  padding: 0;
+}
+
+.text-preview :deep(.md-editor-preview) {
+  background: transparent;
+}
+
+/* Fullscreen treatment for text/markdown: the surface element flips to
+   100vw/100vh (per the rules above), and the text panel itself goes
+   edge-to-edge inside it. Center the content column on wide screens so
+   markdown isn't a single river spanning a 4K monitor. */
+.preview-surface:fullscreen .text-preview,
+.preview-surface.is-fullscreen .text-preview {
+  max-height: none;
+  height: 100vh;
+  width: 100vw;
+  padding: 32px max(48px, calc((100vw - 920px) / 2));
+  background: #ffffff;
+  overflow: auto;
+}
+
+.preview-surface:fullscreen .text-source,
+.preview-surface.is-fullscreen .text-source {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
 @media (max-width: 640px) {
   .pdf-embed {
     height: 360px;
+  }
+  .text-preview {
+    max-height: 360px;
   }
 }
 </style>
