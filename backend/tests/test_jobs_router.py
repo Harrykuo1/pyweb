@@ -1027,3 +1027,60 @@ def test_delete_404(client_factory):
         "DELETE", "/api/jobs/9999", json={"password": "admin-pw"},
     )
     assert r.status_code == 404
+
+
+def test_delete_removes_on_disk_uploads_dir(client_factory, db_session, tmp_path):
+    """DB cascades clean job_attachments rows, but the on-disk
+    uploads/jobs/{id}/ tree was previously leaked. Verify the
+    directory and any files inside (originals + preview PDFs) are
+    swept up alongside the row delete."""
+    from app.routers.job_attachments import get_uploads_root
+
+    client, login_as = client_factory
+    _seed(db_session, [{"company": "Acme"}])
+    login_as("admin")
+
+    uploads_dir = tmp_path / "uploads"
+    app.dependency_overrides[get_uploads_root] = lambda: uploads_dir
+
+    # Seed an on-disk layout that mimics what a real upload produces:
+    # nested folder relpath + an OnlyOffice preview PDF sibling.
+    job_dir = uploads_dir / "jobs" / "1"
+    (job_dir / "src" / "components").mkdir(parents=True)
+    (job_dir / "src" / "components" / "deck.pptx").write_bytes(b"PK\x03\x04")
+    (job_dir / "src" / "components" / "deck.pptx.preview.pdf").write_bytes(b"%PDF-1.4")
+
+    try:
+        r = client.request(
+            "DELETE", "/api/jobs/1", json={"password": "admin-pw"},
+        )
+        assert r.status_code == 204
+        assert not job_dir.exists()
+        # Parent uploads/jobs/ stays — it's shared across jobs and
+        # rmtree only targets the specific job's directory.
+        assert (uploads_dir / "jobs").exists()
+    finally:
+        app.dependency_overrides.pop(get_uploads_root, None)
+
+
+def test_delete_succeeds_when_no_uploads_dir_exists(
+    client_factory, db_session, tmp_path
+):
+    """Most jobs never get an attachment so uploads/jobs/{id}/ may
+    never exist on disk at delete time. rmtree(ignore_errors=True)
+    must no-op rather than 500 the delete."""
+    from app.routers.job_attachments import get_uploads_root
+
+    client, login_as = client_factory
+    _seed(db_session, [{"company": "Acme"}])
+    login_as("admin")
+
+    uploads_dir = tmp_path / "uploads"
+    app.dependency_overrides[get_uploads_root] = lambda: uploads_dir
+    try:
+        r = client.request(
+            "DELETE", "/api/jobs/1", json={"password": "admin-pw"},
+        )
+        assert r.status_code == 204
+    finally:
+        app.dependency_overrides.pop(get_uploads_root, None)

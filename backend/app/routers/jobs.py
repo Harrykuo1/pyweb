@@ -1,3 +1,5 @@
+import shutil
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +11,7 @@ from app.core.search_query import build_ilike_filter, parse as parse_search_quer
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, JobKind, User
+from app.routers.job_attachments import get_uploads_root, job_uploads_dir
 from app.schemas import (
     JobCreate,
     JobResponse,
@@ -234,9 +237,17 @@ def delete_job(
     job_id: int,
     payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
     admin: User = Depends(require_admin),
 ) -> None:
     _require_admin_password(payload, admin)
     obj = _get_or_404(db, job_id)
     db.delete(obj)
     db.commit()
+    # DB rows for job_attachments cascade-delete via the FK, but the
+    # on-disk files (originals + OnlyOffice preview PDFs) under
+    # uploads/jobs/{id}/ are orphaned otherwise. Clean the whole
+    # per-job directory after the DB commit succeeds — if rmtree
+    # races against a concurrent upload the missing files will at
+    # worst surface as 404s on download, not data loss.
+    shutil.rmtree(job_uploads_dir(uploads_root, job_id), ignore_errors=True)
