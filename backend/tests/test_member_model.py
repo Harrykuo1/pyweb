@@ -130,3 +130,29 @@ def test_member_required_field_institution_missing_raises(db_session):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+
+def test_member_asset_paths_default_to_none(db_session):
+    m = Member(graduation_year=2024, real_name="A", institution="B")
+    db_session.add(m)
+    db_session.commit()
+
+    fetched = db_session.query(Member).one()
+    assert fetched.photo_path is None
+    assert fetched.resume_pdf_path is None
+
+
+def test_member_asset_paths_persist_when_set(db_session):
+    m = Member(
+        graduation_year=2024,
+        real_name="A",
+        institution="B",
+        photo_path="members/1/photo.png",
+        resume_pdf_path="members/1/resume.pdf",
+    )
+    db_session.add(m)
+    db_session.commit()
+
+    fetched = db_session.query(Member).one()
+    assert fetched.photo_path == "members/1/photo.png"
+    assert fetched.resume_pdf_path == "members/1/resume.pdf"

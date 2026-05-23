@@ -25,6 +25,11 @@ class Member(Base):
     photo: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True, deferred=True
     )
+    # Path relative to settings.uploads_dir (e.g. "members/3/photo.png").
+    # Lives alongside the BLOB column during the migration window; once
+    # the startup backfill copies bytes to disk it NULLs the BLOB and
+    # the router reads exclusively from photo_path going forward.
+    photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     photo_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Bumped on every photo upload, cleared on delete. Used by the frontend
     # as a cache-busting version stamp so browsers refetch only when the
@@ -39,6 +44,7 @@ class Member(Base):
     resume_pdf: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True, deferred=True
     )
+    resume_pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     resume_pdf_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
