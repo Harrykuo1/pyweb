@@ -196,8 +196,19 @@ describe('JobFormDialog — submit', () => {
     }))
   })
 
-  it('emits saved and closes the dialog after a successful create', async () => {
-    vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+  it('emits saved and stays open in edit mode after a successful create', async () => {
+    // After POST the dialog flips into "edit" mode against the newly
+    // issued id so the user can immediately switch to the attachments
+    // tab. The parent list still needs to refresh (saved emit), but the
+    // dialog itself must NOT close — that's the whole point of option A.
+    vi.spyOn(jobsApi, 'create').mockResolvedValue({
+      id: 42,
+      kind: 'internship',
+      company: 'Acme',
+      job_year: 2026,
+      job_month: 5,
+      experience_md: '## x',
+    })
     const wrapper = await mountDialog()
 
     setNativeValue(
@@ -214,7 +225,65 @@ describe('JobFormDialog — submit', () => {
     await flushPromises()
 
     expect(wrapper.emitted('saved')).toBeTruthy()
-    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+    // No close emit — the dialog stays open so the attachments tab is
+    // reachable against the freshly-issued id.
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+  })
+
+  it('flips to edit mode after create so subsequent saves go through update', async () => {
+    const created = {
+      id: 42,
+      kind: 'internship',
+      company: 'Acme',
+      job_year: 2026,
+      job_month: 5,
+      experience_md: '## first',
+    }
+    vi.spyOn(jobsApi, 'create').mockResolvedValue(created)
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue(created)
+    const wrapper = await mountDialog()
+
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## first')
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    // Second save should be a PUT against the id POST handed back —
+    // no second POST.
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## edited')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(42, expect.objectContaining({
+      experience_md: '## edited',
+    }))
+  })
+
+  it('unlocks the attachments tab once the job is created', async () => {
+    vi.spyOn(jobsApi, 'create').mockResolvedValue({
+      id: 7,
+      kind: 'internship',
+      company: 'Acme',
+      job_year: 2026,
+      job_month: 5,
+      experience_md: '## hi',
+    })
+    const wrapper = await mountDialog()
+
+    // Pre-create: the placeholder explains why the manager isn't here.
+    expect(wrapper.find('[data-test="attachments-locked"]').exists()).toBe(true)
+
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## hi')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    // Post-create: placeholder gone, manager mounted in its place.
+    expect(wrapper.find('[data-test="attachments-locked"]').exists()).toBe(false)
   })
 
   it('does not call the API if required fields are empty', async () => {

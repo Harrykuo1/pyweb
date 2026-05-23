@@ -20,6 +20,7 @@ import {
   ElMessage,
   ElTabPane,
   ElTabs,
+  ElTooltip,
 } from 'element-plus'
 import { FullScreen, Loading } from '@element-plus/icons-vue'
 import { MdEditor } from 'md-editor-v3'
@@ -36,7 +37,13 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-const isEdit = computed(() => props.job !== null)
+// Locally-cached job created during this dialog session. Set by the
+// submit handler after a successful POST so the dialog can flip
+// from "new" mode into "edit" mode without closing — the user can
+// then upload attachments against the freshly-issued job id.
+const createdJob = ref(null)
+const currentJob = computed(() => createdJob.value ?? props.job)
+const isEdit = computed(() => currentJob.value !== null)
 const title = computed(() => (isEdit.value ? '編輯求職紀錄' : '新增求職紀錄'))
 
 const KIND_OPTIONS = [
@@ -277,6 +284,9 @@ watch(
   () => [props.modelValue, props.job],
   ([open]) => {
     if (open) {
+      // Reset the create-then-edit handoff so reopening for a new
+      // record doesn't inherit the previous session's createdJob.
+      createdJob.value = null
       resetForm(props.job)
       wireAllPreviewSync()
       openCounter.value += 1
@@ -380,14 +390,26 @@ async function handleSubmit() {
   try {
     const payload = buildPayload()
     if (isEdit.value) {
-      await jobsApi.update(props.job.id, payload)
+      // currentJob covers both the "opened in edit mode" case (props.job
+      // populated) and the "created earlier in this session" case
+      // (createdJob populated by the POST branch below).
+      await jobsApi.update(currentJob.value.id, payload)
+      toast.close()
+      ElMessage.success('已更新求職紀錄')
+      emit('saved')
+      close()
     } else {
-      await jobsApi.create(payload)
+      const created = await jobsApi.create(payload)
+      toast.close()
+      // Stay in the dialog so the user can drop files into the
+      // attachments tab against the freshly-issued id. Tell the parent
+      // list to refresh now (don't wait for close) so the new record
+      // appears in the index immediately.
+      createdJob.value = created
+      activeTab.value = 'attachments'
+      emit('saved')
+      ElMessage.success('已新增，現在可上傳附件')
     }
-    toast.close()
-    ElMessage.success(isEdit.value ? '已更新求職紀錄' : '已新增求職紀錄')
-    emit('saved')
-    close()
   } catch (err) {
     toast.close()
     const status = err?.response?.status
@@ -539,26 +561,49 @@ async function handleSubmit() {
             />
           </el-tab-pane>
           <el-tab-pane
-            v-if="isEdit"
-            label="附件"
             name="attachments"
+            :disabled="!isEdit"
             data-test="tab-attachments"
           >
+            <!-- Custom label so we can wrap a tooltip around the
+                 disabled state. el-tab-pane's disabled flag stops
+                 activation but doesn't tell the user *why*; the
+                 tooltip mirrors the locked-placeholder copy in a
+                 hover-discoverable spot. -->
+            <template #label>
+              <el-tooltip
+                v-if="!isEdit"
+                content="先按「新增」建立紀錄後可上傳附件"
+                placement="top"
+                :show-after="200"
+                data-test="attachments-tab-tooltip"
+              >
+                <span>附件</span>
+              </el-tooltip>
+              <span v-else>附件</span>
+            </template>
             <!-- :key forces a fresh manager (and a fresh GET) every
                  time the dialog opens, so the manager picks up server
                  state added between sessions — including the previous
                  job's attachments not bleeding through. -->
             <JobAttachmentsManager
-              :key="`${props.job.id}-${openCounter}`"
-              :job-id="props.job.id"
+              v-if="isEdit"
+              :key="`${currentJob.id}-${openCounter}`"
+              :job-id="currentJob.id"
             />
+            <div v-else class="attachments-locked" data-test="attachments-locked">
+              <p class="attachments-locked-title">先儲存基本資料</p>
+              <p class="attachments-locked-sub">
+                按下方「新增」建立紀錄後即可上傳附件。
+              </p>
+            </div>
           </el-tab-pane>
         </el-tabs>
       </el-form-item>
     </el-form>
 
     <template #footer>
-      <el-button @click="close">取消</el-button>
+      <el-button @click="close">{{ createdJob ? '關閉' : '取消' }}</el-button>
       <el-button
         type="primary"
         :loading="submitting"
@@ -761,6 +806,32 @@ async function handleSubmit() {
 .md-required-hint {
   margin: 4px 0 0;
   color: #f56c6c;
+  font-size: 12px;
+}
+
+/* Placeholder inside the attachments tab while we're still in "new"
+   mode — the manager can't mount until POST returns an id, so we
+   explain why instead of leaving an empty pane. */
+.attachments-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--ink-500, #64748b);
+}
+
+.attachments-locked-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-700, #334155);
+}
+
+.attachments-locked-sub {
+  margin: 0;
   font-size: 12px;
 }
 
