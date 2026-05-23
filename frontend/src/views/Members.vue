@@ -34,6 +34,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
+import MarqueeText from '../components/MarqueeText.vue'
 import MemberFormDialog from '../components/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/MemberPhotoCell.vue'
 import PhotoCropDialog from '../components/PhotoCropDialog.vue'
@@ -527,12 +528,14 @@ onBeforeUnmount(() => {
 
           <div class="card-body">
             <h3 class="card-name">{{ m.real_name }}</h3>
-            <p class="card-institution">{{ m.institution }}</p>
+            <p class="card-institution">
+              <MarqueeText :text="m.institution" />
+            </p>
             <p
               class="card-position"
               :class="{ 'is-empty': !m.position }"
             >
-              {{ m.position || '—' }}
+              <MarqueeText :text="m.position || '—'" />
             </p>
 
             <div class="card-meta">
@@ -1102,10 +1105,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: var(--ink-700);
   line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .card-position {
@@ -1113,10 +1113,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--ink-500);
   line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .card-position.is-empty {
