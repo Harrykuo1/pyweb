@@ -30,10 +30,16 @@ const routes = [
         component: () => import('../views/Jobs.vue'),
       },
       {
-        path: 'admin/settings',
-        name: 'admin-settings',
-        component: () => import('../views/AdminSettings.vue'),
+        path: 'settings',
+        name: 'settings',
+        component: () => import('../views/Settings.vue'),
         meta: { requiresAdmin: true },
+      },
+      {
+        // Legacy path — the system-settings page merged into /settings.
+        // Hard-redirect keeps bookmarks and the old navbar link working.
+        path: 'admin/settings',
+        redirect: { name: 'settings', hash: '#system' },
       },
     ],
   },

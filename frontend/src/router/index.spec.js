@@ -15,9 +15,9 @@ afterEach(() => {
 const homeRoute = { path: '/', fullPath: '/', meta: { requiresAuth: true } }
 const loginRoute = { path: '/login', fullPath: '/login', meta: { requiresAuth: false } }
 const membersRoute = { path: '/members', fullPath: '/members', meta: { requiresAuth: true } }
-const adminSettingsRoute = {
-  path: '/admin/settings',
-  fullPath: '/admin/settings',
+const settingsRoute = {
+  path: '/settings',
+  fullPath: '/settings',
   meta: { requiresAuth: true, requiresAdmin: true },
 }
 
@@ -95,7 +95,7 @@ describe('auth guard', () => {
     auth.user = { id: 1, username: 'admin', role: 'admin' }
 
     const guard = createAuthGuard()
-    const result = await guard(adminSettingsRoute)
+    const result = await guard(settingsRoute)
 
     expect(result).toBe(true)
   })
@@ -105,7 +105,7 @@ describe('auth guard', () => {
     auth.user = { id: 2, username: 'viewer', role: 'viewer' }
 
     const guard = createAuthGuard()
-    const result = await guard(adminSettingsRoute)
+    const result = await guard(settingsRoute)
 
     expect(result).toEqual({ path: '/' })
   })
@@ -116,7 +116,7 @@ describe('auth guard', () => {
     auth.setViewAsViewer(true)
 
     const guard = createAuthGuard()
-    const result = await guard(adminSettingsRoute)
+    const result = await guard(settingsRoute)
 
     expect(result).toEqual({ path: '/' })
   })

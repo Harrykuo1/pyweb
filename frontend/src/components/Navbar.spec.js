@@ -28,11 +28,6 @@ const stubs = {
     props: ['to'],
     template: '<a :href="to"><slot /></a>',
   },
-  AccountSettingsDialog: {
-    props: ['modelValue'],
-    template:
-      '<div data-test="account-dialog-stub" :data-open="String(modelValue)" />',
-  },
 }
 
 beforeEach(() => {
@@ -66,22 +61,48 @@ describe('Navbar.vue', () => {
     expect(targets).toContain('/jobs')
   })
 
-  it('shows username and 管理員 role tag for admin', () => {
+  it('shows the username in the chip trigger for admin', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    expect(wrapper.text()).toContain('alice')
+    const trigger = wrapper.find('[data-test="user-menu-trigger"]')
+    expect(trigger.exists()).toBe(true)
+    expect(trigger.text()).toContain('alice')
+  })
+
+  it('shows the 管理員 role tag inside the dropdown header for admin', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'alice', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    // ElTag lives inside the dropdown panel — v-show hides it visually
+    // when closed but it's still in the DOM, so findComponent reaches it.
     expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('管理員')
   })
 
-  it('shows 檢視者 role tag for viewer', () => {
+  it('shows the 檢視者 role tag inside the dropdown header for viewer', () => {
     const auth = useAuthStore()
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    expect(wrapper.text()).toContain('bob')
+    expect(wrapper.find('[data-test="user-menu-trigger"]').text()).toContain('bob')
     expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
+  })
+
+  it('toggles the dropdown open and closed when the chip is clicked', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const trigger = wrapper.find('[data-test="user-menu-trigger"]')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+
+    await trigger.trigger('click')
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+
+    await trigger.trigger('click')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
   })
 
   it('logout button calls store.logout and pushes /login on success', async () => {
@@ -94,6 +115,25 @@ describe('Navbar.vue', () => {
 
     expect(logoutSpy).toHaveBeenCalled()
     expect(pushMock).toHaveBeenCalledWith('/login')
+  })
+
+  it('clicking 設定 navigates to /settings and closes the menu', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    // Open the menu first so we can verify it closes after navigation.
+    await wrapper.find('[data-test="user-menu-trigger"]').trigger('click')
+    expect(
+      wrapper.find('[data-test="user-menu-trigger"]').attributes('aria-expanded'),
+    ).toBe('true')
+
+    await wrapper.find('[data-test="nav-settings"]').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith('/settings')
+    expect(
+      wrapper.find('[data-test="user-menu-trigger"]').attributes('aria-expanded'),
+    ).toBe('false')
   })
 
   it('mobile menu toggle expands and collapses the navbar-right drawer', async () => {
@@ -145,29 +185,27 @@ describe('Navbar.vue', () => {
     expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(false)
   })
 
-  it('admin not previewing has badge slot reserved but invisible', () => {
+  it('admin not previewing has no 預覽中 badge in the navbar', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    const badge = wrapper.find('[data-test="preview-badge"]')
-    expect(badge.exists()).toBe(true)
-    expect(badge.classes()).toContain('is-invisible')
+    expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(false)
   })
 
-  it('admin in preview mode shows 檢視者 tag and visible 預覽中 badge', async () => {
+  it('admin in preview mode shows the 預覽中 badge and a previewing chip', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     auth.setViewAsViewer(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
-    const badge = wrapper.find('[data-test="preview-badge"]')
-    expect(badge.exists()).toBe(true)
-    expect(badge.classes()).not.toContain('is-invisible')
+    expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(true)
+    expect(
+      wrapper.find('[data-test="user-menu-trigger"]').classes(),
+    ).toContain('is-previewing')
   })
 
-  it('viewer never sees the preview badge slot', () => {
+  it('viewer never sees the preview badge', () => {
     const auth = useAuthStore()
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
@@ -175,69 +213,28 @@ describe('Navbar.vue', () => {
     expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(false)
   })
 
-  it('admin sees the account-settings button and viewer does not', () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'admin', role: 'admin' }
-    const adminWrapper = mount(Navbar, { global: { stubs } })
-    expect(
-      adminWrapper.find('[data-test="account-settings"]').exists(),
-    ).toBe(true)
-
-    setActivePinia(createPinia())
-    const auth2 = useAuthStore()
-    auth2.user = { id: 2, username: 'bob', role: 'viewer' }
-    const viewerWrapper = mount(Navbar, { global: { stubs } })
-    expect(
-      viewerWrapper.find('[data-test="account-settings"]').exists(),
-    ).toBe(false)
-  })
-
-  it('clicking account-settings opens the dialog', async () => {
+  it('admin sees the 設定 row in the dropdown', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    const stub = wrapper.find('[data-test="account-dialog-stub"]')
-    expect(stub.attributes('data-open')).toBe('false')
-
-    await wrapper.find('[data-test="account-settings"]').trigger('click')
-    expect(stub.attributes('data-open')).toBe('true')
+    expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(true)
   })
 
-  it('account dialog is not rendered for viewer', () => {
+  it('viewer does not see the 設定 row', () => {
     const auth = useAuthStore()
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    expect(
-      wrapper.find('[data-test="account-dialog-stub"]').exists(),
-    ).toBe(false)
+    expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)
   })
 
-  it('admin sees the 系統設定 link', () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'admin', role: 'admin' }
-    const wrapper = mount(Navbar, { global: { stubs } })
-
-    const link = wrapper.find('[data-test="nav-admin-settings"]')
-    expect(link.exists()).toBe(true)
-    expect(link.attributes('href')).toBe('/admin/settings')
-  })
-
-  it('viewer does not see the 系統設定 link', () => {
-    const auth = useAuthStore()
-    auth.user = { id: 2, username: 'bob', role: 'viewer' }
-    const wrapper = mount(Navbar, { global: { stubs } })
-
-    expect(wrapper.find('[data-test="nav-admin-settings"]').exists()).toBe(false)
-  })
-
-  it('admin previewing as viewer does not see the 系統設定 link', () => {
+  it('admin previewing as viewer does not see the 設定 row', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     auth.setViewAsViewer(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    expect(wrapper.find('[data-test="nav-admin-settings"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)
   })
 })
