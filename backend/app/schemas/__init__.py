@@ -20,6 +20,7 @@ from app.schemas.job import (
 from app.schemas.job_attachment import (
     BulkDeleteRequest,
     BulkDeleteResponse,
+    BulkDownloadRequest,
     JobAttachmentResponse,
 )
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
@@ -35,6 +36,7 @@ __all__ = [
     "ActivityResponse",
     "BulkDeleteRequest",
     "BulkDeleteResponse",
+    "BulkDownloadRequest",
     "ConfigFieldResponse",
     "ConfigResponse",
     "ConfigUpdateRequest",

@@ -140,6 +140,59 @@ describe('JobAttachmentsViewer.vue', () => {
     expect(img.attributes('alt')).toBe('screenshot.png')
   })
 
+  it('clicking the inline image opens the zoom viewer with sibling images', async () => {
+    // Two image attachments so the modal viewer's url-list has more
+    // than one entry — verifies we feed it the whole current-folder
+    // image set, not just the clicked one.
+    const list = [
+      { ...ATTACHMENTS[1] }, // id 2, screenshot.png
+      {
+        id: 20,
+        job_id: 7,
+        filename: 'screenshot2.png',
+        mime_type: 'image/png',
+        size_bytes: 80,
+        uploaded_at: '2026-05-02T00:00:00+00:00',
+        preview_available: false,
+      },
+    ]
+    vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(list)
+    const wrapper = mount(JobAttachmentsViewer, {
+      props: { jobId: 7 },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    await wrapper.find('[data-test="viewer-open-2"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.vm.imageViewerOpen).toBe(false)
+
+    await wrapper.find('[data-test="viewer-image-2"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.vm.imageViewerOpen).toBe(true)
+    expect(wrapper.vm.imageUrlsAtCurrentView).toEqual([
+      '/api/jobs/7/attachments/2',
+      '/api/jobs/7/attachments/20',
+    ])
+    expect(wrapper.vm.selectedImageIndex).toBe(0)
+  })
+
+  it('explicit 放大 button also opens the zoom viewer', async () => {
+    vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(ATTACHMENTS)
+    const wrapper = mount(JobAttachmentsViewer, {
+      props: { jobId: 7 },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await wrapper.find('[data-test="viewer-open-2"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-test="viewer-image-zoom"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.vm.imageViewerOpen).toBe(true)
+  })
+
   it('previewable office file (pptx) opens the inline preview pane against /preview', async () => {
     vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(ATTACHMENTS)
     const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })

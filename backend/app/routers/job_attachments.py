@@ -1,3 +1,5 @@
+import io
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
@@ -34,6 +36,7 @@ from app.models import Job, JobAttachment, User
 from app.schemas import (
     BulkDeleteRequest,
     BulkDeleteResponse,
+    BulkDownloadRequest,
     JobAttachmentResponse,
     PasswordConfirmRequest,
 )
@@ -387,6 +390,63 @@ def _prune_empty_subdirs(root: Path) -> None:
                 child.rmdir()
             except OSError:
                 pass
+
+
+@router.post("/{job_id}/attachments/bulk-download")
+def bulk_download_attachments(
+    job_id: int,
+    payload: BulkDownloadRequest,
+    db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
+    _: User = Depends(get_current_user),
+) -> Response:
+    """Stream a zip of the selected attachments. Read-only — viewer
+    permission is sufficient (anyone who can list/download individually
+    can already grab them one at a time). Scoped to a single job so a
+    foreign ID in the payload is silently filtered, mirroring
+    bulk-delete's scoping. Missing on-disk files are skipped rather
+    than 500-ing the whole batch."""
+    _get_job_or_404(db, job_id)
+
+    rows = (
+        db.query(JobAttachment)
+        .filter(
+            JobAttachment.job_id == job_id,
+            JobAttachment.id.in_(payload.ids),
+        )
+        .order_by(JobAttachment.filename.asc())
+        .all()
+    )
+
+    job_dir = job_uploads_dir(uploads_root, job_id)
+    # Build the archive in memory. For the per-job 50-file × 200 MB
+    # absolute cap this stays bounded; if that ever grows, swap to a
+    # StreamingResponse + chunked writer.
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for row in rows:
+            file_path = job_dir / row.filename
+            if not file_path.exists():
+                # Orphan DB row — skip silently rather than abort the
+                # whole zip. The download/list endpoints already 404
+                # on disk-missing individually so the user can pin it
+                # down if needed.
+                continue
+            zf.write(file_path, arcname=row.filename)
+
+    data = buf.getvalue()
+    # Friendly default filename users will see in their download tray.
+    # Job-scoped to make multiple zips distinguishable in a Downloads
+    # folder; quoted via RFC 5987 for non-ASCII safety.
+    zip_name = f"job-{job_id}-attachments.zip"
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": _content_disposition(zip_name, "attachment"),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post(

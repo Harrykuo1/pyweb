@@ -87,3 +87,21 @@ describe('jobAttachmentsApi.bulkRemove', () => {
     expect(result).toEqual({ deleted: 3 })
   })
 })
+
+describe('jobAttachmentsApi.bulkDownload', () => {
+  it('POSTs ids with responseType blob and returns the binary body', async () => {
+    const blob = new Blob([new Uint8Array([0x50, 0x4b])], {
+      type: 'application/zip',
+    })
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: blob })
+
+    const result = await jobAttachmentsApi.bulkDownload(7, [1, 2])
+
+    expect(post).toHaveBeenCalledWith(
+      '/jobs/7/attachments/bulk-download',
+      { ids: [1, 2] },
+      { responseType: 'blob' },
+    )
+    expect(result).toBe(blob)
+  })
+})

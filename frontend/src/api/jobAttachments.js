@@ -20,7 +20,13 @@ export const jobAttachmentsApi = {
     const { data } = await client.get(`/jobs/${jobId}/attachments`)
     return data
   },
-  async upload(jobId, file, conflictStrategy = null, relativePath = null) {
+  async upload(
+    jobId,
+    file,
+    conflictStrategy = null,
+    relativePath = null,
+    onProgress = null,
+  ) {
     const form = new FormData()
     form.append('file', file)
     if (conflictStrategy) {
@@ -29,10 +35,23 @@ export const jobAttachmentsApi = {
     if (relativePath) {
       form.append('relative_path', relativePath)
     }
+    const config = {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }
+    if (onProgress) {
+      // axios surfaces transfer progress via this hook; evt.total may
+      // be undefined when the server hasn't reported Content-Length —
+      // skip the percent calc rather than reporting NaN%.
+      config.onUploadProgress = (evt) => {
+        if (evt.total) {
+          onProgress(Math.round((evt.loaded / evt.total) * 100))
+        }
+      }
+    }
     const { data } = await client.post(
       `/jobs/${jobId}/attachments`,
       form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
+      config,
     )
     return data
   },
@@ -49,5 +68,16 @@ export const jobAttachmentsApi = {
       { ids, password },
     )
     return data
+  },
+  async bulkDownload(jobId, ids) {
+    // Server returns application/zip; ask axios to keep it as a Blob
+    // so we can hand it straight to a hidden <a download> instead of
+    // having axios coerce the bytes into a malformed string.
+    const response = await client.post(
+      `/jobs/${jobId}/attachments/bulk-download`,
+      { ids },
+      { responseType: 'blob' },
+    )
+    return response.data
   },
 }

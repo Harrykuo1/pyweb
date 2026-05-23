@@ -35,3 +35,11 @@ class BulkDeleteRequest(BaseModel):
 
 class BulkDeleteResponse(BaseModel):
     deleted: int
+
+
+class BulkDownloadRequest(BaseModel):
+    # Same shape and cap as bulk-delete, but read-only — no password.
+    # Anyone with list/download permission on a job can grab a zip of
+    # any subset; no privilege escalation beyond what individual
+    # downloads already allow.
+    ids: list[int] = Field(min_length=1, max_length=500)

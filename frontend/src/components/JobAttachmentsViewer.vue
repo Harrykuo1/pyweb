@@ -1,6 +1,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElAlert, ElEmpty, ElIcon, ElMessage, ElSkeleton } from 'element-plus'
+import {
+  ElAlert,
+  ElEmpty,
+  ElIcon,
+  ElImageViewer,
+  ElMessage,
+  ElSkeleton,
+} from 'element-plus'
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,6 +18,7 @@ import {
   FullScreen,
   Picture,
   View,
+  ZoomIn,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
@@ -69,6 +77,11 @@ const textContent = ref('')
 const textLoading = ref(false)
 const textError = ref('')
 const textMode = ref('rendered')
+
+// ElImageViewer toggle. When the user clicks the inline image preview
+// (or hits the 放大 button), we mount the viewer with the current
+// folder's image set so left/right keys cycle through siblings.
+const imageViewerOpen = ref(false)
 
 function extOf(name) {
   const dot = name.lastIndexOf('.')
@@ -132,6 +145,23 @@ const currentListing = computed(() =>
   buildListing(attachments.value, currentPath.value),
 )
 const breadcrumbSegments = computed(() => buildBreadcrumb(currentPath.value))
+
+// All images in the current folder view, in the same order as the
+// row listing. Feeds ElImageViewer so its built-in ◀/▶ navigation
+// jumps between siblings rather than just showing the one image.
+const imageUrlsAtCurrentView = computed(() =>
+  currentListing.value.files
+    .map((entry) => entry.attachment)
+    .filter(isImage)
+    .map((a) => attachmentUrl(props.jobId, a.id)),
+)
+
+const selectedImageIndex = computed(() => {
+  if (!selected.value || !isImage(selected.value)) return 0
+  const url = attachmentUrl(props.jobId, selected.value.id)
+  const idx = imageUrlsAtCurrentView.value.indexOf(url)
+  return idx < 0 ? 0 : idx
+})
 
 function enterFolder(folderName) {
   currentPath.value = currentPath.value
@@ -284,6 +314,17 @@ onBeforeUnmount(() => {
           {{ selected.filename }}
         </span>
         <button
+          v-if="isImage(selected)"
+          type="button"
+          class="preview-action"
+          data-test="viewer-image-zoom"
+          title="放大檢視 — 支援縮放、旋轉、左右切換"
+          @click="imageViewerOpen = true"
+        >
+          <el-icon :size="14"><ZoomIn /></el-icon>
+          放大
+        </button>
+        <button
           v-if="isMarkdown(selected)"
           type="button"
           class="preview-action"
@@ -336,8 +377,10 @@ onBeforeUnmount(() => {
           v-else-if="isImage(selected)"
           :src="attachmentUrl(jobId, selected.id)"
           :alt="selected.filename"
-          class="image-preview"
+          class="image-preview is-clickable"
           :data-test="`viewer-image-${selected.id}`"
+          title="點擊放大檢視（支援縮放、旋轉、左右切換）"
+          @click="imageViewerOpen = true"
         />
         <embed
           v-else-if="isOffice(selected) && selected.preview_available"
@@ -466,6 +509,21 @@ onBeforeUnmount(() => {
         </li>
       </ul>
     </div>
+
+    <!-- Modal image viewer for the click-to-zoom path. teleported so
+         it escapes the parent dialog's overflow/z-index stacking. The
+         url-list spans every image at the current folder view, so the
+         viewer's built-in left/right arrows (and keyboard nav) flip
+         through siblings without re-opening the modal. -->
+    <ElImageViewer
+      v-if="imageViewerOpen && imageUrlsAtCurrentView.length > 0"
+      :url-list="imageUrlsAtCurrentView"
+      :initial-index="selectedImageIndex"
+      hide-on-click-modal
+      teleported
+      data-test="viewer-image-modal"
+      @close="imageViewerOpen = false"
+    />
   </section>
 </template>
 
@@ -708,6 +766,10 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   border-radius: 6px;
   object-fit: contain;
+}
+
+.image-preview.is-clickable {
+  cursor: zoom-in;
 }
 
 .preview-surface:fullscreen .image-preview,

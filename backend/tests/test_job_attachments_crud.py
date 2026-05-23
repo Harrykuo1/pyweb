@@ -1,3 +1,4 @@
+import zipfile
 from io import BytesIO
 from pathlib import Path
 
@@ -758,3 +759,118 @@ def test_bulk_delete_unknown_ids_count_as_zero(client, job):
     r = _bulk_delete(client, job.id, [9999, 8888])
     assert r.status_code == 200
     assert r.json() == {"deleted": 0}
+
+
+# ---------- BULK DOWNLOAD ----------
+
+
+def _bulk_download_url(job_id):
+    return f"/api/jobs/{job_id}/attachments/bulk-download"
+
+
+def test_bulk_download_requires_auth(client, job):
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf").json()["id"]
+    client.cookies.clear()
+
+    r = client.post(_bulk_download_url(job.id), json={"ids": [a]})
+    assert r.status_code == 401
+
+
+def test_bulk_download_viewer_can_download(client, job):
+    """Bulk download is read-only — same auth gate as listing or
+    downloading single files. A viewer who can pull files one at a
+    time can pull them all in a zip; no privilege escalation."""
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf").json()["id"]
+    b = _upload(client, job.id, filename="b.pdf").json()["id"]
+    client.cookies.clear()
+
+    _login_viewer(client)
+    r = client.post(_bulk_download_url(job.id), json={"ids": [a, b]})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+
+
+def test_bulk_download_returns_zip_with_selected_files(client, job):
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf", body=b"%PDF-1.4\nAAA").json()["id"]
+    b = _upload(client, job.id, filename="b.pdf", body=b"%PDF-1.4\nBBB").json()["id"]
+    _upload(client, job.id, filename="c.pdf", body=b"%PDF-1.4\nCCC")
+
+    r = client.post(_bulk_download_url(job.id), json={"ids": [a, b]})
+    assert r.status_code == 200
+
+    with zipfile.ZipFile(BytesIO(r.content)) as zf:
+        names = sorted(zf.namelist())
+        assert names == ["a.pdf", "b.pdf"]
+        assert zf.read("a.pdf") == b"%PDF-1.4\nAAA"
+        assert zf.read("b.pdf") == b"%PDF-1.4\nBBB"
+
+
+def test_bulk_download_preserves_folder_relpaths_inside_zip(client, job):
+    _login_admin(client)
+    a = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files={"file": ("foo.pdf", BytesIO(TINY_PDF), "application/pdf")},
+        data={"relative_path": "src/components/foo.pdf"},
+    ).json()["id"]
+
+    r = client.post(_bulk_download_url(job.id), json={"ids": [a]})
+    assert r.status_code == 200
+    with zipfile.ZipFile(BytesIO(r.content)) as zf:
+        assert zf.namelist() == ["src/components/foo.pdf"]
+
+
+def test_bulk_download_skips_disk_missing_rows(client, job, uploads_dir):
+    """A DB row whose on-disk file vanished out-of-band should be
+    silently skipped — the rest of the zip still produces. Mirrors
+    the download endpoint's tolerance of orphans."""
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf", body=b"AA").json()["id"]
+    b = _upload(client, job.id, filename="b.pdf", body=b"BB").json()["id"]
+    (uploads_dir / "jobs" / str(job.id) / "a.pdf").unlink()
+
+    r = client.post(_bulk_download_url(job.id), json={"ids": [a, b]})
+    assert r.status_code == 200
+    with zipfile.ZipFile(BytesIO(r.content)) as zf:
+        assert zf.namelist() == ["b.pdf"]
+
+
+def test_bulk_download_filters_cross_job_ids(client, db_session):
+    """Foreign IDs in the payload silently filter out at the SQL
+    level so a partial selection on the UI side can't leak files from
+    another job into the zip."""
+    job_a = Job(
+        job_year=2026, job_month=5, company="A",
+        kind=JobKind.INTERNSHIP, experience_md="x",
+    )
+    job_b = Job(
+        job_year=2026, job_month=5, company="B",
+        kind=JobKind.INTERNSHIP, experience_md="y",
+    )
+    db_session.add_all([job_a, job_b])
+    db_session.commit()
+
+    _login_admin(client)
+    _ = _upload(client, job_a.id, filename="a.pdf", body=b"AA").json()["id"]
+    b_in_b = _upload(client, job_b.id, filename="b.pdf", body=b"BB").json()["id"]
+
+    r = client.post(_bulk_download_url(job_a.id), json={"ids": [b_in_b]})
+    assert r.status_code == 200
+    with zipfile.ZipFile(BytesIO(r.content)) as zf:
+        # b_in_b belongs to job_b, asking under job_a's URL must yield
+        # an empty zip rather than expose it.
+        assert zf.namelist() == []
+
+
+def test_bulk_download_rejects_empty_ids(client, job):
+    _login_admin(client)
+    r = client.post(_bulk_download_url(job.id), json={"ids": []})
+    assert r.status_code == 422
+
+
+def test_bulk_download_unknown_job_404(client):
+    _login_admin(client)
+    r = client.post(_bulk_download_url(9999), json={"ids": [1]})
+    assert r.status_code == 404
