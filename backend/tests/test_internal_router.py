@@ -79,3 +79,18 @@ def test_serve_source_does_not_require_session(client, uploads_dir):
 
     r = client.get("/internal/source/7/deck.pptx")
     assert r.status_code == 200
+
+
+def test_serve_source_resolves_multi_segment_relpath(client, uploads_dir):
+    """Folder uploads land at e.g. src/components/Foo.vue; OnlyOffice
+    fetches via the same path. ``{filename:path}`` lets multi-segment
+    relpaths through."""
+    job_dir = uploads_dir / "jobs" / "7" / "src" / "components"
+    job_dir.mkdir(parents=True)
+    (job_dir / "Foo.docx").write_bytes(b"nested")
+
+    r = client.get("/internal/source/7/src/components/Foo.docx")
+    assert r.status_code == 200
+    assert r.content == b"nested"
+
+

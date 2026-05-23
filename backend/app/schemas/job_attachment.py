@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class JobAttachmentResponse(BaseModel):
@@ -19,3 +19,19 @@ class JobAttachmentResponse(BaseModel):
     # whether a doc/docx/ppt/pptx has been successfully converted to
     # PDF for in-page embedding.
     preview_available: bool = False
+
+
+class BulkDeleteRequest(BaseModel):
+    # Capped to keep a hostile or malformed client from queuing an
+    # unbounded delete in a single request; the per-job count cap is
+    # 50 by default so 500 is comfortable headroom.
+    ids: list[int] = Field(min_length=1, max_length=500)
+    # Re-auth the admin in front of the bulk delete, same as the
+    # single-attachment DELETE endpoint. Without this, a forgotten
+    # unlocked session could fan out a deletion across an entire job
+    # in one request.
+    password: str = Field(min_length=1, max_length=255)
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted: int

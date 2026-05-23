@@ -75,7 +75,9 @@ def _signed_request_body(body: dict[str, object]) -> dict[str, object]:
     return {**body, "token": token}
 
 
-def convert_to_pdf(job_id: int, source: Path, output: Path) -> bool:
+def convert_to_pdf(
+    job_id: int, source: Path, source_relpath: str, output: Path
+) -> bool:
     if not settings.onlyoffice_internal_url or not settings.backend_internal_url:
         return False
     if not source.exists():
@@ -89,9 +91,12 @@ def convert_to_pdf(job_id: int, source: Path, output: Path) -> bool:
     key = secrets.token_urlsafe(16)
     deadline = time.monotonic() + settings.onlyoffice_convert_timeout_seconds
 
+    # Preserve "/" so multi-segment relpaths (folder uploads) reach
+    # the internal source endpoint as one path; everything else gets
+    # percent-encoded.
     source_url = (
         f"{settings.backend_internal_url}"
-        f"/internal/source/{job_id}/{quote(source.name, safe='')}"
+        f"/internal/source/{job_id}/{quote(source_relpath, safe='/')}"
     )
 
     with httpx.Client(timeout=POLL_HTTP_TIMEOUT_SECONDS) as client:

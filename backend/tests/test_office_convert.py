@@ -126,7 +126,7 @@ def test_convert_to_pdf_signs_request_and_writes_returned_pdf(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is True
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is True
     assert output.read_bytes() == b"%PDF-1.4 fake bytes"
 
     # Inspect the POST: filetype/outputtype set right, async polling
@@ -172,7 +172,7 @@ def test_convert_to_pdf_polls_until_endconvert_true(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is True
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is True
 
     # The same conversion key sticks across polls — otherwise OnlyOffice
     # would treat each request as a new job and never return a fileUrl.
@@ -195,7 +195,7 @@ def test_convert_to_pdf_returns_false_when_polling_exceeds_deadline(
     ] * 200)
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
 def test_convert_to_pdf_url_encodes_filename(
@@ -218,11 +218,37 @@ def test_convert_to_pdf_url_encodes_filename(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, src, output) is True
+    assert office_convert.convert_to_pdf(JOB_ID, src, src.name, output) is True
 
     posted_url = fake.calls[0]["json"]["url"]
     assert "%E7%B0%A1%E5%A0%B1" in posted_url
     assert "簡報" not in posted_url
+
+
+def test_convert_to_pdf_preserves_slashes_in_folder_relpath(
+    output, configured, monkeypatch, tmp_path
+):
+    """Folder uploads pass a multi-segment relpath like "src/foo.docx".
+    The URL has to keep "/" intact so the internal source endpoint
+    finds the file — percent-encoding every char would 404."""
+    src = tmp_path / "foo.docx"
+    src.write_bytes(b"x")
+    done = FakeResponse(
+        200,
+        json_body={"endConvert": True, "fileUrl": "http://onlyoffice/cache/x.pdf"},
+    )
+    fake = FakeClient([
+        ("POST", lambda u: True, done),
+        ("GET", lambda u: True, FakeResponse(200, body=b"%PDF")),
+    ])
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
+
+    assert (
+        office_convert.convert_to_pdf(JOB_ID, src, "src/foo.docx", output) is True
+    )
+
+    posted_url = fake.calls[0]["json"]["url"]
+    assert posted_url.endswith("/internal/source/7/src/foo.docx")
 
 
 # ---------- convert_to_pdf — failure modes ----------
@@ -232,14 +258,14 @@ def test_convert_to_pdf_returns_false_when_config_missing(
     source, output, monkeypatch
 ):
     monkeypatch.setattr(settings, "onlyoffice_internal_url", "")
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
 def test_convert_to_pdf_returns_false_when_source_missing(
     tmp_path, output, configured
 ):
     assert (
-        office_convert.convert_to_pdf(JOB_ID, tmp_path / "nope.docx", output) is False
+        office_convert.convert_to_pdf(JOB_ID, tmp_path / "nope.docx", "nope.docx", output) is False
     )
 
 
@@ -248,7 +274,7 @@ def test_convert_to_pdf_rejects_non_office_source(
 ):
     source = tmp_path / "x.png"
     source.write_bytes(b"PNG")
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
 def test_convert_to_pdf_returns_false_on_non_200_post(
@@ -259,7 +285,7 @@ def test_convert_to_pdf_returns_false_on_non_200_post(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
     assert not output.exists()
 
 
@@ -271,7 +297,7 @@ def test_convert_to_pdf_returns_false_on_onlyoffice_error_code(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
 def test_convert_to_pdf_returns_false_when_endconvert_true_but_fileurl_missing(
@@ -282,7 +308,7 @@ def test_convert_to_pdf_returns_false_when_endconvert_true_but_fileurl_missing(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
 def test_convert_to_pdf_returns_false_on_pdf_fetch_failure(
@@ -294,7 +320,7 @@ def test_convert_to_pdf_returns_false_on_pdf_fetch_failure(
     ])
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
     assert not output.exists()
 
 
@@ -316,4 +342,4 @@ def test_convert_to_pdf_returns_false_on_network_error(
 
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: BoomClient())
 
-    assert office_convert.convert_to_pdf(JOB_ID, source, output) is False
+    assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False

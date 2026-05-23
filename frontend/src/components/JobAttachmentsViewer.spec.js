@@ -213,6 +213,122 @@ describe('JobAttachmentsViewer.vue', () => {
     expect(wrapper.text()).toContain('載入附件失敗')
   })
 
+  describe('folder-tree browsing', () => {
+    const NESTED = [
+      {
+        id: 10,
+        job_id: 7,
+        filename: 'top-level.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 11,
+        job_id: 7,
+        filename: 'src/foo.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 12,
+        job_id: 7,
+        filename: 'src/components/Bar.png',
+        mime_type: 'image/png',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 13,
+        job_id: 7,
+        filename: 'src/components/Baz.png',
+        mime_type: 'image/png',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+    ]
+
+    it('root listing shows top-level files and folder folders only', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(NESTED)
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+
+      // top-level.pdf is a file at root.
+      expect(wrapper.find('[data-test="viewer-item-10"]').exists()).toBe(true)
+      // src/ is the only folder visible from root.
+      expect(wrapper.find('[data-test="viewer-folder-src"]').exists()).toBe(true)
+      // Files deeper than root must NOT appear at this level.
+      expect(wrapper.find('[data-test="viewer-item-11"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="viewer-item-12"]').exists()).toBe(false)
+      // Folder count reflects every descendant file, not just direct children.
+      expect(
+        wrapper.find('[data-test="viewer-folder-src"]').text(),
+      ).toContain('3 個檔案')
+    })
+
+    it('clicking a folder drills down and shows its contents', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(NESTED)
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+
+      await wrapper.find('[data-test="viewer-folder-src"]').trigger('click')
+      await flushPromises()
+
+      // Now we're inside src/: foo.pdf is a direct child file, components
+      // is the only subfolder visible.
+      expect(wrapper.find('[data-test="viewer-item-11"]').exists()).toBe(true)
+      expect(
+        wrapper.find('[data-test="viewer-folder-components"]').exists(),
+      ).toBe(true)
+      // Root-level top-level.pdf must no longer appear.
+      expect(wrapper.find('[data-test="viewer-item-10"]').exists()).toBe(false)
+    })
+
+    it('breadcrumb lets the user jump back to an ancestor path in one click', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(NESTED)
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+
+      await wrapper.find('[data-test="viewer-folder-src"]').trigger('click')
+      await flushPromises()
+      await wrapper
+        .find('[data-test="viewer-folder-components"]')
+        .trigger('click')
+      await flushPromises()
+
+      // Now at src/components — file rows are the two PNGs.
+      expect(wrapper.find('[data-test="viewer-item-12"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-item-13"]').exists()).toBe(true)
+
+      // Click the root breadcrumb to jump straight back.
+      await wrapper.find('[data-test="breadcrumb-0"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-test="viewer-item-10"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-folder-src"]').exists()).toBe(true)
+    })
+
+    it('file row uses the basename within the current folder', async () => {
+      vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue(NESTED)
+      const wrapper = mount(JobAttachmentsViewer, { props: { jobId: 7 } })
+      await flushPromises()
+
+      await wrapper.find('[data-test="viewer-folder-src"]').trigger('click')
+      await flushPromises()
+
+      // foo.pdf, NOT src/foo.pdf — display name strips the current
+      // path prefix so the row reads naturally.
+      const row = wrapper.find('[data-test="viewer-item-11"]')
+      expect(row.text()).toContain('foo.pdf')
+      expect(row.text()).not.toContain('src/foo.pdf')
+    })
+  })
+
   describe('fullscreen preview', () => {
     let requestFullscreenSpy
     let exitFullscreenSpy

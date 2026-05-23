@@ -61,11 +61,29 @@ describe('jobAttachmentsApi.upload', () => {
 })
 
 describe('jobAttachmentsApi.remove', () => {
-  it('DELETEs /jobs/{id}/attachments/{aid}', async () => {
+  it('DELETEs /jobs/{id}/attachments/{aid} with the admin password in the body', async () => {
     const del = vi.spyOn(client, 'delete').mockResolvedValue({ data: null })
 
-    await jobAttachmentsApi.remove(7, 11)
+    await jobAttachmentsApi.remove(7, 11, 'admin-pw')
 
-    expect(del).toHaveBeenCalledWith('/jobs/7/attachments/11')
+    expect(del).toHaveBeenCalledWith('/jobs/7/attachments/11', {
+      data: { password: 'admin-pw' },
+    })
+  })
+})
+
+describe('jobAttachmentsApi.bulkRemove', () => {
+  it('POSTs ids + password to /jobs/{id}/attachments/bulk-delete', async () => {
+    const post = vi
+      .spyOn(client, 'post')
+      .mockResolvedValue({ data: { deleted: 3 } })
+
+    const result = await jobAttachmentsApi.bulkRemove(7, [11, 12, 13], 'admin-pw')
+
+    expect(post).toHaveBeenCalledWith('/jobs/7/attachments/bulk-delete', {
+      ids: [11, 12, 13],
+      password: 'admin-pw',
+    })
+    expect(result).toEqual({ deleted: 3 })
   })
 })

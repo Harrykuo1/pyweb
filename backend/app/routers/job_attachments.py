@@ -18,19 +18,40 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.attachments import (
-    ALLOWED_EXTENSIONS,
-    ALLOWED_MIME_TYPES,
+    PREVIEW_INLINE_EXTENSIONS,
     ext_of,
-    next_available_filename,
-    sanitize_filename,
+    is_junk,
+    next_available_relpath,
+    sanitize_relpath,
 )
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core import office_convert
 from app.core.runtime_config import get_int
+from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, JobAttachment, User
-from app.schemas import JobAttachmentResponse
+from app.schemas import (
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    JobAttachmentResponse,
+    PasswordConfirmRequest,
+)
+
+
+def _require_admin_password(password: str, admin: User) -> None:
+    """Re-authenticate the admin before a destructive attachment action.
+
+    Returns 422 (not 401) on mismatch so the global axios auth-interceptor
+    doesn't read a typo'd confirmation password as an expired session and
+    bounce the user back to /login. Same rationale as members.py /
+    jobs.py — keep the local request-validation failure local.
+    """
+    if not verify_password(password, admin.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Password is incorrect",
+        )
 
 
 def job_uploads_dir(uploads_root: Path, job_id: int) -> Path:
@@ -96,32 +117,37 @@ async def upload_attachment(
     job_id: int,
     file: UploadFile = File(...),
     conflict_strategy: Annotated[ConflictStrategy | None, Form()] = None,
+    relative_path: Annotated[str | None, Form()] = None,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
     _: User = Depends(require_admin),
 ) -> JobAttachmentResponse:
     _get_job_or_404(db, job_id)
 
+    # Folder uploads send the in-folder relpath as a separate form
+    # field — file.filename only has the basename, which would lose
+    # the directory structure. Single-file uploads omit the field and
+    # the basename becomes the relpath.
+    raw_name = relative_path if relative_path else (file.filename or "")
     try:
-        clean_name = sanitize_filename(file.filename or "")
+        clean_name = sanitize_relpath(raw_name)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(e),
         )
 
-    ext = ext_of(clean_name)
-    if ext not in ALLOWED_EXTENSIONS:
+    if is_junk(clean_name):
+        # Frontend already filters these out, but defence-in-depth.
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"不支援的副檔名：{ext}",
+            detail="不支援的檔案類型（系統暫存檔）",
         )
 
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"不支援的檔案類型：{file.content_type}",
-        )
+    # No extension / MIME allowlist: any binary the admin uploads is
+    # stored as-is. The download endpoint serves non-previewable types
+    # with Content-Disposition: attachment so HTML/SVG/script payloads
+    # can't ride this response into an XSS surface.
 
     # Conflict detection runs before reading the body so the rejected
     # case doesn't waste bandwidth re-uploading on every retry. The
@@ -171,11 +197,14 @@ async def upload_attachment(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     if has_conflict and conflict_strategy == "rename":
-        final_filename = next_available_filename(upload_dir, clean_name)
+        final_filename = next_available_relpath(upload_dir, clean_name)
     else:
         final_filename = clean_name
 
     final_path = upload_dir / final_filename
+    # The relpath can have intermediate subdirectories (folder upload);
+    # make sure they exist before write_bytes.
+    final_path.parent.mkdir(parents=True, exist_ok=True)
     final_path.write_bytes(data)
 
     # Re-generate the on-disk PDF preview alongside the saved file so
@@ -192,7 +221,11 @@ async def upload_attachment(
         # the same uvicorn loop that's busy polling OnlyOffice, and the
         # whole pipeline deadlocks until OnlyOffice times out.
         await run_in_threadpool(
-            office_convert.convert_to_pdf, job_id, final_path, preview_target
+            office_convert.convert_to_pdf,
+            job_id,
+            final_path,
+            final_filename,
+            preview_target,
         )
 
     now = datetime.now(timezone.utc)
@@ -290,13 +323,23 @@ def download_attachment(
             detail="附件檔案不存在",
         )
 
+    # Only the small preview-safe set gets Content-Disposition: inline
+    # — that's what the viewer's <embed>/<img> tags rely on. Everything
+    # else (Office sources, archives, source code, .html, .svg, ...) is
+    # served as an attachment, with nosniff to keep browsers from
+    # guessing the type and rendering it inline against our wishes.
+    ext = ext_of(attachment.filename)
+    disposition_mode = "inline" if ext in PREVIEW_INLINE_EXTENSIONS else "attachment"
+
     return FileResponse(
         file_path,
-        media_type=attachment.mime_type,
-        # Inline so PDFs and images render in <embed>/<img> previews;
-        # the frontend's <a download="..."> still forces a save when the
-        # user clicks an explicit download link.
-        headers={"Content-Disposition": _content_disposition(attachment.filename)},
+        media_type=attachment.mime_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": _content_disposition(
+                attachment.filename, disposition_mode
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -323,9 +366,80 @@ def preview_attachment(
         headers={
             "Content-Disposition": _content_disposition(
                 f"{attachment.filename}.pdf"
-            )
+            ),
+            "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+def _prune_empty_subdirs(root: Path) -> None:
+    """Bottom-up sweep: rmdir every empty descendant of `root`, leaving
+    `root` itself for the caller to decide on. Bulk delete needs this
+    because multiple files across the tree can disappear in one call,
+    and the single-file handler's "walk up from one file's parent"
+    isn't enough to find all the newly-empty directories elsewhere."""
+    if not root.exists() or not root.is_dir():
+        return
+    for child in list(root.iterdir()):
+        if child.is_dir():
+            _prune_empty_subdirs(child)
+            try:
+                child.rmdir()
+            except OSError:
+                pass
+
+
+@router.post(
+    "/{job_id}/attachments/bulk-delete",
+    response_model=BulkDeleteResponse,
+)
+def bulk_delete_attachments(
+    job_id: int,
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    uploads_root: Path = Depends(get_uploads_root),
+    admin: User = Depends(require_admin),
+) -> BulkDeleteResponse:
+    """Delete every attachment whose id appears in the body. Scoped
+    to a single job so a malicious or buggy client can't spray
+    deletes across the table; rows whose job_id doesn't match are
+    silently skipped (no leakage of which IDs exist where).
+
+    Used both by the multi-select bulk action and by "delete this
+    whole folder" — the frontend expands the folder into its
+    descendant file IDs before sending."""
+    _require_admin_password(payload.password, admin)
+    rows = (
+        db.query(JobAttachment)
+        .filter(
+            JobAttachment.job_id == job_id,
+            JobAttachment.id.in_(payload.ids),
+        )
+        .all()
+    )
+
+    job_dir = job_uploads_dir(uploads_root, job_id)
+    deleted = 0
+    for row in rows:
+        file_path = job_dir / row.filename
+        preview_path = _preview_path(uploads_root, job_id, row.filename)
+        if file_path.exists():
+            file_path.unlink()
+        if preview_path.exists():
+            preview_path.unlink()
+        db.delete(row)
+        deleted += 1
+
+    # Bulk delete can leave empty dirs anywhere across the tree;
+    # one walk top-down then rmdir bottom-up handles the lot.
+    _prune_empty_subdirs(job_dir)
+    try:
+        job_dir.rmdir()
+    except OSError:
+        pass
+
+    db.commit()
+    return BulkDeleteResponse(deleted=deleted)
 
 
 @router.delete(
@@ -335,10 +449,12 @@ def preview_attachment(
 def delete_attachment(
     job_id: int,
     attachment_id: int,
+    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ) -> Response:
+    _require_admin_password(payload.password, admin)
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     job_dir = job_uploads_dir(uploads_root, job_id)
@@ -352,14 +468,20 @@ def delete_attachment(
     if preview_path.exists():
         preview_path.unlink()
 
-    # If that was the last file in the per-job directory, clean the
-    # directory up so the host filesystem doesn't accumulate empty
-    # shells. rmdir refuses non-empty dirs, so a stray file (e.g. a
-    # manual drop) keeps the directory alive on purpose.
-    try:
-        job_dir.rmdir()
-    except OSError:
-        pass
+    # Walk up from the deleted file's parent toward job_dir, rmdir-ing
+    # any directory that just emptied out. Stops at job_dir itself,
+    # which gets the same treatment as the final step. rmdir refuses
+    # non-empty dirs, so other siblings keep their parents alive on
+    # purpose.
+    current = file_path.parent
+    while current.is_relative_to(job_dir) or current == job_dir:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        if current == job_dir:
+            break
+        current = current.parent
 
     db.delete(attachment)
     db.commit()

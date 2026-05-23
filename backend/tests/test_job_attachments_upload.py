@@ -108,6 +108,36 @@ def test_upload_admin_success_stores_row_and_file(client, job, db_session, uploa
     assert on_disk.read_bytes() == TINY_PDF
 
 
+def test_upload_accepts_zip_archive(client, job, db_session):
+    """Archives are stored as opaque blobs — no preview, just download.
+    This guards the allowlist so a future tweak doesn't quietly drop
+    the file types users have come to rely on."""
+    _login_admin(client)
+    r = _upload(
+        client,
+        job.id,
+        filename="bundle.zip",
+        body=b"PK\x03\x04 fake zip body",
+        mime="application/zip",
+    )
+    assert r.status_code == 201, r.text
+
+
+def test_upload_accepts_octet_stream_archive(client, job):
+    """Some browsers can't identify rar/7z by MIME and fall back to
+    application/octet-stream. The extension allowlist is the real
+    gate, so we accept the fallback rather than 415ing the user."""
+    _login_admin(client)
+    r = _upload(
+        client,
+        job.id,
+        filename="bundle.7z",
+        body=b"7z\xbc\xaf\x27\x1c fake",
+        mime="application/octet-stream",
+    )
+    assert r.status_code == 201, r.text
+
+
 # ---------- Validation ----------
 
 
@@ -117,29 +147,36 @@ def test_upload_unknown_job_404(client):
     assert r.status_code == 404
 
 
-def test_upload_rejects_disallowed_extension(client, job):
+def test_upload_accepts_arbitrary_extension(client, job):
+    """No extension allowlist: any byte payload the admin uploads is
+    stored as-is. The download endpoint takes responsibility for
+    serving non-previewable types as attachments so this can't turn
+    into an XSS vector."""
     _login_admin(client)
     r = _upload(
         client,
         job.id,
-        filename="evil.exe",
-        body=b"MZ\x90\x00",
+        filename="random.weirdext",
+        body=b"some content",
         mime="application/octet-stream",
     )
-    assert r.status_code == 415
+    assert r.status_code == 201
 
 
-def test_upload_rejects_disallowed_mime(client, job):
+def test_upload_accepts_arbitrary_mime(client, job):
+    """MIME is advisory only — even text/plain on a .pdf goes through.
+    The decision of "render inline vs force-download" is made at
+    serve time based on the extension, not the MIME the client
+    asserted at upload."""
     _login_admin(client)
-    # Extension is fine, but the Content-Type lies about it.
     r = _upload(
         client,
         job.id,
         filename="report.pdf",
         body=TINY_PDF,
-        mime="application/octet-stream",
+        mime="text/plain",
     )
-    assert r.status_code == 415
+    assert r.status_code == 201
 
 
 def test_upload_rejects_oversized(client, job, db_session):
@@ -157,9 +194,73 @@ def test_upload_rejects_path_traversal_filename(client, job):
     _login_admin(client)
     files = {"file": ("../../etc/passwd", BytesIO(TINY_PDF), "application/pdf")}
     r = client.post(f"/api/jobs/{job.id}/attachments", files=files)
-    # Sanitization strips the path components down to "passwd", which has
-    # no allowed extension and gets rejected at the extension check.
+    # sanitize_relpath rejects the ".." segment outright with 422; the
+    # request never reaches the extension or MIME checks.
+    assert r.status_code == 422
+
+
+def test_upload_with_relative_path_stores_nested_file(
+    client, job, db_session, uploads_dir
+):
+    _login_admin(client)
+    files = {"file": ("foo.pdf", BytesIO(TINY_PDF), "application/pdf")}
+    r = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=files,
+        data={"relative_path": "src/components/foo.pdf"},
+    )
+    assert r.status_code == 201
+    assert r.json()["filename"] == "src/components/foo.pdf"
+
+    on_disk = uploads_dir / "jobs" / str(job.id) / "src" / "components" / "foo.pdf"
+    assert on_disk.exists()
+    assert on_disk.read_bytes() == TINY_PDF
+
+
+def test_upload_rejects_relative_path_with_parent_segment(client, job):
+    _login_admin(client)
+    files = {"file": ("foo.pdf", BytesIO(TINY_PDF), "application/pdf")}
+    r = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=files,
+        data={"relative_path": "src/../../etc/foo.pdf"},
+    )
+    assert r.status_code == 422
+
+
+def test_upload_rejects_junk_filename(client, job):
+    _login_admin(client)
+    files = {"file": (".DS_Store", BytesIO(b""), "application/octet-stream")}
+    r = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=files,
+        data={"relative_path": "src/.DS_Store"},
+    )
     assert r.status_code == 415
+    assert "暫存" in r.json()["detail"]
+
+
+def test_rename_in_folder_suffixes_last_segment(
+    client, job, db_session, uploads_dir
+):
+    _login_admin(client)
+    base = {"file": ("foo.pdf", BytesIO(TINY_PDF), "application/pdf")}
+    client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=base,
+        data={"relative_path": "src/foo.pdf"},
+    )
+    r = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=base,
+        data={"relative_path": "src/foo.pdf", "conflict_strategy": "rename"},
+    )
+    assert r.status_code == 201
+    assert r.json()["filename"] == "src/foo (1).pdf"
+
+    assert (
+        uploads_dir / "jobs" / str(job.id) / "src" / "foo (1).pdf"
+    ).exists()
 
 
 def test_upload_respects_max_attachments_per_job(client, job, db_session):

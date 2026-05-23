@@ -17,22 +17,25 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
+from app.core.attachments import sanitize_relpath
 from app.routers.job_attachments import get_uploads_root, job_uploads_dir
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 
-@router.get("/source/{job_id}/{filename}")
+@router.get("/source/{job_id}/{filename:path}")
 def serve_source(
     job_id: int,
     filename: str,
     uploads_root: Path = Depends(get_uploads_root),
 ) -> FileResponse:
-    # Path traversal defence: any separator or parent reference is a
-    # 404. The filename was sanitised at upload time, so anything
-    # weird arriving here is suspect.
-    safe = Path(filename).name
-    if safe != filename or safe in {"", ".", ".."}:
+    # ``:path`` lets multi-segment relpaths land here (folder uploads
+    # store files at e.g. "src/foo.txt"). Each segment still has to
+    # survive the same basename checks the upload handler applied;
+    # anything off-script is a 404 to avoid leaking what's on disk.
+    try:
+        safe = sanitize_relpath(filename)
+    except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     file_path = job_uploads_dir(uploads_root, job_id) / safe

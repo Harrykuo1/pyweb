@@ -65,6 +65,26 @@ def _upload(client, job_id, filename="report.pdf", body=TINY_PDF):
     return client.post(f"/api/jobs/{job_id}/attachments", files=files)
 
 
+ADMIN_PW = "admin-pw"
+
+
+def _delete_attachment(client, job_id, attachment_id, password=ADMIN_PW):
+    """DELETE with a JSON body — httpx's TestClient.delete() doesn't take a
+    json= kwarg, so go through .request() like the members tests do."""
+    return client.request(
+        "DELETE",
+        f"/api/jobs/{job_id}/attachments/{attachment_id}",
+        json={"password": password},
+    )
+
+
+def _bulk_delete(client, job_id, ids, password=ADMIN_PW):
+    return client.post(
+        f"/api/jobs/{job_id}/attachments/bulk-delete",
+        json={"ids": ids, "password": password},
+    )
+
+
 # ---------- LIST ----------
 
 
@@ -121,7 +141,36 @@ def test_download_attachment_viewer_can_read(client, job):
     assert r.status_code == 200
     assert r.content == TINY_PDF
     assert r.headers["content-type"].startswith("application/pdf")
-    assert 'filename="report.pdf"' in r.headers["content-disposition"]
+    # PDFs are in the preview-inline allowlist so they get
+    # Content-Disposition: inline (the viewer's <embed src=> needs it).
+    cd = r.headers["content-disposition"]
+    assert cd.startswith("inline;")
+    assert 'filename="report.pdf"' in cd
+    # nosniff is always-on as defence-in-depth.
+    assert r.headers.get("x-content-type-options") == "nosniff"
+
+
+def test_download_forces_attachment_for_non_preview_safe_types(client, job):
+    """HTML / SVG / source code etc. ride the same download URL but
+    must not get inline rendering — that's how a hostile upload would
+    turn into an XSS surface. The attachment disposition + nosniff
+    keeps browsers from interpreting the bytes."""
+    _login_admin(client)
+    files = {
+        "file": (
+            "snippet.html",
+            BytesIO(b"<script>alert(1)</script>"),
+            "text/html",
+        ),
+    }
+    up = client.post(f"/api/jobs/{job.id}/attachments", files=files)
+    attachment_id = up.json()["id"]
+
+    r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    assert r.status_code == 200
+    cd = r.headers["content-disposition"]
+    assert cd.startswith("attachment;")
+    assert r.headers.get("x-content-type-options") == "nosniff"
 
 
 def test_download_handles_unicode_filename(client, job):
@@ -192,7 +241,9 @@ def test_delete_attachment_requires_admin(client, job):
     client.cookies.clear()
 
     _login_viewer(client)
-    r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    # Viewer's session can't reach the handler — auth dependency runs
+    # before the body password is checked, so the viewer-pw is moot.
+    r = _delete_attachment(client, job.id, attachment_id, password="viewer-pw")
     assert r.status_code == 403
 
 
@@ -202,8 +253,34 @@ def test_delete_attachment_unauthenticated(client, job):
     attachment_id = up.json()["id"]
     client.cookies.clear()
 
-    r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    r = _delete_attachment(client, job.id, attachment_id)
     assert r.status_code == 401
+
+
+def test_delete_attachment_wrong_password_422(client, job):
+    _login_admin(client)
+    up = _upload(client, job.id, filename="report.pdf")
+    attachment_id = up.json()["id"]
+
+    r = _delete_attachment(client, job.id, attachment_id, password="wrong")
+    assert r.status_code == 422
+    # And the row + file are still there — the wrong-password path
+    # must not delete anything on its way out.
+    assert (
+        client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}").status_code
+        == 200
+    )
+
+
+def test_delete_attachment_missing_password_422(client, job):
+    _login_admin(client)
+    up = _upload(client, job.id, filename="report.pdf")
+    attachment_id = up.json()["id"]
+
+    r = client.request(
+        "DELETE", f"/api/jobs/{job.id}/attachments/{attachment_id}",
+    )
+    assert r.status_code == 422
 
 
 def test_delete_removes_row_and_disk_file(client, job, db_session, uploads_dir):
@@ -214,7 +291,7 @@ def test_delete_removes_row_and_disk_file(client, job, db_session, uploads_dir):
     on_disk = uploads_dir / "jobs" / str(job.id) / "report.pdf"
     assert on_disk.exists()
 
-    r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    r = _delete_attachment(client, job.id, attachment_id)
     assert r.status_code == 204
     assert db_session.query(JobAttachment).filter_by(id=attachment_id).one_or_none() is None
     assert not on_disk.exists()
@@ -230,14 +307,14 @@ def test_delete_when_disk_file_already_gone_still_clears_row(client, job, db_ses
 
     (uploads_dir / "jobs" / str(job.id) / "report.pdf").unlink()
 
-    r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    r = _delete_attachment(client, job.id, attachment_id)
     assert r.status_code == 204
     assert db_session.query(JobAttachment).filter_by(id=attachment_id).one_or_none() is None
 
 
 def test_delete_404_when_attachment_unknown(client, job):
     _login_admin(client)
-    r = client.delete(f"/api/jobs/{job.id}/attachments/9999")
+    r = _delete_attachment(client, job.id, 9999)
     assert r.status_code == 404
 
 
@@ -250,7 +327,7 @@ def test_delete_last_attachment_removes_job_directory(
     job_dir = uploads_dir / "jobs" / str(job.id)
     assert job_dir.exists()
 
-    client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    _delete_attachment(client, job.id, attachment_id)
 
     assert not job_dir.exists()
 
@@ -263,11 +340,61 @@ def test_delete_keeps_directory_when_other_attachments_remain(
     _upload(client, job.id, filename="b.pdf")
     job_dir = uploads_dir / "jobs" / str(job.id)
 
-    client.delete(f"/api/jobs/{job.id}/attachments/{a}")
+    _delete_attachment(client, job.id, a)
 
     # b.pdf is still there so the directory must survive.
     assert job_dir.exists()
     assert (job_dir / "b.pdf").exists()
+
+
+def test_delete_cleans_empty_intermediate_dirs_in_folder_upload(
+    client, job, uploads_dir
+):
+    """Folder uploads land at e.g. src/components/foo.pdf. When the
+    last file under src/components/ is deleted, the empty src/ and
+    src/components/ directories should be reaped — but only as long
+    as no other sibling files still need them."""
+    _login_admin(client)
+    files = {"file": ("foo.pdf", BytesIO(TINY_PDF), "application/pdf")}
+    up = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=files,
+        data={"relative_path": "src/components/foo.pdf"},
+    )
+    attachment_id = up.json()["id"]
+    job_dir = uploads_dir / "jobs" / str(job.id)
+    assert (job_dir / "src" / "components" / "foo.pdf").exists()
+
+    _delete_attachment(client, job.id, attachment_id)
+
+    # Walks up from src/components/ through src/ and into the per-job
+    # directory; with no other files left, everything goes.
+    assert not (job_dir / "src" / "components").exists()
+    assert not (job_dir / "src").exists()
+    assert not job_dir.exists()
+
+
+def test_delete_keeps_intermediate_dir_with_sibling_file(
+    client, job, uploads_dir
+):
+    _login_admin(client)
+    files = {"file": ("a.pdf", BytesIO(TINY_PDF), "application/pdf")}
+    a = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files=files,
+        data={"relative_path": "src/a.pdf"},
+    ).json()["id"]
+    client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files={"file": ("b.pdf", BytesIO(TINY_PDF), "application/pdf")},
+        data={"relative_path": "src/b.pdf"},
+    )
+
+    _delete_attachment(client, job.id, a)
+
+    job_dir = uploads_dir / "jobs" / str(job.id)
+    assert (job_dir / "src" / "b.pdf").exists()
+    assert (job_dir / "src").exists()  # not empty, must stay
 
 
 # ---------- PREVIEW (OnlyOffice-converted PDF) ----------
@@ -295,7 +422,7 @@ def _stub_convert(monkeypatch, *, succeed: bool):
 
     calls = []
 
-    def fake_convert(_job_id, source, output, *_a, **_kw):
+    def fake_convert(_job_id, source, _relpath, output, *_a, **_kw):
         calls.append((source, output))
         if succeed:
             output.write_bytes(FAKE_PDF)
@@ -401,7 +528,7 @@ def test_overwrite_regenerates_preview(
 
     invocations = {"n": 0}
 
-    def fake_convert(_job_id, source, output, *_a, **_kw):
+    def fake_convert(_job_id, source, _relpath, output, *_a, **_kw):
         if not succeed:
             return False
         output.write_bytes(pdfs[invocations["n"]])
@@ -455,6 +582,179 @@ def test_delete_also_removes_preview_pdf(
     preview_path = uploads_dir / "jobs" / str(job.id) / "deck.pptx.preview.pdf"
     assert preview_path.exists()
 
-    r = client.delete(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    r = _delete_attachment(client, job.id, attachment_id)
     assert r.status_code == 204
     assert not preview_path.exists()
+
+
+# ---------- BULK DELETE ----------
+
+
+def test_bulk_delete_requires_admin(client, job):
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf").json()["id"]
+    client.cookies.clear()
+
+    _login_viewer(client)
+    r = _bulk_delete(client, job.id, [a], password="viewer-pw")
+    assert r.status_code == 403
+
+
+def test_bulk_delete_unauthenticated(client, job):
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf").json()["id"]
+    client.cookies.clear()
+
+    r = _bulk_delete(client, job.id, [a])
+    assert r.status_code == 401
+
+
+def test_bulk_delete_wrong_password_422(client, job):
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf").json()["id"]
+
+    r = _bulk_delete(client, job.id, [a], password="wrong")
+    assert r.status_code == 422
+    # Row must still be present — no silent partial deletion when the
+    # password doesn't match.
+    assert (
+        client.get(f"/api/jobs/{job.id}/attachments/{a}").status_code == 200
+    )
+
+
+def test_bulk_delete_rejects_empty_ids(client, job):
+    _login_admin(client)
+    r = _bulk_delete(client, job.id, [])
+    assert r.status_code == 422
+
+
+def test_bulk_delete_rejects_too_many_ids(client, job):
+    _login_admin(client)
+    r = _bulk_delete(client, job.id, list(range(1, 502)))
+    assert r.status_code == 422
+
+
+def test_bulk_delete_removes_multiple_rows_and_files(
+    client, job, db_session, uploads_dir
+):
+    _login_admin(client)
+    a = _upload(client, job.id, filename="a.pdf").json()["id"]
+    b = _upload(client, job.id, filename="b.pdf").json()["id"]
+    c = _upload(client, job.id, filename="c.pdf").json()["id"]
+
+    r = _bulk_delete(client, job.id, [a, b])
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 2}
+
+    remaining = {
+        row.id for row in db_session.query(JobAttachment).filter_by(job_id=job.id)
+    }
+    assert remaining == {c}
+
+    job_dir = uploads_dir / "jobs" / str(job.id)
+    assert not (job_dir / "a.pdf").exists()
+    assert not (job_dir / "b.pdf").exists()
+    assert (job_dir / "c.pdf").exists()
+
+
+def test_bulk_delete_also_removes_preview_pdfs(
+    client, job, monkeypatch, uploads_dir
+):
+    _stub_convert(monkeypatch, succeed=True)
+    _login_admin(client)
+    deck = _upload_pptx(client, job.id, filename="deck.pptx").json()["id"]
+    preview = uploads_dir / "jobs" / str(job.id) / "deck.pptx.preview.pdf"
+    assert preview.exists()
+
+    r = _bulk_delete(client, job.id, [deck])
+    assert r.status_code == 200
+    assert not preview.exists()
+
+
+def test_bulk_delete_clears_empty_intermediate_dirs(
+    client, job, uploads_dir
+):
+    """Bulk delete spanning multiple folder branches must collapse
+    every newly-empty descendant, not just the parents of the last
+    file processed."""
+    _login_admin(client)
+    a = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files={"file": ("a.pdf", BytesIO(TINY_PDF), "application/pdf")},
+        data={"relative_path": "src/a.pdf"},
+    ).json()["id"]
+    b = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files={"file": ("b.pdf", BytesIO(TINY_PDF), "application/pdf")},
+        data={"relative_path": "docs/team/b.pdf"},
+    ).json()["id"]
+
+    r = _bulk_delete(client, job.id, [a, b])
+    assert r.status_code == 200
+
+    job_dir = uploads_dir / "jobs" / str(job.id)
+    assert not (job_dir / "src").exists()
+    assert not (job_dir / "docs" / "team").exists()
+    assert not (job_dir / "docs").exists()
+    # Job had no other files — reap the per-job dir too.
+    assert not job_dir.exists()
+
+
+def test_bulk_delete_keeps_dirs_with_surviving_siblings(
+    client, job, uploads_dir
+):
+    _login_admin(client)
+    a = client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files={"file": ("a.pdf", BytesIO(TINY_PDF), "application/pdf")},
+        data={"relative_path": "src/a.pdf"},
+    ).json()["id"]
+    client.post(
+        f"/api/jobs/{job.id}/attachments",
+        files={"file": ("b.pdf", BytesIO(TINY_PDF), "application/pdf")},
+        data={"relative_path": "src/b.pdf"},
+    )
+
+    r = _bulk_delete(client, job.id, [a])
+    assert r.status_code == 200
+
+    job_dir = uploads_dir / "jobs" / str(job.id)
+    assert (job_dir / "src" / "b.pdf").exists()
+    assert (job_dir / "src").exists()
+
+
+def test_bulk_delete_silently_skips_ids_from_other_jobs(client, db_session):
+    """Cross-job IDs in the payload must not affect the other job.
+    The endpoint scopes its query by job_id; foreign IDs filter out at
+    the SQL layer rather than 404-ing, so a partial selection on the
+    UI side still cleans up what's legitimately the user's."""
+    job_a = Job(
+        job_year=2026, job_month=5, company="A",
+        kind=JobKind.INTERNSHIP, experience_md="x",
+    )
+    job_b = Job(
+        job_year=2026, job_month=5, company="B",
+        kind=JobKind.INTERNSHIP, experience_md="y",
+    )
+    db_session.add_all([job_a, job_b])
+    db_session.commit()
+
+    _login_admin(client)
+    a_in_a = _upload(client, job_a.id, filename="a.pdf").json()["id"]
+    b_in_b = _upload(client, job_b.id, filename="b.pdf").json()["id"]
+
+    # Spray a delete at job_a but include b_in_b — the cross-job ID
+    # should be ignored, not honored.
+    r = _bulk_delete(client, job_a.id, [a_in_a, b_in_b])
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 1}
+
+    # job_b's row is untouched.
+    assert db_session.query(JobAttachment).filter_by(id=b_in_b).one_or_none() is not None
+
+
+def test_bulk_delete_unknown_ids_count_as_zero(client, job):
+    _login_admin(client)
+    r = _bulk_delete(client, job.id, [9999, 8888])
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 0}

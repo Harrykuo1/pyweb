@@ -20,11 +20,14 @@ export const jobAttachmentsApi = {
     const { data } = await client.get(`/jobs/${jobId}/attachments`)
     return data
   },
-  async upload(jobId, file, conflictStrategy = null) {
+  async upload(jobId, file, conflictStrategy = null, relativePath = null) {
     const form = new FormData()
     form.append('file', file)
     if (conflictStrategy) {
       form.append('conflict_strategy', conflictStrategy)
+    }
+    if (relativePath) {
+      form.append('relative_path', relativePath)
     }
     const { data } = await client.post(
       `/jobs/${jobId}/attachments`,
@@ -33,7 +36,18 @@ export const jobAttachmentsApi = {
     )
     return data
   },
-  async remove(jobId, attachmentId) {
-    await client.delete(`/jobs/${jobId}/attachments/${attachmentId}`)
+  async remove(jobId, attachmentId, password) {
+    // axios needs `data:` (not the second positional arg) to send a body
+    // on DELETE — matches the pattern in members.js.
+    await client.delete(`/jobs/${jobId}/attachments/${attachmentId}`, {
+      data: { password },
+    })
+  },
+  async bulkRemove(jobId, ids, password) {
+    const { data } = await client.post(
+      `/jobs/${jobId}/attachments/bulk-delete`,
+      { ids, password },
+    )
+    return data
   },
 }

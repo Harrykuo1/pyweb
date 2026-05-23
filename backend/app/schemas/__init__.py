@@ -17,7 +17,11 @@ from app.schemas.job import (
     JobUpdate,
     ListResponse,
 )
-from app.schemas.job_attachment import JobAttachmentResponse
+from app.schemas.job_attachment import (
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    JobAttachmentResponse,
+)
 from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
 from app.schemas.setting import (
     ConfigFieldResponse,
@@ -29,6 +33,8 @@ from app.schemas.stats import StatsResponse
 __all__ = [
     "ActivityItem",
     "ActivityResponse",
+    "BulkDeleteRequest",
+    "BulkDeleteResponse",
     "ConfigFieldResponse",
     "ConfigResponse",
     "ConfigUpdateRequest",

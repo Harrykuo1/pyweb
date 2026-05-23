@@ -1,11 +1,13 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElAlert, ElEmpty, ElIcon, ElMessage, ElSkeleton } from 'element-plus'
 import {
   ArrowLeft,
+  ArrowRight,
   Close,
   Document,
   Download,
+  Folder,
   FullScreen,
   Picture,
 } from '@element-plus/icons-vue'
@@ -15,17 +17,24 @@ import {
   attachmentUrl,
   jobAttachmentsApi,
 } from '../api/jobAttachments'
+import {
+  breadcrumbSegments as buildBreadcrumb,
+  buildListing,
+} from '../utils/attachmentTree'
 
 const props = defineProps({
   jobId: { type: Number, required: true },
 })
 
-const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg'])
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 const OFFICE_EXTS = new Set(['.doc', '.docx', '.ppt', '.pptx'])
 
 const attachments = ref([])
 const loading = ref(true)
 const loadError = ref(false)
+// "" = root. Otherwise a forward-slash path matching the prefix of
+// the attachment filenames at this level (e.g. "src/components").
+const currentPath = ref('')
 const selected = ref(null)
 const previewSurfaceRef = ref(null)
 const isFullscreen = ref(false)
@@ -51,7 +60,7 @@ function isOffice(a) {
 }
 
 function canPreview(a) {
-  // Native: browser PDF viewer / <img>. Office: only when LibreOffice
+  // Native: browser PDF viewer / <img>. Office: only when OnlyOffice
   // successfully produced a companion PDF, which the API surfaces as
   // preview_available.
   return isPdf(a) || isImage(a) || (isOffice(a) && a.preview_available)
@@ -67,7 +76,22 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function onRowClick(a, event) {
+const currentListing = computed(() =>
+  buildListing(attachments.value, currentPath.value),
+)
+const breadcrumbSegments = computed(() => buildBreadcrumb(currentPath.value))
+
+function enterFolder(folderName) {
+  currentPath.value = currentPath.value
+    ? `${currentPath.value}/${folderName}`
+    : folderName
+}
+
+function jumpToPath(path) {
+  currentPath.value = path
+}
+
+function onFileClick(a, event) {
   if (canPreview(a)) {
     // Hijack the native link click so we can render the preview inside
     // the dialog instead of letting the browser navigate away.
@@ -226,40 +250,92 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <ul v-else class="viewer-list">
-      <li
-        v-for="a in attachments"
-        :key="a.id"
-        class="viewer-row"
-        :data-test="`viewer-item-${a.id}`"
-      >
-        <a
-          :href="attachmentUrl(jobId, a.id)"
-          :download="canPreview(a) ? null : a.filename"
-          class="row-link"
-          :data-test="
-            canPreview(a) ? `viewer-open-${a.id}` : `viewer-download-${a.id}`
-          "
-          @click="onRowClick(a, $event)"
+    <div v-else class="folder-browser" data-test="folder-browser">
+      <nav class="breadcrumb" aria-label="附件路徑" data-test="breadcrumb">
+        <template
+          v-for="(seg, i) in breadcrumbSegments"
+          :key="`bc-${i}-${seg.path}`"
         >
-          <el-icon class="row-icon" :size="20">
-            <component :is="iconFor(a)" />
-          </el-icon>
+          <span v-if="i > 0" class="breadcrumb-sep" aria-hidden="true">
+            <el-icon :size="11"><ArrowRight /></el-icon>
+          </span>
+          <button
+            v-if="i < breadcrumbSegments.length - 1"
+            type="button"
+            class="breadcrumb-item is-clickable"
+            :data-test="`breadcrumb-${i}`"
+            @click="jumpToPath(seg.path)"
+          >
+            {{ seg.name }}
+          </button>
+          <span
+            v-else
+            class="breadcrumb-item is-current"
+            :data-test="`breadcrumb-current`"
+          >
+            {{ seg.name }}
+          </span>
+        </template>
+      </nav>
+
+      <ul class="viewer-list">
+        <li
+          v-for="folder in currentListing.folders"
+          :key="`folder:${folder.name}`"
+          class="viewer-row folder-row"
+          :data-test="`viewer-folder-${folder.name}`"
+          @click="enterFolder(folder.name)"
+        >
+          <el-icon class="row-icon folder-icon" :size="22"><Folder /></el-icon>
           <div class="row-meta">
-            <span class="row-name" :title="a.filename">{{ a.filename }}</span>
-            <span class="row-sub">
-              {{ formatSize(a.size_bytes) }}
-              <span class="row-hint">
-                · {{ canPreview(a) ? '點擊預覽' : '點擊下載' }}
-              </span>
-            </span>
+            <span class="row-name">{{ folder.name }}</span>
+            <span class="row-sub">{{ folder.count }} 個檔案</span>
           </div>
-          <el-icon class="row-action" :size="14">
-            <component :is="canPreview(a) ? ArrowLeft : Download" />
-          </el-icon>
-        </a>
-      </li>
-    </ul>
+          <el-icon class="row-action" :size="14"><ArrowRight /></el-icon>
+        </li>
+
+        <li
+          v-for="entry in currentListing.files"
+          :key="`file:${entry.attachment.id}`"
+          class="viewer-row file-row"
+          :data-test="`viewer-item-${entry.attachment.id}`"
+        >
+          <a
+            :href="attachmentUrl(jobId, entry.attachment.id)"
+            :download="
+              canPreview(entry.attachment) ? null : entry.attachment.filename
+            "
+            class="row-link"
+            :data-test="
+              canPreview(entry.attachment)
+                ? `viewer-open-${entry.attachment.id}`
+                : `viewer-download-${entry.attachment.id}`
+            "
+            @click="onFileClick(entry.attachment, $event)"
+          >
+            <el-icon class="row-icon" :size="20">
+              <component :is="iconFor(entry.attachment)" />
+            </el-icon>
+            <div class="row-meta">
+              <span class="row-name" :title="entry.displayName">
+                {{ entry.displayName }}
+              </span>
+              <span class="row-sub">
+                {{ formatSize(entry.attachment.size_bytes) }}
+                <span class="row-hint">
+                  · {{ canPreview(entry.attachment) ? '點擊預覽' : '點擊下載' }}
+                </span>
+              </span>
+            </div>
+            <el-icon class="row-action" :size="14">
+              <component
+                :is="canPreview(entry.attachment) ? ArrowRight : Download"
+              />
+            </el-icon>
+          </a>
+        </li>
+      </ul>
+    </div>
   </section>
 </template>
 
@@ -268,6 +344,47 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* ---------- Breadcrumb ---------- */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.breadcrumb-item {
+  border: 0;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--brand-primary, #6366f1);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.breadcrumb-item.is-clickable:hover {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.breadcrumb-item.is-current {
+  color: var(--ink-900, #0f172a);
+  font-weight: 500;
+  cursor: default;
+}
+
+.breadcrumb-sep {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-400, #94a3b8);
+  margin: 0 2px;
 }
 
 /* ---------- List ---------- */
@@ -293,6 +410,16 @@ onBeforeUnmount(() => {
   border-color: rgba(99, 102, 241, 0.32);
 }
 
+/* Folder row is a direct <li> click target — no <a> wrapper because
+   it's not a download/navigation; it just shifts the current path. */
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
 .row-link {
   display: flex;
   align-items: center;
@@ -304,6 +431,12 @@ onBeforeUnmount(() => {
 
 .row-icon {
   color: var(--ink-500, #64748b);
+}
+
+.folder-icon {
+  /* Slightly larger and brand-tinted so folders read as containers,
+     not "another file row with a different icon". */
+  color: var(--brand-primary, #6366f1);
 }
 
 .row-meta {
@@ -334,11 +467,9 @@ onBeforeUnmount(() => {
 
 .row-action {
   color: var(--ink-400, #94a3b8);
-  /* Action affordance icon sits flush on the right; rotation makes the
-     "preview" arrow point inward (toward content) while the download
-     icon stays its natural orientation. */
 }
 
+.viewer-row:hover .row-action,
 .viewer-row .row-link:hover .row-action {
   color: var(--brand-primary, #6366f1);
 }

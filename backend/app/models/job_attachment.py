@@ -15,12 +15,14 @@ class JobAttachment(Base):
         nullable=False,
         index=True,
     )
-    # Filename as the user sees it: shown in the list, used in the
-    # Content-Disposition header on download, and the on-disk name
-    # under data/uploads/<job_id>/. When a conflict is resolved with
-    # "rename", this becomes the suffixed form like "report (1).pdf"
-    # so the user-visible name matches what's on disk.
-    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    # User-facing relative path under data/uploads/jobs/<job_id>/.
+    # Single-file uploads put a bare basename here; folder uploads
+    # preserve the directory structure with "/" as separator (e.g.
+    # "src/components/Foo.vue"). The Content-Disposition header on
+    # download uses the same string. Conflict-resolution "rename"
+    # bumps the last segment ("report.pdf" -> "report (1).pdf";
+    # "src/foo.txt" -> "src/foo (1).txt").
+    filename: Mapped[str] = mapped_column(String(1024), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(
