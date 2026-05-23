@@ -6,6 +6,7 @@ import {
   ElCheckbox,
   ElIcon,
   ElMessage,
+  ElMessageBox,
   ElSkeleton,
   ElUpload,
 } from 'element-plus'
@@ -15,6 +16,7 @@ import {
   Delete,
   Document,
   Folder,
+  FolderAdd,
   FolderOpened,
   InfoFilled,
   Loading,
@@ -72,6 +74,12 @@ const conflictRows = ref([])
 let resolveConflictPromise = null
 
 const folderInputRef = ref(null)
+const fileInputRef = ref(null)
+// Visual drop-zone state — only flips true while files are actually
+// being dragged over the file card. Showing the overlay all the time
+// would just add visual noise; only highlighting on dragover keeps the
+// affordance discoverable without dominating the UI.
+const isDragOver = ref(false)
 
 // Selection state for the bulk-delete UX. Files are tracked by row
 // id; folders by their *full* path (e.g. "src/components") because
@@ -240,6 +248,55 @@ function jumpToPath(path) {
   currentPath.value = path
 }
 
+// Transient "new folder" — there's no folder entity in the DB, so we
+// just shift currentPath to the new virtual location. As soon as the
+// admin uploads a file inside, the folder becomes "real" (an
+// attachment row exists with that prefix). If they navigate away
+// without uploading anything, it quietly disappears, which matches
+// the way folders work everywhere else in this UI.
+async function handleCreateFolder() {
+  let raw
+  try {
+    const result = await ElMessageBox.prompt(
+      `將在「${currentPathLabel.value}」之下建立新資料夾。`,
+      '新增資料夾',
+      {
+        confirmButtonText: '建立',
+        cancelButtonText: '取消',
+        inputPlaceholder: '輸入資料夾名稱',
+        // Block obviously broken names at the prompt — frontend match
+        // for the backend's sanitize_relpath rules so the user gets
+        // immediate feedback instead of an upload-time 422.
+        inputValidator(value) {
+          const v = (value ?? '').trim()
+          if (!v) return '名稱不可空白'
+          if (v === '.' || v === '..') return '不可使用 . 或 ..'
+          if (/[\\/]/.test(v)) return '名稱不可含有 / 或 \\'
+          if (/[\x00-\x1f]/.test(v)) return '名稱含有不可見字元'
+          const existing = currentListing.value
+          if (existing.folders.some((f) => f.name === v)) {
+            return '此資料夾已存在，請改用上方列表進入'
+          }
+          if (existing.files.some((entry) => entry.displayName === v)) {
+            return '此名稱與當前目錄下的檔案重複'
+          }
+          return true
+        },
+      },
+    )
+    raw = result.value
+  } catch {
+    // User cancelled the prompt.
+    return
+  }
+  const name = raw.trim()
+  currentPath.value = joinPath(currentPath.value, name)
+  clearSelection()
+  ElMessage.success(
+    `已進入新資料夾「${name}」，在這裡上傳的檔案會放進這個資料夾。`,
+  )
+}
+
 // Queue files added in one user gesture so we can ask about all
 // conflicts in a single modal instead of one-by-one. Each entry is
 // {file, relpath} — relpath is the FULL path the upload should land
@@ -272,6 +329,40 @@ function pushPending(file) {
 function handleFileSelected(uploadFile) {
   if (!uploadFile?.raw) return
   pushPending(uploadFile.raw)
+}
+
+function handleFileInputChange(event) {
+  // Native <input multiple> selection — same destination as
+  // handleFileSelected, just without the el-upload wrapper. We took
+  // the native input route to drop the bulky drag-drop card; the
+  // primary action is now a plain button that triggers this input.
+  const files = event.target?.files
+  if (!files) return
+  for (const file of files) pushPending(file)
+  event.target.value = ''
+}
+
+function onDragEnter(event) {
+  // Only react to file drags — ignoring text/link drags keeps random
+  // browser-internal drags from flickering the overlay.
+  if (event.dataTransfer?.types?.includes('Files')) {
+    isDragOver.value = true
+  }
+}
+
+function onDragLeave(event) {
+  // dragleave fires every time the pointer crosses a child boundary;
+  // only clear the highlight when truly leaving the card.
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    isDragOver.value = false
+  }
+}
+
+function onDrop(event) {
+  isDragOver.value = false
+  const files = event.dataTransfer?.files
+  if (!files || files.length === 0) return
+  for (const file of files) pushPending(file)
 }
 
 function handleFolderPicked(event) {
@@ -479,11 +570,6 @@ async function onDeleteConfirm(password) {
       </span>
     </header>
 
-    <p class="manager-hint" data-test="manager-hint">
-      <el-icon :size="13"><InfoFilled /></el-icon>
-      附件變更（上傳 / 刪除）會立即生效，不需要再按表單下方的「儲存」按鈕。
-    </p>
-
     <el-skeleton v-if="loading" :rows="2" animated />
 
     <template v-else>
@@ -539,6 +625,7 @@ async function onDeleteConfirm(password) {
       </Transition>
 
       <nav
+        v-if="currentPath"
         class="breadcrumb"
         aria-label="附件路徑"
         data-test="manager-breadcrumb"
@@ -569,120 +656,77 @@ async function onDeleteConfirm(password) {
         </template>
       </nav>
 
-      <div
-        v-if="
-          currentListing.folders.length > 0 ||
-          currentListing.files.length > 0
-        "
-        class="list-toolbar"
-        data-test="manager-list-toolbar"
+      <!-- ── Upload card ───────────────────────────────────────────
+           Compact card grouping the three primary actions (file
+           upload, folder upload, create folder) plus a clear label
+           of where they'll land. Replaces the old oversized drag-
+           drop region; drag-drop still works on the file card below. -->
+      <section
+        v-if="!atCapacity"
+        class="manager-card upload-card"
+        data-test="upload-card"
       >
-        <el-checkbox
-          :model-value="allVisibleSelected"
-          :indeterminate="someVisibleSelected"
-          data-test="select-all"
-          @change="toggleSelectAllVisible($event)"
-        >
-          <span class="select-all-label">
-            全選此資料夾
-            <span class="select-all-sub">
-              （{{ visibleEntryCount }} 個項目）
-            </span>
+        <div class="card-header">
+          <span class="card-label">
+            <el-icon :size="14"><FolderOpened /></el-icon>
+            上傳到
           </span>
-        </el-checkbox>
-      </div>
-
-      <ul
-        v-if="
-          currentListing.folders.length > 0 ||
-          currentListing.files.length > 0
-        "
-        class="entry-list"
-      >
-        <li
-          v-for="folder in currentListing.folders"
-          :key="`folder:${folder.name}`"
-          class="entry-row folder-row"
-          :class="{ 'is-selected': isFolderSelected(folder.name) }"
-          :data-test="`manager-folder-${folder.name}`"
-          @click="enterFolder(folder.name)"
-        >
-          <el-checkbox
-            class="row-checkbox"
-            :model-value="isFolderSelected(folder.name)"
-            :data-test="`select-folder-${folder.name}`"
-            :aria-label="`選取資料夾 ${folder.name}`"
-            @click.stop
-            @change="toggleFolderSelection(folder.name, $event)"
-          />
-          <el-icon class="row-icon folder-icon" :size="22"><Folder /></el-icon>
-          <div class="row-meta">
-            <span class="row-name">{{ folder.name }}</span>
-            <span class="row-sub">{{ folder.count }} 個檔案</span>
-          </div>
-          <el-icon class="row-action" :size="14"><ArrowRight /></el-icon>
+          <span class="card-location" data-test="upload-location">
+            {{ currentPathLabel }}
+          </span>
+        </div>
+        <div class="card-actions">
           <el-button
-            text
-            :icon="Delete"
-            type="danger"
-            class="row-delete"
-            :data-test="`delete-folder-${folder.name}`"
-            :aria-label="`刪除資料夾 ${folder.name}`"
-            @click.stop="handleDeleteFolder(folder.name)"
-          />
-        </li>
-
-        <li
-          v-for="entry in currentListing.files"
-          :key="`file:${entry.attachment.id}`"
-          class="entry-row file-row"
-          :class="{ 'is-selected': selectedFileIds.has(entry.attachment.id) }"
-          :data-test="`attachment-row-${entry.attachment.id}`"
-        >
-          <el-checkbox
-            class="row-checkbox"
-            :model-value="selectedFileIds.has(entry.attachment.id)"
-            :data-test="`select-file-${entry.attachment.id}`"
-            :aria-label="`選取檔案 ${entry.displayName}`"
-            @change="toggleFileSelection(entry.attachment.id, $event)"
-          />
-          <el-icon class="row-icon" :size="20">
-            <component :is="iconFor(entry.displayName)" />
-          </el-icon>
-          <div class="row-meta">
-            <a
-              :href="`/api/jobs/${jobId}/attachments/${entry.attachment.id}`"
-              :download="entry.displayName"
-              class="row-name file-link"
-              :title="entry.attachment.filename"
-            >
-              {{ entry.displayName }}
-            </a>
-            <span class="row-sub">{{ formatSize(entry.attachment.size_bytes) }}</span>
-          </div>
+            type="primary"
+            :icon="UploadFilled"
+            :disabled="uploading"
+            data-test="upload-file-button"
+            @click="fileInputRef?.click()"
+          >
+            上傳檔案
+          </el-button>
           <el-button
-            text
-            :icon="Delete"
-            type="danger"
-            :data-test="`delete-${entry.attachment.id}`"
-            @click="handleDelete(entry.attachment)"
-          />
-        </li>
-      </ul>
+            :icon="FolderOpened"
+            :disabled="uploading"
+            data-test="folder-upload-button"
+            @click="folderInputRef?.click()"
+          >
+            上傳資料夾
+          </el-button>
+          <el-button
+            :icon="FolderAdd"
+            :disabled="uploading"
+            data-test="folder-create-button"
+            @click="handleCreateFolder"
+          >
+            新增資料夾
+          </el-button>
+        </div>
+        <!-- Hidden native inputs the buttons trigger. Native input is
+             simpler than el-upload here once the visible drag area is
+             gone: one click → opens picker → pushPending. -->
+        <input
+          ref="fileInputRef"
+          type="file"
+          multiple
+          class="hidden-input"
+          data-test="attachment-uploader"
+          @change="handleFileInputChange"
+        />
+        <input
+          ref="folderInputRef"
+          type="file"
+          multiple
+          webkitdirectory
+          directory
+          class="hidden-input"
+          data-test="folder-input"
+          @change="handleFolderPicked"
+        />
+      </section>
+
       <el-alert
         v-else
-        type="info"
-        :closable="false"
-        :title="
-          currentPath
-            ? '此資料夾還沒有附件。透過下方上傳區把檔案放進來吧。'
-            : '尚未上傳任何附件'
-        "
-        show-icon
-      />
-
-      <el-alert
-        v-if="atCapacity"
         class="capacity-alert"
         type="warning"
         :closable="false"
@@ -690,63 +734,133 @@ async function onDeleteConfirm(password) {
         show-icon
       />
 
-      <template v-else>
-        <el-upload
-          ref="uploadRef"
-          drag
-          multiple
-          :auto-upload="false"
-          :show-file-list="false"
-          :disabled="uploading"
-          :on-change="handleFileSelected"
-          data-test="attachment-uploader"
-          class="upload-zone"
+      <!-- ── Files card ────────────────────────────────────────────
+           Where the file list lives. Drag-and-drop is wired here so
+           dropping anywhere over the card lands files at currentPath;
+           a visual overlay only appears mid-drag. -->
+      <section
+        class="manager-card files-card"
+        :class="{ 'is-dragover': isDragOver }"
+        data-test="files-card"
+        @dragenter.prevent="onDragEnter"
+        @dragover.prevent
+        @dragleave.prevent="onDragLeave"
+        @drop.prevent="onDrop"
+      >
+        <div
+          v-if="visibleEntryCount > 0"
+          class="card-header"
+          data-test="manager-list-toolbar"
         >
-          <el-icon class="upload-icon" :size="36"><UploadFilled /></el-icon>
-          <div class="upload-text">
-            將檔案拖到此處，或<em>點擊上傳</em>
-          </div>
-          <template #tip>
-            <div class="upload-tip">
-              上傳目的地：<strong>{{ currentPathLabel }}</strong>
-            </div>
-            <div class="upload-tip secondary">
-              不限檔案類型；PDF、圖片、Office 文件會在頁面內預覽，其他類型一律提供下載
-              <template v-if="maxMb !== null">
-                。單檔最多 {{ maxMb }} MB
-              </template>
-            </div>
-          </template>
-        </el-upload>
-
-        <!-- 資料夾上傳：el-upload 沒有 directory prop，所以開另一個按鈕觸發
-             原生 <input webkitdirectory>。瀏覽器把整個資料夾的檔案展平送進來，
-             每個 File 帶 webkitRelativePath；前端再用 currentPath 包一層，
-             整個資料夾就會落在「當前位置 / 來源資料夾名稱」之下。 -->
-        <div class="folder-upload-row">
-          <input
-            ref="folderInputRef"
-            type="file"
-            multiple
-            webkitdirectory
-            directory
-            class="folder-input"
-            data-test="folder-input"
-            @change="handleFolderPicked"
-          />
-          <el-button
-            :icon="FolderOpened"
-            :disabled="uploading"
-            data-test="folder-upload-button"
-            @click="folderInputRef?.click()"
+          <el-checkbox
+            :model-value="allVisibleSelected"
+            :indeterminate="someVisibleSelected"
+            data-test="select-all"
+            @change="toggleSelectAllVisible($event)"
           >
-            上傳整個資料夾
-          </el-button>
-          <span class="folder-tip">
-            保留來源資料夾結構，整個放到目前位置之下；自動略過 .DS_Store / Thumbs.db / desktop.ini
-          </span>
+            <span class="select-all-label">
+              全選
+              <span class="select-all-sub">
+                （{{ visibleEntryCount }} 項）
+              </span>
+            </span>
+          </el-checkbox>
         </div>
-      </template>
+
+        <ul v-if="visibleEntryCount > 0" class="entry-list">
+          <li
+            v-for="folder in currentListing.folders"
+            :key="`folder:${folder.name}`"
+            class="entry-row folder-row"
+            :class="{ 'is-selected': isFolderSelected(folder.name) }"
+            :data-test="`manager-folder-${folder.name}`"
+            @click="enterFolder(folder.name)"
+          >
+            <el-checkbox
+              class="row-checkbox"
+              :model-value="isFolderSelected(folder.name)"
+              :data-test="`select-folder-${folder.name}`"
+              :aria-label="`選取資料夾 ${folder.name}`"
+              @click.stop
+              @change="toggleFolderSelection(folder.name, $event)"
+            />
+            <el-icon class="row-icon folder-icon" :size="22"><Folder /></el-icon>
+            <div class="row-meta">
+              <span class="row-name">{{ folder.name }}</span>
+              <span class="row-sub">{{ folder.count }} 個檔案</span>
+            </div>
+            <el-icon class="row-action" :size="14"><ArrowRight /></el-icon>
+            <el-button
+              text
+              :icon="Delete"
+              type="danger"
+              class="row-delete"
+              :data-test="`delete-folder-${folder.name}`"
+              :aria-label="`刪除資料夾 ${folder.name}`"
+              @click.stop="handleDeleteFolder(folder.name)"
+            />
+          </li>
+
+          <li
+            v-for="entry in currentListing.files"
+            :key="`file:${entry.attachment.id}`"
+            class="entry-row file-row"
+            :class="{ 'is-selected': selectedFileIds.has(entry.attachment.id) }"
+            :data-test="`attachment-row-${entry.attachment.id}`"
+          >
+            <el-checkbox
+              class="row-checkbox"
+              :model-value="selectedFileIds.has(entry.attachment.id)"
+              :data-test="`select-file-${entry.attachment.id}`"
+              :aria-label="`選取檔案 ${entry.displayName}`"
+              @change="toggleFileSelection(entry.attachment.id, $event)"
+            />
+            <el-icon class="row-icon" :size="20">
+              <component :is="iconFor(entry.displayName)" />
+            </el-icon>
+            <div class="row-meta">
+              <a
+                :href="`/api/jobs/${jobId}/attachments/${entry.attachment.id}`"
+                :download="entry.displayName"
+                class="row-name file-link"
+                :title="entry.attachment.filename"
+              >
+                {{ entry.displayName }}
+              </a>
+              <span class="row-sub">{{ formatSize(entry.attachment.size_bytes) }}</span>
+            </div>
+            <el-button
+              text
+              :icon="Delete"
+              type="danger"
+              :data-test="`delete-${entry.attachment.id}`"
+              @click="handleDelete(entry.attachment)"
+            />
+          </li>
+        </ul>
+
+        <div v-else class="files-empty" data-test="files-empty">
+          <el-icon :size="36" class="empty-icon"><UploadFilled /></el-icon>
+          <p class="empty-text">
+            {{
+              currentPath
+                ? '此資料夾還沒有附件'
+                : '尚未上傳任何附件'
+            }}
+          </p>
+          <p class="empty-sub">將檔案拖到此處，或使用上方按鈕</p>
+        </div>
+
+        <div v-if="isDragOver" class="drop-overlay" aria-hidden="true">
+          <el-icon :size="40"><UploadFilled /></el-icon>
+          <p>放開以上傳到「{{ currentPathLabel }}」</p>
+        </div>
+      </section>
+
+      <p class="manager-footnote" data-test="manager-hint">
+        <el-icon :size="12"><InfoFilled /></el-icon>
+        變更立即生效，不需再按「儲存」<template v-if="maxMb !== null"> · 單檔最多 {{ maxMb }} MB</template> · 不限類型，PDF / 圖片 / Office 自動預覽
+      </p>
     </template>
 
     <AttachmentConflictDialog
@@ -841,16 +955,6 @@ async function onDeleteConfirm(password) {
   justify-content: space-between;
 }
 
-.manager-hint {
-  margin: -4px 0 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-500, #64748b);
-  line-height: 1.5;
-}
-
 .title {
   margin: 0;
   font-size: 16px;
@@ -860,6 +964,142 @@ async function onDeleteConfirm(password) {
 .counter {
   font-size: 13px;
   color: var(--ink-500, #64748b);
+}
+
+/* ---------- Cards (upload card + files card) ----------
+   Each section gets a soft surface + 1px border so the two zones
+   read as distinct without shouting. Keeps the dialog body visually
+   organised even when the file list is empty. */
+.manager-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-card {
+  padding: 14px 16px;
+  gap: 12px;
+}
+
+.files-card {
+  padding: 12px;
+  gap: 10px;
+  position: relative;
+  /* The card itself is the drop target — overlay below floats inside. */
+  min-height: 120px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.files-card.is-dragover {
+  border-color: var(--brand-primary, #6366f1);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.card-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-500, #64748b);
+  font-weight: 500;
+}
+
+.card-location {
+  font-weight: 600;
+  color: var(--brand-primary, #6366f1);
+  font-size: 13px;
+  /* Truncate when nested deep so the toolbar stays one row. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hidden-input {
+  /* Pull the native picker inputs out of layout entirely so they
+     don't add stray height beneath the button row. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.files-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  color: var(--ink-500, #64748b);
+  text-align: center;
+}
+
+.empty-icon {
+  color: var(--ink-300, #cbd5e1);
+}
+
+.empty-text {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-700, #334155);
+}
+
+.empty-sub {
+  margin: 0;
+  font-size: 12px;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(99, 102, 241, 0.92);
+  color: #ffffff;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.drop-overlay p {
+  margin: 0;
+}
+
+.manager-footnote {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-500, #64748b);
+  line-height: 1.5;
 }
 
 /* ---------- Breadcrumb ---------- */
@@ -954,14 +1194,6 @@ async function onDeleteConfirm(password) {
 .bulk-bar-enter-active,
 .bulk-bar-leave-active {
   transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-/* ---------- List toolbar (select-all row) ---------- */
-.list-toolbar {
-  display: flex;
-  align-items: center;
-  padding: 4px 4px 0;
-  font-size: 13px;
 }
 
 .select-all-label {
@@ -1070,61 +1302,5 @@ async function onDeleteConfirm(password) {
 
 .capacity-alert {
   margin-top: 4px;
-}
-
-.upload-zone {
-  margin-top: 4px;
-}
-
-.upload-icon {
-  color: var(--ink-400, #94a3b8);
-}
-
-.upload-text {
-  font-size: 14px;
-  color: var(--ink-700, #334155);
-}
-
-.upload-text em {
-  color: var(--brand-primary, #6366f1);
-  font-style: normal;
-}
-
-.upload-tip {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--ink-700, #334155);
-}
-
-.upload-tip strong {
-  color: var(--brand-primary, #6366f1);
-  font-weight: 600;
-}
-
-.upload-tip.secondary {
-  font-size: 12px;
-  color: var(--ink-500, #64748b);
-  margin-top: 2px;
-}
-
-.folder-upload-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
-
-.folder-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.folder-tip {
-  font-size: 12px;
-  color: var(--ink-500, #64748b);
 }
 </style>

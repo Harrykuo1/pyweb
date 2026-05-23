@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { jobAttachmentsApi } from '../api/jobAttachments'
 import { settingsApi } from '../api/settings'
@@ -597,6 +597,151 @@ describe('JobAttachmentsManager.vue', () => {
       await flushPromises()
 
       expect(wrapper.vm.selectionCount).toBe(0)
+    })
+  })
+
+  describe('transient "new folder" button', () => {
+    const NESTED = [
+      {
+        id: 100,
+        job_id: 7,
+        filename: 'top.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+      {
+        id: 101,
+        job_id: 7,
+        filename: 'src/a.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      },
+    ]
+
+    it('opens a name prompt and navigates into the new folder on confirm', async () => {
+      jobAttachmentsApi.list.mockResolvedValue(NESTED)
+      vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({
+        action: 'confirm',
+        value: 'planning',
+      })
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+
+      await wrapper.find('[data-test="folder-create-button"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.vm.currentPath).toBe('planning')
+      // No DB write happens — folder is purely a navigation state. The
+      // list is untouched until the first upload lands.
+      expect(wrapper.vm.attachments).toHaveLength(NESTED.length)
+    })
+
+    it('uploads from inside the new folder prefix the relpath with its name', async () => {
+      jobAttachmentsApi.list.mockResolvedValue(NESTED)
+      vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({
+        action: 'confirm',
+        value: 'planning',
+      })
+      const upload = vi.spyOn(jobAttachmentsApi, 'upload').mockResolvedValue({
+        id: 999,
+        job_id: 7,
+        filename: 'planning/notes.md',
+        mime_type: 'text/markdown',
+        size_bytes: 1,
+        uploaded_at: '2026-05-02T00:00:00+00:00',
+        preview_available: false,
+      })
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="folder-create-button"]').trigger('click')
+      await flushPromises()
+
+      const file = new File([new Uint8Array([1])], 'notes.md', {
+        type: 'text/markdown',
+      })
+      wrapper.vm.handleFileSelected({ raw: file })
+      await flushPromises()
+
+      expect(upload.mock.calls[0][3]).toBe('planning/notes.md')
+    })
+
+    it('rejects names that collide with an existing folder at the same level', async () => {
+      jobAttachmentsApi.list.mockResolvedValue(NESTED)
+      // Root has "src" as a folder. The prompt's inputValidator must
+      // refuse "src" so the user doesn't end up in a confused state
+      // where the breadcrumb says new-folder but the listing is the
+      // pre-existing one.
+      const prompt = vi.spyOn(ElMessageBox, 'prompt').mockImplementation(
+        async (_msg, _title, opts) => {
+          const verdict = opts.inputValidator('src')
+          expect(verdict).toContain('已存在')
+          throw 'cancel'
+        },
+      )
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="folder-create-button"]').trigger('click')
+      await flushPromises()
+
+      expect(prompt).toHaveBeenCalledTimes(1)
+      expect(wrapper.vm.currentPath).toBe('')
+    })
+
+    it('rejects names with path separators', async () => {
+      jobAttachmentsApi.list.mockResolvedValue(NESTED)
+      vi.spyOn(ElMessageBox, 'prompt').mockImplementation(
+        async (_msg, _title, opts) => {
+          expect(opts.inputValidator('a/b')).toContain('不可含有')
+          expect(opts.inputValidator('..')).toContain('不可使用')
+          expect(opts.inputValidator('   ')).toContain('不可空白')
+          throw 'cancel'
+        },
+      )
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="folder-create-button"]').trigger('click')
+      await flushPromises()
+    })
+
+    it('cancelling the prompt leaves currentPath unchanged', async () => {
+      jobAttachmentsApi.list.mockResolvedValue(NESTED)
+      vi.spyOn(ElMessageBox, 'prompt').mockRejectedValue('cancel')
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+      await wrapper.find('[data-test="folder-create-button"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.vm.currentPath).toBe('')
+    })
+
+    it('is disabled when the attachment count is already at the cap', async () => {
+      const full = Array.from({ length: 5 }, (_, i) => ({
+        id: i + 1,
+        job_id: 7,
+        filename: `f${i + 1}.pdf`,
+        mime_type: 'application/pdf',
+        size_bytes: 1,
+        uploaded_at: '2026-05-01T00:00:00+00:00',
+        preview_available: false,
+      }))
+      jobAttachmentsApi.list.mockResolvedValue(full)
+
+      const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+      await flushPromises()
+
+      // Cap reached → upload zone hides → folder-create button hidden too.
+      expect(
+        wrapper.find('[data-test="folder-create-button"]').exists(),
+      ).toBe(false)
     })
   })
 
