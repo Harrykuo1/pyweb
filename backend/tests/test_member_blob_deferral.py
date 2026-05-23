@@ -13,10 +13,15 @@ These tests guard against two regressions:
      column, which would trigger a per-row SELECT during response
      serialization — turning the optimisation into a real N+1.
 
-Both regressions show up here as either an inflated query count or
-the BLOB column appearing in the SELECT statement string.
+Photo storage has since moved to the filesystem (photo_path), so the
+GET endpoint never touches the BLOB column either — the deferral
+optimisation is now strictly a safety net while the column itself is
+on its way out. The seeding here mirrors a post-FS-rollout row:
+photo_path set, photo BLOB NULL. Resume PDFs still live in the BLOB
+column until their own router migration lands.
 """
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +30,7 @@ from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
 from app.models import Member, User, UserRole
+from app.routers.members import get_uploads_root
 from tests.conftest import count_queries
 
 
@@ -37,20 +43,31 @@ TINY_PDF = b"%PDF-1.4\n%fake\n%%EOF\n"
 
 
 @pytest.fixture
-def populated(db_session):
-    """Seed admin + 5 members each with a photo + resume_pdf so the
-    'real' list query has multiple rows to potentially N+1 over."""
+def uploads_dir(tmp_path) -> Path:
+    return tmp_path / "uploads"
+
+
+@pytest.fixture
+def populated(db_session, uploads_dir):
+    """Seed admin + 5 members each with a photo (FS-backed) and a
+    resume_pdf BLOB so the 'real' list query has multiple rows to
+    potentially N+1 over."""
     db_session.add(
         User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN)
     )
     for i in range(5):
+        member_id = i + 1
+        relpath = f"members/{member_id}/photo.png"
+        on_disk = uploads_dir / relpath
+        on_disk.parent.mkdir(parents=True, exist_ok=True)
+        on_disk.write_bytes(TINY_PNG)
         db_session.add(
             Member(
-                id=i + 1,
+                id=member_id,
                 graduation_year=2020 + i,
                 real_name=f"Member {i}",
                 institution="SWE",
-                photo=TINY_PNG,
+                photo_path=relpath,
                 photo_content_type="image/png",
                 photo_updated_at=datetime.now(timezone.utc),
                 resume_pdf=TINY_PDF,
@@ -64,6 +81,7 @@ def populated(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_uploads_root] = lambda: uploads_dir
     client = TestClient(app)
     client.post("/api/auth/login", json={"password": "admin-pw"})
 
@@ -127,16 +145,27 @@ def test_list_members_issues_no_per_row_blob_load(populated, db_engine):
     )
 
 
-def test_get_photo_endpoint_loads_blob_exactly_once(populated, db_engine):
-    # Single-row endpoint deliberately reads the BLOB; that's expected.
-    # We just want to confirm we don't blow up to multiple SELECTs.
+def test_get_photo_endpoint_serves_from_disk_without_loading_blob(
+    populated, db_engine
+):
+    # Photo storage moved to the filesystem, so even the single-row
+    # endpoint must not touch the BLOB column. If a future change
+    # accidentally reintroduces a `member.photo` read, the deferred
+    # load shows up here as an extra SELECT against the BLOB column.
     with count_queries(db_engine) as statements:
         r = populated.get("/api/members/1/photo")
         assert r.status_code == 200
         assert r.content == TINY_PNG
 
-    photo_loads = [s for s in statements if "members.photo" in s.lower()]
-    assert len(photo_loads) >= 1, "expected at least one query touching photo"
+    blob_loads = [
+        s for s in statements
+        if "members.photo " in s.lower() or "members.photo," in s.lower()
+    ]
+    assert blob_loads == [], (
+        f"GET /api/members/{{id}}/photo loaded the deferred BLOB column — "
+        f"the endpoint should be reading photo_path and streaming from "
+        f"disk only. Statements: {blob_loads}"
+    )
 
 
 def test_has_photo_property_does_not_trigger_blob_load(populated, db_session, db_engine):
@@ -169,7 +198,7 @@ def test_has_photo_property_correct_with_and_without_photo(populated, db_session
 
     # Mutate one row to clear photo + companion column, mirroring what
     # the delete endpoint does.
-    with_photo.photo = None
+    with_photo.photo_path = None
     with_photo.photo_content_type = None
     with_photo.photo_updated_at = None
     with_photo.resume_pdf = None
