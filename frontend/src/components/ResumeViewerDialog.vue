@@ -164,8 +164,8 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   <el-dialog
     :model-value="modelValue"
     title=""
-    width="1000"
-    class="resume-dialog"
+    :fullscreen="true"
+    modal-class="resume-overlay"
     :show-close="false"
     :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
@@ -298,27 +298,40 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   />
 </template>
 
-<!-- Unscoped: pin the dialog and its layout. The .resume-dialog class
-     is merged onto el-dialog's root which lives inside EP's nested
-     wrappers — Vue's scoped data-v hash doesn't reach that element,
-     so a scoped selector wouldn't match. Targeting it from a global
-     style block guarantees the rules apply. -->
+<!-- Unscoped: the rules below target EP's overlay/dialog tree via
+     modal-class="resume-overlay" (an explicit prop, applied to .el-overlay).
+     A scoped data-v hash wouldn't reach those nested wrappers. -->
 <style>
-.resume-dialog {
-  border-radius: 16px;
-  overflow: hidden;
-  margin: 2vh auto !important;
-  height: 96vh !important;
+/* Pin the dialog to the viewport directly with position:fixed + top/bottom.
+   :fullscreen gives us the .is-fullscreen class hook; we override width and
+   chrome to keep the normal dialog look. modal-class lands on .el-overlay
+   synchronously so we don't need the class on .el-dialog itself. */
+.resume-overlay .el-dialog.is-fullscreen {
+  position: fixed !important;
+  top: 1vh !important;
+  bottom: 1vh !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  margin: 0 !important;
+  width: 1100px !important;
+  max-width: 95vw !important;
+  height: auto !important;
+  /* style.css applies max-height: 88vh to every .el-dialog as a global
+     viewport cap. That caps this dialog before top/bottom anchoring can
+     stretch it, so we lift the cap for this one. */
+  max-height: none !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
   display: flex;
   flex-direction: column;
 }
 
 /* The custom hero replaces the EP title bar entirely. */
-.resume-dialog .el-dialog__header {
+.resume-overlay .el-dialog__header {
   display: none;
 }
 
-.resume-dialog .el-dialog__body {
+.resume-overlay .el-dialog__body {
   padding: 0;
   flex: 1;
   min-height: 0;
@@ -326,7 +339,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   flex-direction: column;
 }
 
-.resume-dialog .el-dialog__footer {
+.resume-overlay .el-dialog__footer {
   padding: 16px 24px;
   border-top: 1px solid #f2f3f5;
   flex-shrink: 0;
