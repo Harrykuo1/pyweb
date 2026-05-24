@@ -89,6 +89,12 @@ class JobResponse(BaseModel):
     timeline_md: str | None
     timeline_events: list[TimelineEvent] | None
     created_at: datetime
+    # Populated by the jobs router via a per-call COUNT query, not an
+    # ORM relationship — keeps the Job model decoupled from the
+    # attachments subsystem. Defaults to 0 so endpoints that don't
+    # need it (or paths where attachments are guaranteed empty, like
+    # immediately after create_job) don't have to pass it explicitly.
+    attachment_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

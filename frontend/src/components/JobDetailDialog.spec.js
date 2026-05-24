@@ -136,6 +136,30 @@ describe('JobDetailDialog — markdown tabs', () => {
     expect(legacy.text()).toContain('舊版時程表')
     expect(wrapper.text()).toContain('舊版時程內文')
   })
+
+  it('renders the attachments tab when attachment_count > 0', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, attachment_count: 2 },
+    })
+    // Inspect the visible tab nav text — Element Plus's el-tab-pane
+    // doesn't surface its data-test on the nav element, so checking
+    // the rendered label is more reliable (matches the timeline tab
+    // tests' pattern).
+    expect(wrapper.text()).toContain('附件')
+  })
+
+  it('hides the attachments tab when attachment_count is 0 or missing', async () => {
+    // Mirror the timeline behaviour — no content → no tab. Both the
+    // explicit-zero case and the missing-field case should hide.
+    const w1 = await mountDialog({
+      job: { ...sample, attachment_count: 0 },
+    })
+    expect(w1.text()).not.toContain('附件')
+
+    const { attachment_count, ...withoutCount } = sample
+    const w2 = await mountDialog({ job: withoutCount })
+    expect(w2.text()).not.toContain('附件')
+  })
 })
 
 describe('JobDetailDialog — admin edit button', () => {

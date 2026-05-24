@@ -3,14 +3,14 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
 from app.core.search_query import build_ilike_filter, parse as parse_search_query
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Job, JobKind, User
+from app.models import Job, JobAttachment, JobKind, User
 from app.routers.job_attachments import get_uploads_root, job_uploads_dir
 from app.schemas import (
     JobCreate,
@@ -52,6 +52,30 @@ def _get_or_404(db: Session, job_id: int) -> Job:
             detail="Job not found",
         )
     return obj
+
+
+def _attachment_counts(db: Session, job_ids: list[int]) -> dict[int, int]:
+    """Return {job_id: count} for the given jobs in a single query.
+    Job IDs missing from the result map to 0 attachments — let the
+    caller default via dict.get(..., 0)."""
+    if not job_ids:
+        return {}
+    rows = (
+        db.query(JobAttachment.job_id, func.count(JobAttachment.id))
+        .filter(JobAttachment.job_id.in_(job_ids))
+        .group_by(JobAttachment.job_id)
+        .all()
+    )
+    return {job_id: count for job_id, count in rows}
+
+
+def _to_response(job: Job, attachment_count: int = 0) -> JobResponse:
+    """Build a JobResponse and stamp the (separately-queried) count.
+    Avoids defining a SQLAlchemy column_property on Job that would
+    forcibly subquery on every Job load app-wide."""
+    resp = JobResponse.model_validate(job)
+    resp.attachment_count = attachment_count
+    return resp
 
 
 def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
@@ -127,8 +151,9 @@ def list_jobs(
         order_by = [primary, Job.created_at.desc()]
 
     items = query.order_by(*order_by).all()
+    counts = _attachment_counts(db, [i.id for i in items])
     return ListResponse[JobResponse](
-        items=[JobResponse.model_validate(i) for i in items],
+        items=[_to_response(i, counts.get(i.id, 0)) for i in items],
         total=len(items),
     )
 
@@ -173,8 +198,10 @@ def get_job(
     job_id: int,
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
-) -> Job:
-    return _get_or_404(db, job_id)
+) -> JobResponse:
+    obj = _get_or_404(db, job_id)
+    counts = _attachment_counts(db, [obj.id])
+    return _to_response(obj, counts.get(obj.id, 0))
 
 
 @router.post(
@@ -186,7 +213,7 @@ def create_job(
     payload: JobCreate,
     db: Session = Depends(get_db),
     _: object = Depends(require_admin),
-) -> Job:
+) -> JobResponse:
     obj = Job(
         job_year=payload.job_year,
         job_month=payload.job_month,
@@ -209,7 +236,9 @@ def create_job(
     db.add(obj)
     db.commit()
     db.refresh(obj)
-    return obj
+    # Freshly created — no attachments could exist yet, so the default 0
+    # is exact. Skip the COUNT query for this path.
+    return _to_response(obj, 0)
 
 
 @router.put("/{job_id}", response_model=JobResponse)
@@ -218,7 +247,7 @@ def update_job(
     payload: JobUpdate,
     db: Session = Depends(get_db),
     _: object = Depends(require_admin),
-) -> Job:
+) -> JobResponse:
     obj = _get_or_404(db, job_id)
     # mode="json" so any nested date objects (timeline_events[].date)
     # arrive at the SQLAlchemy JSON column already serialised to ISO
@@ -229,7 +258,8 @@ def update_job(
         setattr(obj, field, value)
     db.commit()
     db.refresh(obj)
-    return obj
+    counts = _attachment_counts(db, [obj.id])
+    return _to_response(obj, counts.get(obj.id, 0))
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

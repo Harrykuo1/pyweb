@@ -1063,6 +1063,53 @@ def test_delete_removes_on_disk_uploads_dir(client_factory, db_session, tmp_path
         app.dependency_overrides.pop(get_uploads_root, None)
 
 
+def test_get_reports_attachment_count(client_factory, db_session):
+    """Detail dialog hides the 附件 tab when attachment_count is 0,
+    so the field has to be present on both list and get responses."""
+    from app.models import JobAttachment
+
+    client, login_as = client_factory
+    _seed(db_session, [{"company": "Acme"}, {"company": "Beta"}])
+    # Two attachments on job 1, zero on job 2.
+    db_session.add_all([
+        JobAttachment(
+            job_id=1, filename="a.pdf",
+            mime_type="application/pdf", size_bytes=1,
+            uploaded_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        ),
+        JobAttachment(
+            job_id=1, filename="b.pdf",
+            mime_type="application/pdf", size_bytes=1,
+            uploaded_at=datetime(2026, 5, 2, tzinfo=timezone.utc),
+        ),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r1 = client.get("/api/jobs/1").json()
+    r2 = client.get("/api/jobs/2").json()
+    assert r1["attachment_count"] == 2
+    assert r2["attachment_count"] == 0
+
+    listing = client.get("/api/jobs").json()
+    by_id = {row["id"]: row["attachment_count"] for row in listing["items"]}
+    assert by_id == {1: 2, 2: 0}
+
+
+def test_create_reports_zero_attachment_count(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post("/api/jobs", json={
+        "kind": "internship",
+        "job_year": 2026,
+        "job_month": 5,
+        "company": "Acme",
+        "experience_md": "hi",
+    })
+    assert r.status_code == 201
+    assert r.json()["attachment_count"] == 0
+
+
 def test_delete_succeeds_when_no_uploads_dir_exists(
     client_factory, db_session, tmp_path
 ):

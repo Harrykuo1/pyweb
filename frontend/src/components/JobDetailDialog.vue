@@ -45,6 +45,14 @@ const hasTimeline = computed(
   () => hasTimelineEvents.value || hasLegacyTimelineMd.value,
 )
 
+// Mirror the timeline behavior: tab only shows when there's content
+// to look at. attachment_count is populated by the jobs API; default
+// to 0 if the field is absent (defensive in case an older cached job
+// object slips through without it).
+const hasAttachments = computed(
+  () => (props.job?.attachment_count ?? 0) > 0,
+)
+
 watch(
   () => props.modelValue,
   (open) => {
@@ -162,6 +170,7 @@ function formatJobYearMonth(j) {
         </div>
       </el-tab-pane>
       <el-tab-pane
+        v-if="hasAttachments"
         label="附件"
         name="attachments"
         lazy
