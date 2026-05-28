@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from app.schemas.job import JobKindLiteral
 
 
-class MemberJoinedActivity(BaseModel):
+class MemberJoinedItem(BaseModel):
     type: Literal["member_joined"] = "member_joined"
     timestamp: datetime
     member_id: int
@@ -17,7 +17,7 @@ class MemberJoinedActivity(BaseModel):
     photo_updated_at: datetime | None
 
 
-class JobCreatedActivity(BaseModel):
+class JobCreatedItem(BaseModel):
     type: Literal["job_created"] = "job_created"
     timestamp: datetime
     job_id: int
@@ -29,14 +29,14 @@ class JobCreatedActivity(BaseModel):
     job_month: int
 
 
-ActivityItem = Annotated[
-    MemberJoinedActivity | JobCreatedActivity,
+TimelineItem = Annotated[
+    MemberJoinedItem | JobCreatedItem,
     Field(discriminator="type"),
 ]
 
 
-class ActivityResponse(BaseModel):
-    items: list[ActivityItem]
+class TimelineResponse(BaseModel):
+    items: list[TimelineItem]
     # Set by the cursor pagination path: True when at least one row exists
     # strictly older than the last item in `items`. The frontend uses this
     # to decide whether to keep fetching as the user scrolls; once it

@@ -18,7 +18,7 @@ import {
   UserFilled,
 } from '@element-plus/icons-vue'
 
-import { activityApi } from '../api/activity'
+import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
@@ -40,7 +40,7 @@ const errored = ref(false)
 
 // Always-expanded by default on every page load. We deliberately don't
 // persist a collapsed state — the feed is the social-discovery hook, so
-// each fresh visit should surface activity, even if the user collapsed
+// each fresh visit should surface the latest updates, even if collapsed
 // it last time. The toggle still works within a session for screen-
 // real-estate reasons.
 const collapsed = ref(false)
@@ -60,7 +60,7 @@ async function loadInitial() {
   loading.value = true
   errored.value = false
   try {
-    const data = await activityApi.list({ limit: props.pageSize })
+    const data = await timelineApi.list({ limit: props.pageSize })
     items.value = data.items ?? []
     hasMore.value = Boolean(data.has_more)
   } catch (err) {
@@ -88,7 +88,7 @@ async function loadMore() {
   loadingMore.value = true
   try {
     const cursor = items.value[items.value.length - 1].timestamp
-    const data = await activityApi.list({
+    const data = await timelineApi.list({
       limit: props.pageSize,
       before: cursor,
     })
@@ -191,7 +191,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 </script>
 
 <template>
-  <section class="activity-feed" data-test="activity-feed">
+  <section class="timeline-feed" data-test="timeline-feed">
     <header class="feed-header">
       <div class="feed-title-wrap">
         <span class="feed-title-icon">
@@ -206,9 +206,9 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
         type="button"
         class="feed-toggle"
         :aria-expanded="!collapsed"
-        aria-controls="activity-feed-body"
+        aria-controls="timeline-feed-body"
         :title="collapsed ? '展開動態' : '收合動態'"
-        data-test="activity-toggle"
+        data-test="timeline-toggle"
         @click="toggleCollapsed"
       >
         <span class="feed-toggle-label">{{ collapsed ? '展開' : '收合' }}</span>
@@ -222,8 +222,8 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
     </header>
 
     <el-collapse-transition>
-      <div v-show="!collapsed" id="activity-feed-body" class="feed-body">
-        <div v-if="loading" class="feed-list" data-test="activity-loading">
+      <div v-show="!collapsed" id="timeline-feed-body" class="feed-body">
+        <div v-if="loading" class="feed-list" data-test="timeline-loading">
           <div
             v-for="(_, idx) in skeletonRows"
             :key="idx"
@@ -247,7 +247,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
         <div
           v-else-if="errored"
           class="feed-empty"
-          data-test="activity-error"
+          data-test="timeline-error"
         >
           <el-empty description="動態載入失敗，稍後再試" :image-size="80" />
         </div>
@@ -255,7 +255,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
         <div
           v-else-if="items.length === 0"
           class="feed-empty"
-          data-test="activity-empty"
+          data-test="timeline-empty"
         >
           <el-empty
             description="目前還沒有動態，新增成員或求職紀錄後會顯示在這裡"
@@ -267,7 +267,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
           v-else
           ref="listRef"
           class="feed-list"
-          data-test="activity-list"
+          data-test="timeline-list"
         >
           <li
             v-for="item in items"
@@ -275,7 +275,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
             :class="['feed-row', `feed-row--${item.type}`]"
             role="button"
             tabindex="0"
-            :data-test="`activity-row-${item.type}`"
+            :data-test="`timeline-row-${item.type}`"
             @click="handleClick(item)"
             @keydown="handleKey($event, item)"
           >
@@ -367,7 +367,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
             ref="sentinelRef"
             class="feed-sentinel"
             aria-hidden="true"
-            data-test="activity-sentinel"
+            data-test="timeline-sentinel"
           >
             <el-icon
               v-if="loadingMore"
@@ -384,7 +384,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 </template>
 
 <style scoped>
-.activity-feed {
+.timeline-feed {
   background: var(--surface-0);
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
@@ -486,7 +486,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
   display: flex;
   flex-direction: column;
   /* Cap the expanded feed at ~6 rows so the home page doesn't grow
-     with every new activity — anything beyond uses the inner scroll.
+     with every new entry — anything beyond uses the inner scroll.
      The cut-off lands mid-row to signal "more below" without needing
      a separate fade overlay. */
   max-height: 420px;
@@ -640,7 +640,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
    member avatar's circle) so type stays disambiguated; the gradient
    below is then tinted by kind to mirror the chip colour beside it.
    Internship → indigo, Fulltime → career teal — matches the Jobs
-   page card accents and ActivityFeedPreview's avatar tints. */
+   page card accents and TimelineFeedPreview's avatar tints. */
 .row-avatar--job {
   border-radius: 12px;
 }
@@ -811,7 +811,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 
 /* ---------- mobile ---------- */
 @media (max-width: 640px) {
-  .activity-feed {
+  .timeline-feed {
     padding: 18px 16px 12px;
   }
 

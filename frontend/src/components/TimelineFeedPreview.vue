@@ -8,12 +8,12 @@ import {
   Promotion,
 } from '@element-plus/icons-vue'
 
-import { activityApi } from '../api/activity'
+import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
 
-// A compact preview of the activity feed designed to live inside the
+// A compact preview of the timeline feed designed to live inside the
 // hero. Visually distinct (dark glass card on the hero gradient) and
 // stripped of features that belong to the standalone full feed below
 // (collapse toggle, skeleton variant, large rows). The full feed
@@ -22,8 +22,8 @@ import { relativeTime } from '../utils/relativeTime'
 const props = defineProps({
   limit: { type: Number, default: 4 },
   // DOM id to scroll to when the user clicks 查看全部. Defaults to the
-  // standalone ActivityFeed below the hero.
-  fullFeedAnchor: { type: String, default: 'activity-feed-section' },
+  // standalone TimelineFeed below the hero.
+  fullFeedAnchor: { type: String, default: 'timeline-feed-section' },
 })
 
 const router = useRouter()
@@ -32,7 +32,7 @@ const loading = ref(true)
 
 onMounted(async () => {
   try {
-    const data = await activityApi.list({ limit: props.limit })
+    const data = await timelineApi.list({ limit: props.limit })
     items.value = data.items ?? []
   } catch {
     // Hero degrades gracefully — empty state copy covers both empty DB

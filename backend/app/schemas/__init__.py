@@ -1,8 +1,8 @@
-from app.schemas.activity import (
-    ActivityItem,
-    ActivityResponse,
-    JobCreatedActivity,
-    MemberJoinedActivity,
+from app.schemas.timeline import (
+    JobCreatedItem,
+    MemberJoinedItem,
+    TimelineItem,
+    TimelineResponse,
 )
 from app.schemas.auth import (
     LoginRequest,
@@ -32,8 +32,6 @@ from app.schemas.setting import (
 from app.schemas.stats import StatsResponse
 
 __all__ = [
-    "ActivityItem",
-    "ActivityResponse",
     "BulkDeleteRequest",
     "BulkDeleteResponse",
     "BulkDownloadRequest",
@@ -42,17 +40,19 @@ __all__ = [
     "ConfigUpdateRequest",
     "JobAttachmentResponse",
     "JobCreate",
-    "JobCreatedActivity",
+    "JobCreatedItem",
     "JobResponse",
     "JobUpdate",
     "ListResponse",
     "LoginRequest",
     "MemberCreate",
-    "MemberJoinedActivity",
+    "MemberJoinedItem",
     "MemberResponse",
     "MemberUpdate",
     "PasswordConfirmRequest",
     "StatsResponse",
+    "TimelineItem",
+    "TimelineResponse",
     "UpdatePasswordRequest",
     "UpdateUsernameRequest",
     "UserResponse",

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import ActivityFeed from './ActivityFeed.vue'
-import { activityApi } from '../api/activity'
+import TimelineFeed from './TimelineFeed.vue'
+import { timelineApi } from '../api/timeline'
 
 const pushMock = vi.fn()
 
@@ -39,7 +39,7 @@ class MockIntersectionObserver {
 }
 
 function fireIntersect(isIntersecting = true) {
-  // Always poke the most recently created observer — ActivityFeed
+  // Always poke the most recently created observer — TimelineFeed
   // disconnects and recreates one on every loadMore round-trip, so the
   // freshest instance is the only one still hooked to a live sentinel.
   const obs = observerInstances[observerInstances.length - 1]
@@ -64,46 +64,46 @@ afterEach(() => {
 
 async function mountFeed(items, { hasMore = false, props = {} } = {}) {
   const listSpy = vi
-    .spyOn(activityApi, 'list')
+    .spyOn(timelineApi, 'list')
     .mockResolvedValue({ items, has_more: hasMore })
-  const wrapper = mount(ActivityFeed, { props })
+  const wrapper = mount(TimelineFeed, { props })
   await flushPromises()
   return { wrapper, listSpy }
 }
 
-describe('ActivityFeed.vue', () => {
+describe('TimelineFeed.vue', () => {
   it('shows skeleton rows while loading', async () => {
     let resolve
-    vi.spyOn(activityApi, 'list').mockReturnValue(
+    vi.spyOn(timelineApi, 'list').mockReturnValue(
       new Promise((r) => {
         resolve = r
       }),
     )
-    const wrapper = mount(ActivityFeed)
+    const wrapper = mount(TimelineFeed)
     // onMounted's load() flips `loading` to true on a microtask, and the
     // ElCollapseTransition wrapper means the body re-renders one extra
     // tick later — wait for both before asserting.
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.find('[data-test="activity-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="timeline-loading"]').exists()).toBe(true)
 
     resolve({ items: [], has_more: false })
     await flushPromises()
-    expect(wrapper.find('[data-test="activity-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="timeline-loading"]').exists()).toBe(false)
   })
 
   it('shows the empty state when no items return', async () => {
     const { wrapper } = await mountFeed([])
-    expect(wrapper.find('[data-test="activity-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="timeline-empty"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('目前還沒有動態')
   })
 
   it('shows an error state when the API rejects', async () => {
-    vi.spyOn(activityApi, 'list').mockRejectedValue(new Error('boom'))
-    const wrapper = mount(ActivityFeed)
+    vi.spyOn(timelineApi, 'list').mockRejectedValue(new Error('boom'))
+    const wrapper = mount(TimelineFeed)
     await flushPromises()
-    expect(wrapper.find('[data-test="activity-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="timeline-error"]').exists()).toBe(true)
   })
 
   it('renders a member_joined row with name, institution, position', async () => {
@@ -119,7 +119,7 @@ describe('ActivityFeed.vue', () => {
         photo_updated_at: null,
       },
     ])
-    const row = wrapper.find('[data-test="activity-row-member_joined"]')
+    const row = wrapper.find('[data-test="timeline-row-member_joined"]')
     expect(row.exists()).toBe(true)
     expect(row.text()).toContain('Alice')
     expect(row.text()).toContain('加入了社群')
@@ -141,7 +141,7 @@ describe('ActivityFeed.vue', () => {
         job_month: 5,
       },
     ])
-    const row = wrapper.find('[data-test="activity-row-job_created"]')
+    const row = wrapper.find('[data-test="timeline-row-job_created"]')
     expect(row.exists()).toBe(true)
     expect(row.text()).toContain('Bob')
     expect(row.text()).toContain('新增了一筆求職紀錄')
@@ -175,7 +175,7 @@ describe('ActivityFeed.vue', () => {
         job_month: 5,
       },
     ])
-    const rows = wrapper.findAll('[data-test="activity-row-job_created"]')
+    const rows = wrapper.findAll('[data-test="timeline-row-job_created"]')
     expect(rows.length).toBe(2)
     expect(rows[0].find('.row-avatar--job').classes()).toContain(
       'row-avatar--kind-internship',
@@ -199,7 +199,7 @@ describe('ActivityFeed.vue', () => {
         job_month: 5,
       },
     ])
-    const row = wrapper.find('[data-test="activity-row-job_created"]')
+    const row = wrapper.find('[data-test="timeline-row-job_created"]')
     expect(row.text()).toContain('匿名成員')
     expect(row.text()).toContain('正職')
   })
@@ -218,7 +218,7 @@ describe('ActivityFeed.vue', () => {
       },
     ])
     await wrapper
-      .find('[data-test="activity-row-member_joined"]')
+      .find('[data-test="timeline-row-member_joined"]')
       .trigger('click')
     expect(pushMock).toHaveBeenCalledWith({
       path: '/members',
@@ -240,7 +240,7 @@ describe('ActivityFeed.vue', () => {
         job_month: 5,
       },
     ])
-    await wrapper.find('[data-test="activity-row-job_created"]').trigger('click')
+    await wrapper.find('[data-test="timeline-row-job_created"]').trigger('click')
     expect(pushMock).toHaveBeenCalledWith({
       path: '/jobs',
       query: { detail: '9' },
@@ -261,7 +261,7 @@ describe('ActivityFeed.vue', () => {
       },
     ])
     await wrapper
-      .find('[data-test="activity-row-member_joined"]')
+      .find('[data-test="timeline-row-member_joined"]')
       .trigger('keydown', { key: 'Enter' })
     expect(pushMock).toHaveBeenCalledWith({
       path: '/members',
@@ -271,18 +271,18 @@ describe('ActivityFeed.vue', () => {
 
   it('passes the pageSize prop through to the API as `limit`', async () => {
     const listSpy = vi
-      .spyOn(activityApi, 'list')
+      .spyOn(timelineApi, 'list')
       .mockResolvedValue({ items: [], has_more: false })
-    mount(ActivityFeed, { props: { pageSize: 5 } })
+    mount(TimelineFeed, { props: { pageSize: 5 } })
     await flushPromises()
     expect(listSpy).toHaveBeenCalledWith({ limit: 5 })
   })
 })
 
-describe('ActivityFeed.vue — collapse / expand', () => {
+describe('TimelineFeed.vue — collapse / expand', () => {
   it('defaults to expanded on every mount and labels the toggle 收合', async () => {
     const { wrapper } = await mountFeed([])
-    const toggle = wrapper.find('[data-test="activity-toggle"]')
+    const toggle = wrapper.find('[data-test="timeline-toggle"]')
     expect(toggle.exists()).toBe(true)
     expect(toggle.attributes('aria-expanded')).toBe('true')
     expect(toggle.text()).toContain('收合')
@@ -290,7 +290,7 @@ describe('ActivityFeed.vue — collapse / expand', () => {
 
   it('flips aria-expanded and the label on click', async () => {
     const { wrapper } = await mountFeed([])
-    const toggle = wrapper.find('[data-test="activity-toggle"]')
+    const toggle = wrapper.find('[data-test="timeline-toggle"]')
 
     await toggle.trigger('click')
     expect(toggle.attributes('aria-expanded')).toBe('false')
@@ -304,7 +304,7 @@ describe('ActivityFeed.vue — collapse / expand', () => {
   it('does not refetch when collapsing then re-expanding within a session', async () => {
     const { wrapper, listSpy } = await mountFeed([])
     expect(listSpy).toHaveBeenCalledTimes(1)
-    const toggle = wrapper.find('[data-test="activity-toggle"]')
+    const toggle = wrapper.find('[data-test="timeline-toggle"]')
     await toggle.trigger('click') // collapse
     await toggle.trigger('click') // expand
     await flushPromises()
@@ -312,7 +312,7 @@ describe('ActivityFeed.vue — collapse / expand', () => {
   })
 })
 
-describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
+describe('TimelineFeed.vue — lazy load (cursor pagination)', () => {
   function memberItem(id, timestamp, real_name = `Member${id}`) {
     return {
       type: 'member_joined',
@@ -330,19 +330,19 @@ describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
     const { wrapper } = await mountFeed([memberItem(1, ONE_HOUR_AGO)], {
       hasMore: false,
     })
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(false)
   })
 
   it('renders the sentinel when has_more is true', async () => {
     const { wrapper } = await mountFeed([memberItem(1, ONE_HOUR_AGO)], {
       hasMore: true,
     })
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(true)
   })
 
   it('fetches the next batch with `before = lastItem.timestamp` when sentinel intersects', async () => {
     // First call: 1 item, has_more=true. Second call: cursor walk.
-    const listSpy = vi.spyOn(activityApi, 'list')
+    const listSpy = vi.spyOn(timelineApi, 'list')
     listSpy.mockResolvedValueOnce({
       items: [memberItem(1, ONE_HOUR_AGO)],
       has_more: true,
@@ -351,7 +351,7 @@ describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
       items: [memberItem(2, TWO_HOURS_AGO)],
       has_more: false,
     })
-    const wrapper = mount(ActivityFeed, { props: { pageSize: 1 } })
+    const wrapper = mount(TimelineFeed, { props: { pageSize: 1 } })
     await flushPromises()
 
     fireIntersect(true)
@@ -364,13 +364,13 @@ describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
     })
     // Both rows now in the DOM; sentinel is gone (has_more=false).
     expect(
-      wrapper.findAll('[data-test="activity-row-member_joined"]').length,
+      wrapper.findAll('[data-test="timeline-row-member_joined"]').length,
     ).toBe(2)
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(false)
   })
 
   it('appends successive pages and keeps the sentinel until has_more flips false', async () => {
-    const listSpy = vi.spyOn(activityApi, 'list')
+    const listSpy = vi.spyOn(timelineApi, 'list')
     listSpy.mockResolvedValueOnce({
       items: [memberItem(1, '2026-05-05T11:00:00Z')],
       has_more: true,
@@ -383,30 +383,30 @@ describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
       items: [memberItem(3, '2026-05-05T09:00:00Z')],
       has_more: false,
     })
-    const wrapper = mount(ActivityFeed, { props: { pageSize: 1 } })
+    const wrapper = mount(TimelineFeed, { props: { pageSize: 1 } })
     await flushPromises()
 
     fireIntersect(true)
     await flushPromises()
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(true)
 
     fireIntersect(true)
     await flushPromises()
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(false)
     expect(
-      wrapper.findAll('[data-test="activity-row-member_joined"]').length,
+      wrapper.findAll('[data-test="timeline-row-member_joined"]').length,
     ).toBe(3)
     expect(listSpy).toHaveBeenCalledTimes(3)
   })
 
   it('ignores non-intersecting observer events', async () => {
     const listSpy = vi
-      .spyOn(activityApi, 'list')
+      .spyOn(timelineApi, 'list')
       .mockResolvedValue({
         items: [memberItem(1, ONE_HOUR_AGO)],
         has_more: true,
       })
-    mount(ActivityFeed, { props: { pageSize: 1 } })
+    mount(TimelineFeed, { props: { pageSize: 1 } })
     await flushPromises()
 
     fireIntersect(false)
@@ -417,15 +417,15 @@ describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
   })
 
   it('hides the sentinel after a failed lazy-load fetch (silent failure)', async () => {
-    const listSpy = vi.spyOn(activityApi, 'list')
+    const listSpy = vi.spyOn(timelineApi, 'list')
     listSpy.mockResolvedValueOnce({
       items: [memberItem(1, ONE_HOUR_AGO)],
       has_more: true,
     })
     listSpy.mockRejectedValueOnce(new Error('network down'))
-    const wrapper = mount(ActivityFeed, { props: { pageSize: 1 } })
+    const wrapper = mount(TimelineFeed, { props: { pageSize: 1 } })
     await flushPromises()
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(true)
 
     fireIntersect(true)
     await flushPromises()
@@ -433,9 +433,9 @@ describe('ActivityFeed.vue — lazy load (cursor pagination)', () => {
     // The first row is still there; the sentinel disappears so the
     // observer doesn't get re-armed and refire on every scroll.
     expect(
-      wrapper.findAll('[data-test="activity-row-member_joined"]').length,
+      wrapper.findAll('[data-test="timeline-row-member_joined"]').length,
     ).toBe(1)
-    expect(wrapper.find('[data-test="activity-sentinel"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="activity-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="timeline-sentinel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="timeline-error"]').exists()).toBe(false)
   })
 })

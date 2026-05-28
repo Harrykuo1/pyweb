@@ -320,7 +320,7 @@ function formatDate(iso) {
 
 // ---------- ?focus=<id> deep-link ----------
 // Members has no detail dialog, so the deep-link entry from elsewhere
-// (currently the home-page activity feed) lands here as ?focus=<id>.
+// (currently the home-page timeline feed) lands here as ?focus=<id>.
 // We strip the query immediately so a refresh doesn't re-flash, then
 // scroll the matching anchor into view + briefly highlight it. The URL
 // shape is owned by membersApi.focusRoute() — see api/members.js.

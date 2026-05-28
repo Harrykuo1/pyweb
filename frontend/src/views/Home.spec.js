@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
 import Home from './Home.vue'
-import { activityApi } from '../api/activity'
+import { timelineApi } from '../api/timeline'
 import { membersApi } from '../api/members'
 import { statsApi } from '../api/stats'
 
@@ -58,9 +58,9 @@ beforeEach(() => {
       dispatchEvent: vi.fn(),
     })),
   )
-  // ActivityFeed installs an IntersectionObserver on mount; jsdom
+  // TimelineFeed installs an IntersectionObserver on mount; jsdom
   // doesn't provide one, so stub a no-op class. Home tests don't drive
-  // lazy-load behavior — that's covered in ActivityFeed.spec — they
+  // lazy-load behavior — that's covered in TimelineFeed.spec — they
   // just need the constructor to exist.
   vi.stubGlobal(
     'IntersectionObserver',
@@ -70,7 +70,7 @@ beforeEach(() => {
       disconnect() {}
     },
   )
-  vi.spyOn(activityApi, 'list').mockResolvedValue({
+  vi.spyOn(timelineApi, 'list').mockResolvedValue({
     items: [],
     has_more: false,
   })
@@ -256,8 +256,8 @@ describe('Home.vue — feature grid', () => {
   })
 })
 
-describe('Home.vue — activity preview integration', () => {
-  it('mounts the in-hero activity preview alongside the spotlight', async () => {
+describe('Home.vue — timeline preview integration', () => {
+  it('mounts the in-hero timeline preview alongside the spotlight', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
     const wrapper = mount(Home)
@@ -270,11 +270,11 @@ describe('Home.vue — activity preview integration', () => {
     // The full feed below the hero now lazy-loads via cursor pagination;
     // its first request is just `limit=<pageSize>` (no `before` cursor).
     // Subsequent batches are driven by the IntersectionObserver inside
-    // ActivityFeed itself and aren't asserted from here.
+    // TimelineFeed itself and aren't asserted from here.
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
     mount(Home)
     await flushPromises()
-    expect(activityApi.list).toHaveBeenCalledWith({ limit: 20 })
+    expect(timelineApi.list).toHaveBeenCalledWith({ limit: 20 })
   })
 })

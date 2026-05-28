@@ -88,21 +88,21 @@ def _add_job(
     )
 
 
-def test_list_activity_requires_auth(client_factory):
+def test_list_timeline_requires_auth(client_factory):
     client, _ = client_factory
-    r = client.get("/api/activity")
+    r = client.get("/api/timeline")
     assert r.status_code == 401
 
 
-def test_list_activity_empty(client_factory):
+def test_list_timeline_empty(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.get("/api/activity")
+    r = client.get("/api/timeline")
     assert r.status_code == 200
     assert r.json() == {"items": [], "has_more": False}
 
 
-def test_list_activity_only_members(client_factory, db_session):
+def test_list_timeline_only_members(client_factory, db_session):
     client, login_as = client_factory
     _add_member(
         db_session,
@@ -118,7 +118,7 @@ def test_list_activity_only_members(client_factory, db_session):
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity")
+    r = client.get("/api/timeline")
     items = r.json()["items"]
     assert [(x["type"], x["real_name"]) for x in items] == [
         ("member_joined", "Bob"),
@@ -128,7 +128,7 @@ def test_list_activity_only_members(client_factory, db_session):
     assert items[0]["has_photo"] is False
 
 
-def test_list_activity_only_jobs(client_factory, db_session):
+def test_list_timeline_only_jobs(client_factory, db_session):
     client, login_as = client_factory
     _add_job(
         db_session,
@@ -146,7 +146,7 @@ def test_list_activity_only_jobs(client_factory, db_session):
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity")
+    r = client.get("/api/timeline")
     items = r.json()["items"]
     assert [(x["type"], x["company"]) for x in items] == [
         ("job_created", "Globex"),
@@ -159,7 +159,7 @@ def test_list_activity_only_jobs(client_factory, db_session):
     assert items[1]["real_name"] == "Alice"
 
 
-def test_list_activity_merges_members_and_jobs_by_timestamp_desc(
+def test_list_timeline_merges_members_and_jobs_by_timestamp_desc(
     client_factory, db_session
 ):
     client, login_as = client_factory
@@ -188,7 +188,7 @@ def test_list_activity_merges_members_and_jobs_by_timestamp_desc(
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity")
+    r = client.get("/api/timeline")
     items = r.json()["items"]
     labels = [
         (x["type"], x.get("company") or x.get("real_name")) for x in items
@@ -201,7 +201,7 @@ def test_list_activity_merges_members_and_jobs_by_timestamp_desc(
     ]
 
 
-def test_list_activity_respects_limit(client_factory, db_session):
+def test_list_timeline_respects_limit(client_factory, db_session):
     client, login_as = client_factory
     for idx in range(8):
         _add_member(
@@ -218,14 +218,14 @@ def test_list_activity_respects_limit(client_factory, db_session):
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity?limit=5")
+    r = client.get("/api/timeline?limit=5")
     items = r.json()["items"]
     assert len(items) == 5
     # The 5 newest are all jobs (Feb beats Jan), in descending order.
     assert [x["company"] for x in items] == ["J7", "J6", "J5", "J4", "J3"]
 
 
-def test_list_activity_default_limit_is_ten(client_factory, db_session):
+def test_list_timeline_default_limit_is_ten(client_factory, db_session):
     client, login_as = client_factory
     for idx in range(15):
         _add_member(
@@ -236,21 +236,21 @@ def test_list_activity_default_limit_is_ten(client_factory, db_session):
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity")
+    r = client.get("/api/timeline")
     assert len(r.json()["items"]) == 10
 
 
-def test_list_activity_rejects_limit_below_min(client_factory):
+def test_list_timeline_rejects_limit_below_min(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.get("/api/activity?limit=0")
+    r = client.get("/api/timeline?limit=0")
     assert r.status_code == 422
 
 
-def test_list_activity_rejects_limit_above_max(client_factory):
+def test_list_timeline_rejects_limit_above_max(client_factory):
     client, login_as = client_factory
     login_as("viewer")
-    r = client.get("/api/activity?limit=51")
+    r = client.get("/api/timeline?limit=51")
     assert r.status_code == 422
 
 
@@ -259,7 +259,7 @@ def test_list_activity_rejects_limit_above_max(client_factory):
 # ---------------------------------------------------------------------------
 
 
-def test_list_activity_has_more_true_when_more_rows_exist(client_factory, db_session):
+def test_list_timeline_has_more_true_when_more_rows_exist(client_factory, db_session):
     client, login_as = client_factory
     # 8 total members, asking for 5 → 3 still older than the last one.
     for idx in range(8):
@@ -271,13 +271,13 @@ def test_list_activity_has_more_true_when_more_rows_exist(client_factory, db_ses
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity?limit=5")
+    r = client.get("/api/timeline?limit=5")
     body = r.json()
     assert len(body["items"]) == 5
     assert body["has_more"] is True
 
 
-def test_list_activity_has_more_false_when_exactly_limit_rows(client_factory, db_session):
+def test_list_timeline_has_more_false_when_exactly_limit_rows(client_factory, db_session):
     client, login_as = client_factory
     for idx in range(5):
         _add_member(
@@ -288,13 +288,13 @@ def test_list_activity_has_more_false_when_exactly_limit_rows(client_factory, db
     db_session.commit()
     login_as("viewer")
 
-    r = client.get("/api/activity?limit=5")
+    r = client.get("/api/timeline?limit=5")
     body = r.json()
     assert len(body["items"]) == 5
     assert body["has_more"] is False
 
 
-def test_list_activity_paginates_via_before_cursor(client_factory, db_session):
+def test_list_timeline_paginates_via_before_cursor(client_factory, db_session):
     client, login_as = client_factory
     # Mix of members and jobs interleaved across days so the merged feed
     # is genuinely sorted across both tables, not just members-then-jobs.
@@ -314,13 +314,13 @@ def test_list_activity_paginates_via_before_cursor(client_factory, db_session):
     login_as("viewer")
 
     # First page: newest 4 across both tables.
-    page1 = client.get("/api/activity?limit=4").json()
+    page1 = client.get("/api/timeline?limit=4").json()
     assert len(page1["items"]) == 4
     assert page1["has_more"] is True
 
     # Cursor-walk: hand the last item's timestamp back as `before`.
     cursor = page1["items"][-1]["timestamp"]
-    page2 = client.get(f"/api/activity?limit=4&before={cursor}").json()
+    page2 = client.get(f"/api/timeline?limit=4&before={cursor}").json()
     assert len(page2["items"]) == 4
     assert page2["has_more"] is True
     # No overlap between the two pages — `before` is a strict <.
@@ -332,7 +332,7 @@ def test_list_activity_paginates_via_before_cursor(client_factory, db_session):
     assert page2["items"][-1]["timestamp"] < page1["items"][-1]["timestamp"]
 
 
-def test_list_activity_pagination_walks_to_end(client_factory, db_session):
+def test_list_timeline_pagination_walks_to_end(client_factory, db_session):
     client, login_as = client_factory
     for idx in range(7):
         _add_member(
@@ -348,7 +348,7 @@ def test_list_activity_pagination_walks_to_end(client_factory, db_session):
     collected: list[str] = []
     cursor = None
     while True:
-        url = "/api/activity?limit=3"
+        url = "/api/timeline?limit=3"
         if cursor is not None:
             url += f"&before={cursor}"
         body = client.get(url).json()
@@ -361,7 +361,7 @@ def test_list_activity_pagination_walks_to_end(client_factory, db_session):
     assert collected == [f"M{idx}" for idx in reversed(range(7))]
 
 
-def test_list_activity_before_with_no_older_rows_returns_empty(client_factory, db_session):
+def test_list_timeline_before_with_no_older_rows_returns_empty(client_factory, db_session):
     client, login_as = client_factory
     _add_member(
         db_session,
@@ -373,6 +373,6 @@ def test_list_activity_before_with_no_older_rows_returns_empty(client_factory, d
 
     # Cursor older than the only row → empty + has_more=False.
     body = client.get(
-        "/api/activity?before=2025-01-01T00:00:00%2B00:00"
+        "/api/timeline?before=2025-01-01T00:00:00%2B00:00"
     ).json()
     assert body == {"items": [], "has_more": False}

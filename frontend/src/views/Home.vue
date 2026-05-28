@@ -10,8 +10,8 @@ import {
   UserFilled,
 } from '@element-plus/icons-vue'
 
-import ActivityFeed from '../components/ActivityFeed.vue'
-import ActivityFeedPreview from '../components/ActivityFeedPreview.vue'
+import TimelineFeed from '../components/TimelineFeed.vue'
+import TimelineFeedPreview from '../components/TimelineFeedPreview.vue'
 import { membersApi } from '../api/members'
 import { statsApi } from '../api/stats'
 import { useCounter } from '../utils/useCounter'
@@ -113,7 +113,7 @@ function focusMember(id) {
       <!-- ============================================================
            Hero L/R band:
              left  → spotlight (members count + pile + 2 mini stats)
-             right → activity preview (4 latest events)
+             right → timeline preview (4 latest events)
            Both columns stretch to equal height so the hero stays
            visually balanced regardless of how dense each side is.
            ============================================================ -->
@@ -222,7 +222,7 @@ function focusMember(id) {
           </div>
         </div>
 
-        <ActivityFeedPreview :limit="5" />
+        <TimelineFeedPreview :limit="5" />
       </div>
     </section>
 
@@ -270,8 +270,8 @@ function focusMember(id) {
       </article>
     </section>
 
-    <div id="activity-feed-section">
-      <ActivityFeed :page-size="20" />
+    <div id="timeline-feed-section">
+      <TimelineFeed :page-size="20" />
     </div>
   </div>
 </template>
@@ -286,7 +286,7 @@ function focusMember(id) {
 /* ============================================================
    HERO — single L/R band:
      left  → spotlight card (members count + pile + mini stats)
-     right → activity preview (4 latest events)
+     right → timeline preview (4 latest events)
    ============================================================ */
 .hero {
   position: relative;

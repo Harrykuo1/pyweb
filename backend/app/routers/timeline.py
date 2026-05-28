@@ -6,25 +6,25 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import Job, Member
-from app.schemas.activity import (
-    ActivityResponse,
-    JobCreatedActivity,
-    MemberJoinedActivity,
+from app.schemas.timeline import (
+    JobCreatedItem,
+    MemberJoinedItem,
+    TimelineResponse,
 )
 
-router = APIRouter(prefix="/api/activity", tags=["activity"])
+router = APIRouter(prefix="/api/timeline", tags=["timeline"])
 
-ACTIVITY_LIMIT_DEFAULT = 10
-ACTIVITY_LIMIT_MAX = 50
+TIMELINE_LIMIT_DEFAULT = 10
+TIMELINE_LIMIT_MAX = 50
 
 
-@router.get("", response_model=ActivityResponse)
-def list_activity(
-    limit: int = Query(default=ACTIVITY_LIMIT_DEFAULT, ge=1, le=ACTIVITY_LIMIT_MAX),
+@router.get("", response_model=TimelineResponse)
+def list_timeline(
+    limit: int = Query(default=TIMELINE_LIMIT_DEFAULT, ge=1, le=TIMELINE_LIMIT_MAX),
     before: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
-) -> ActivityResponse:
+) -> TimelineResponse:
     # Cursor pagination: when `before` is supplied, return only rows
     # strictly older than that timestamp. Frontend passes the timestamp
     # of the last item it received to walk the feed backwards as the
@@ -49,8 +49,8 @@ def list_activity(
     members = members_q.limit(peek).all()
     jobs = jobs_q.limit(peek).all()
 
-    member_items: list[MemberJoinedActivity | JobCreatedActivity] = [
-        MemberJoinedActivity(
+    member_items: list[MemberJoinedItem | JobCreatedItem] = [
+        MemberJoinedItem(
             timestamp=m.joined_at,
             member_id=m.id,
             real_name=m.real_name,
@@ -61,8 +61,8 @@ def list_activity(
         )
         for m in members
     ]
-    job_items: list[MemberJoinedActivity | JobCreatedActivity] = [
-        JobCreatedActivity(
+    job_items: list[MemberJoinedItem | JobCreatedItem] = [
+        JobCreatedItem(
             timestamp=j.created_at,
             job_id=j.id,
             company=j.company,
@@ -81,4 +81,4 @@ def list_activity(
         reverse=True,
     )[:peek]
     has_more = len(merged) > limit
-    return ActivityResponse(items=merged[:limit], has_more=has_more)
+    return TimelineResponse(items=merged[:limit], has_more=has_more)

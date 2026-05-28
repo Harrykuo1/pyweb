@@ -37,13 +37,13 @@ pyweb/
 │       ├── reset_password.py # CLI：丟失 admin 密碼時的救援腳本
 │       ├── models/           # member / job / job_attachment / app_config / site_setting / user
 │       ├── schemas/          # Pydantic schemas
-│       ├── routers/          # auth / members / jobs / job_attachments / activity / stats / settings / internal
+│       ├── routers/          # auth / members / jobs / job_attachments / timeline / stats / settings / internal
 │       └── core/             # config / deps / security / rate_limit / attachments / office_convert / runtime_config / audit_log / search_query
 ├── frontend/                 # Vue 3 + Vite 前端
 │   └── src/
 │       ├── views/            # Home / Login / Members / Jobs / Settings
 │       ├── layouts/          # AuthLayout（navbar + outlet）
-│       ├── components/       # 對話框、附件管理 / 檢視、ActivityFeed、MarqueeText 等
+│       ├── components/       # 對話框、附件管理 / 檢視、TimelineFeed、MarqueeText 等
 │       │   └── settings/     # 設定頁的各區塊
 │       ├── router/
 │       ├── stores/           # Pinia auth store

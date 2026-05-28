@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import ActivityFeedPreview from './ActivityFeedPreview.vue'
-import { activityApi } from '../api/activity'
+import TimelineFeedPreview from './TimelineFeedPreview.vue'
+import { timelineApi } from '../api/timeline'
 
 const pushMock = vi.fn()
 
@@ -21,21 +21,21 @@ afterEach(() => {
 })
 
 async function mountPreview(items, props = {}) {
-  vi.spyOn(activityApi, 'list').mockResolvedValue({ items })
-  const wrapper = mount(ActivityFeedPreview, { props })
+  vi.spyOn(timelineApi, 'list').mockResolvedValue({ items })
+  const wrapper = mount(TimelineFeedPreview, { props })
   await flushPromises()
   return wrapper
 }
 
-describe('ActivityFeedPreview.vue', () => {
+describe('TimelineFeedPreview.vue', () => {
   it('shows skeleton rows while loading', async () => {
     let resolve
-    vi.spyOn(activityApi, 'list').mockReturnValue(
+    vi.spyOn(timelineApi, 'list').mockReturnValue(
       new Promise((r) => {
         resolve = r
       }),
     )
-    const wrapper = mount(ActivityFeedPreview)
+    const wrapper = mount(TimelineFeedPreview)
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-test="hero-feed-loading"]').exists()).toBe(true)
     resolve({ items: [] })
@@ -51,9 +51,9 @@ describe('ActivityFeedPreview.vue', () => {
 
   it('caps requested limit by passing it to the API', async () => {
     const spy = vi
-      .spyOn(activityApi, 'list')
+      .spyOn(timelineApi, 'list')
       .mockResolvedValue({ items: [] })
-    mount(ActivityFeedPreview, { props: { limit: 4 } })
+    mount(TimelineFeedPreview, { props: { limit: 4 } })
     await flushPromises()
     expect(spy).toHaveBeenCalledWith({ limit: 4 })
   })
@@ -158,8 +158,8 @@ describe('ActivityFeedPreview.vue', () => {
   })
 
   it('查看全部 link scrolls to the configured anchor', async () => {
-    document.body.innerHTML = '<div id="activity-feed-section"></div>'
-    const target = document.getElementById('activity-feed-section')
+    document.body.innerHTML = '<div id="timeline-feed-section"></div>'
+    const target = document.getElementById('timeline-feed-section')
     target.scrollIntoView = vi.fn()
     const wrapper = await mountPreview([])
     await wrapper.find('[data-test="hero-feed-link"]').trigger('click')

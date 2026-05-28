@@ -1,6 +1,6 @@
 import client from './client'
 
-export const activityApi = {
+export const timelineApi = {
   async list({ limit, before } = {}) {
     const params = {}
     if (limit !== undefined && limit !== null) params.limit = limit
@@ -8,7 +8,7 @@ export const activityApi = {
     // Server returns rows strictly older than this — caller walks the
     // feed backwards as the user scrolls.
     if (before !== undefined && before !== null) params.before = before
-    const { data } = await client.get('/activity', { params })
+    const { data } = await client.get('/timeline', { params })
     return data
   },
 }
