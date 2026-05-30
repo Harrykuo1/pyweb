@@ -190,7 +190,21 @@ SEED_VIEWER_PASSWORD=...
 
 ## 自動備份到雲端（rclone）
 
-排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 走「**停 backend → atomic snapshot → 啟 backend → gzip → 上傳 → 清舊**」流程。停服務這幾秒讓 SQLite 自動 checkpoint WAL 並釋放所有 lock，所以拿到的快照保證 100% 完整、絕不會 corrupt。**腳本本身可以放公開 repo — secret 都在 `~/.config/rclone/rclone.conf` 不會被 commit**（已寫進 `.gitignore`）。
+排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 走「**hot snapshot → 打包整個 data/ → 上傳 → 清舊**」流程，**不停服務**。流程：
+
+1. `sqlite3 .backup` + `?immutable=1` 對 `pyweb.db` 做 atomic 快照到 tmp
+2. `cp -a data/.` → tmp/data/（整個 data 目錄，**未來新加子資料夾自動包進去**）
+3. 拿 step 1 的 atomic snapshot 覆蓋 tmp/data/pyweb.db（取代有 torn page 風險的 live 版本）
+4. 刪掉 tmp/data/pyweb.db-wal、pyweb.db-shm（SQLite 內部協調用、備份意義為零）
+5. `tar czf` → `pyweb-STAMP.tar.gz` → rclone 上傳 → 清舊
+
+**腳本本身可以放公開 repo — secret 都在 `~/.config/rclone/rclone.conf`，已寫進 `.gitignore`**。
+
+> **⚠️ Trade-off**：因為**不停服務**，理論上有兩個小破口：
+> - DB 的 `?immutable=1` 會跳過 `-wal` 內尚未 checkpoint 的資料（SQLite 預設每 1000 page / ~4 MB 自動 checkpoint，社群網站平常 WAL 是空的）
+> - `cp -a data/` 跟 backend 寫附件有 ~幾十毫秒 race window，極小機率抓到正在寫一半的附件
+>
+> 凌晨備份 + 網站幾天才更新一次，實務上等同 0 風險。要 100% 數學保證，看 git history 找回「停服務」版本即可。
 
 ### 一次性設定（host 端）
 
@@ -207,10 +221,6 @@ rclone config
 
 # 3. 鎖緊 config 權限（內含 OAuth refresh token，等同永久存取權）
 chmod 600 ~/.config/rclone/rclone.conf
-
-# 4. 確保跑備份的 user 在 docker group（要能下 docker compose stop / start）
-sudo usermod -aG docker $USER
-# 重新登入或 `newgrp docker` 讓 group 生效
 ```
 
 ### 手動跑一次驗證
@@ -220,23 +230,25 @@ cd /path/to/pyweb
 PYWEB_DATA_DIR=./data RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pyweb-backup.sh
 ```
 
-預期輸出（順利的話 ~10 秒內結束）：
+預期輸出：
 
 ```
-[20260505-070000] Stopping backend for clean snapshot...
-[20260505-070000] Snapshotting...
-[20260505-070000] Restarting backend...
-[20260505-070000] Verifying integrity...
-[20260505-070000] Uploading 3.2M → pyweb_backup:pyweb-backups/
+[20260505-070000] Snapshotting pyweb.db...
+[20260505-070000] Verifying DB integrity...
+[20260505-070000] Mirroring ./data/...
+[20260505-070000] Bundling...
+[20260505-070000] Uploading 18M → pyweb_backup:pyweb-backups/
 [20260505-070000] Pruning archives older than 30d
 [20260505-070000] Backup complete
 ```
 
 ### 排程
 
+**重要：用自己的 user crontab，不要用 sudo / root 的 crontab。** 以 root 跑會把 `data/` 內的檔案 owner 改成 root，導致 container 內 `pyweb` (uid 1000) 寫不進去 → 站上上傳全部失敗。腳本開頭已經加了 `$EUID -eq 0` 拒絕保護。
+
 ```cron
-# /etc/cron.d/pyweb-backup（替換使用者名稱與路徑）
-0 3 * * * youruser cd /home/youruser/pyweb && RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pyweb-backup.sh >> /home/youruser/pyweb-backup.log 2>&1
+# crontab -e（你自己的 user，不要 sudo crontab）
+0 3 * * * cd /home/me/pyweb && RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pyweb-backup.sh >> /home/me/pyweb-backup.log 2>&1
 ```
 
 或 systemd timer（log 走 journalctl 更乾淨）：
@@ -245,8 +257,8 @@ PYWEB_DATA_DIR=./data RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pywe
 # /etc/systemd/system/pyweb-backup.service
 [Service]
 Type=oneshot
-User=youruser
-WorkingDirectory=/home/youruser/pyweb
+User=me
+WorkingDirectory=/home/me/pyweb
 Environment=RCLONE_REMOTE=pyweb_backup:pyweb-backups
 ExecStart=/usr/bin/bash scripts/pyweb-backup.sh
 
@@ -266,33 +278,28 @@ sudo systemctl enable --now pyweb-backup.timer
 
 | 變數 | 預設 | 說明 |
 |---|---|---|
-| `PYWEB_DATA_DIR` | `./data` | 含 `pyweb.db` 的目錄 |
+| `PYWEB_DATA_DIR` | `./data` | 含 `pyweb.db` / `uploads/` / `logs/` 的目錄 |
 | `RCLONE_REMOTE` | `gdrive:pyweb-backups` | rclone remote + 資料夾 |
 | `RETENTION_DAYS` | `30` | 保留幾天的備份；超過會被 `rclone delete` 清掉 |
-| `COMPOSE_SERVICE` | `backend` | docker-compose.yml 裡 backend 的 service 名稱 |
-| `COMPOSE_PROJECT_DIR` | 當下目錄 | `docker compose` 要在哪個目錄執行 |
-
-### 為什麼要停服務
-
-SQLite WAL 模式下，活著被寫入的 DB 任何形式的「外部讀」都有風險：
-- `cp` / `tar` 會撞 torn page（transaction 寫到一半）
-- `sqlite3 .backup` 在 read 端**仍然需要寫 `-shm` 檔**做 reader/writer 協調（這就是先前卡住的原因）
-- `?immutable=1` 雖然能 bypass 鎖協調，但會跳過 `-wal` 內未 checkpoint 的資料
-
-唯一無懈可擊的做法：讓 backend 完整下線，SQLite 在最後一個 connection 關閉時會自動 `wal_checkpoint(TRUNCATE)`，把 WAL 全部 merge 回主檔並刪掉 `-wal` / `-shm` 檔。這時候做的快照（不論用 `sqlite3 .backup` 還是 `cp`）都是 100% 完整。代價只有 3–8 秒的 downtime，半夜執行對社群網站幾乎無感。
-
-腳本還做了 **trap-based 復原**：snapshot 或上傳失敗時 `EXIT` trap 仍會把 backend 重新拉起來，不會留下你的服務在停機狀態。
 
 ### Restore
 
-`rclone copy` 把備份拉下來，`gunzip` 解開，停掉 backend container 後直接覆蓋 `data/pyweb.db`：
+備份檔 unpack 出來就是一個完整的 `data/` 資料夾，整個取代現有的 `data/` 即可：
 
 ```bash
-rclone copy gdrive:pyweb-backups/pyweb-20260101-030000.db.gz .
-gunzip pyweb-20260101-030000.db.gz
+# 1. 從 Drive 拉備份
+rclone copy gdrive:pyweb-backups/pyweb-20260101-030000.tar.gz .
+
+# 2. 停服務、整個換掉 data/
 docker compose stop backend
-mv pyweb-20260101-030000.db data/pyweb.db
-docker compose up -d backend
+rm -rf data
+tar xzf pyweb-20260101-030000.tar.gz   # 解壓後直接出現一個 data/ 目錄
+
+# 3. 確認 owner（應該是 uid 1000，host 上對應 jenkins 或你的 host user）
+ls -la data/
+
+# 4. 重啟
+docker compose start backend
 ```
 
 ### Secret 守則
