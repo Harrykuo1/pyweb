@@ -1,6 +1,10 @@
 -r requirements.txt
 
 pytest>=8.3,<9.0
+# Parallel test runner — splits collected tests across worker processes
+# so the full suite finishes in roughly wall-time / cores. Used by both
+# local `pytest -n auto` and CI.
+pytest-xdist>=3.6,<4.0
 httpx>=0.27,<1.0
 
 # Used by scripts/stress_seed.py to generate viewable photos and PDFs for

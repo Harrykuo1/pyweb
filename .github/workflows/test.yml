@@ -26,7 +26,12 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: backend/requirements-dev.txt
+          # Both files matter: requirements-dev.txt does `-r requirements.txt`,
+          # so a change to the latter must invalidate the cache or CI installs
+          # a stale resolution.
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
       - name: Install dependencies
         run: |
@@ -36,8 +41,12 @@ jobs:
       # backend/tests/conftest.py sets SESSION_SECRET / SEED_* / DATABASE_URL
       # via os.environ.setdefault, so the CI environment doesn't need to
       # provide them.
+      #
+      # -n auto distributes the suite across the runner's CPUs via pytest-xdist
+      # (~3x speedup on the 2-vCPU ubuntu-latest runner). --durations=10 lists
+      # the slowest tests in the log so creeping regressions stay visible.
       - name: Run pytest
-        run: pytest
+        run: pytest -n auto --durations=10
 
   frontend:
     name: frontend (vitest + build)
