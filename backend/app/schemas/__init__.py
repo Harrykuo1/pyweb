@@ -11,6 +11,13 @@ from app.schemas.auth import (
     UpdateUsernameRequest,
     UserResponse,
 )
+from app.schemas.event import (
+    EventCreate,
+    EventPhotoCaptionUpdate,
+    EventPhotoResponse,
+    EventResponse,
+    EventUpdate,
+)
 from app.schemas.job import (
     JobCreate,
     JobResponse,
@@ -38,6 +45,11 @@ __all__ = [
     "ConfigFieldResponse",
     "ConfigResponse",
     "ConfigUpdateRequest",
+    "EventCreate",
+    "EventPhotoCaptionUpdate",
+    "EventPhotoResponse",
+    "EventResponse",
+    "EventUpdate",
     "JobAttachmentResponse",
     "JobCreate",
     "JobCreatedItem",
