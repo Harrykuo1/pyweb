@@ -49,9 +49,10 @@ describe('Navbar.vue', () => {
     expect(wrapper.text()).toContain('首頁')
     expect(wrapper.text()).toContain('成員')
     expect(wrapper.text()).toContain('求職')
+    expect(wrapper.text()).toContain('活動')
   })
 
-  it('has a nav link pointing at /jobs', () => {
+  it('has nav links pointing at /jobs and /events', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
@@ -59,6 +60,7 @@ describe('Navbar.vue', () => {
     const links = wrapper.findAll('.nav-link')
     const targets = links.map((l) => l.attributes('href'))
     expect(targets).toContain('/jobs')
+    expect(targets).toContain('/events')
   })
 
   it('shows the username in the chip trigger for admin', () => {

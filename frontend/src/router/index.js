@@ -30,6 +30,11 @@ const routes = [
         component: () => import('../views/Jobs.vue'),
       },
       {
+        path: 'events',
+        name: 'events',
+        component: () => import('../views/Events.vue'),
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/Settings.vue'),

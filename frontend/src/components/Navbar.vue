@@ -97,6 +97,7 @@ onBeforeUnmount(() => {
         <router-link to="/" class="nav-link">首頁</router-link>
         <router-link to="/members" class="nav-link">成員</router-link>
         <router-link to="/jobs" class="nav-link">求職</router-link>
+        <router-link to="/events" class="nav-link">活動</router-link>
       </nav>
 
       <el-button
