@@ -4,7 +4,9 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import Job, JobKind, Member, User, UserRole
+from datetime import date
+
+from app.models import Event, Job, JobKind, Member, User, UserRole
 
 
 @pytest.fixture
@@ -92,6 +94,7 @@ def test_stats_empty_db(client_factory):
     assert r.json() == {
         "total_members": 0,
         "total_jobs": 0,
+        "total_events": 0,
         "total_companies": 0,
         "year_min": None,
         "year_max": None,
@@ -112,6 +115,19 @@ def test_stats_counts_members_and_jobs(client_factory, db_session):
     body = r.json()
     assert body["total_members"] == 3
     assert body["total_jobs"] == 2
+
+
+def test_stats_counts_events(client_factory, db_session):
+    client, login_as = client_factory
+    db_session.add_all([
+        Event(title="春酒", event_date=date(2026, 3, 1)),
+        Event(title="溪頭兩日遊", event_date=date(2026, 1, 15)),
+    ])
+    db_session.commit()
+    login_as("viewer")
+
+    r = client.get("/api/stats")
+    assert r.json()["total_events"] == 2
 
 
 def test_stats_counts_companies_distinct(client_factory, db_session):

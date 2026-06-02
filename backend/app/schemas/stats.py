@@ -4,6 +4,9 @@ from pydantic import BaseModel
 class StatsResponse(BaseModel):
     total_members: int
     total_jobs: int
+    # Count of community-event records — drives the activities mini-stat
+    # and feature card on the home dashboard.
+    total_events: int
     # Distinct count of Job.company across the whole table — drives the
     # "涵蓋 N 間公司" stat on the home dashboard.
     total_companies: int

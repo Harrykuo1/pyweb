@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.database import get_db
-from app.models import Job, Member
+from app.models import Event, Job, Member
 from app.schemas.stats import StatsResponse
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -17,6 +17,7 @@ def get_stats(
 ) -> StatsResponse:
     total_members = db.query(func.count(Member.id)).scalar() or 0
     total_jobs = db.query(func.count(Job.id)).scalar() or 0
+    total_events = db.query(func.count(Event.id)).scalar() or 0
     total_companies = db.query(func.count(func.distinct(Job.company))).scalar() or 0
     year_min, year_max = db.query(
         func.min(Job.job_year),
@@ -25,6 +26,7 @@ def get_stats(
     return StatsResponse(
         total_members=total_members,
         total_jobs=total_jobs,
+        total_events=total_events,
         total_companies=total_companies,
         year_min=year_min,
         year_max=year_max,
