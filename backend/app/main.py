@@ -7,6 +7,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.routers import auth as auth_router
+from app.routers import event_photos as event_photos_router
+from app.routers import events as events_router
 from app.routers import internal as internal_router
 from app.routers import job_attachments as job_attachments_router
 from app.routers import jobs as jobs_router
@@ -44,6 +46,8 @@ app.include_router(auth_router.router)
 app.include_router(members_router.router)
 app.include_router(jobs_router.router)
 app.include_router(job_attachments_router.router)
+app.include_router(events_router.router)
+app.include_router(event_photos_router.router)
 app.include_router(timeline_router.router)
 app.include_router(stats_router.router)
 app.include_router(settings_router.router)
