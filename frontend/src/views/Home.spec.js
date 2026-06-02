@@ -17,6 +17,7 @@ vi.mock('vue-router', () => ({
 const SAMPLE_STATS = {
   total_members: 12,
   total_jobs: 30,
+  total_events: 7,
   total_companies: 18,
   year_min: 2020,
   year_max: 2026,
@@ -205,18 +206,33 @@ describe('Home.vue — spotlight stat + member pile', () => {
     expect(pushMock).toHaveBeenCalledWith('/jobs')
   })
 
-  it('renders the activities mini-stat as a 規劃中 placeholder', async () => {
+  it('renders the activities mini-stat with the live count', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
     const wrapper = mount(Home)
     await flushPromises()
     const tile = wrapper.find('[data-test="mini-stat-activities"]')
     expect(tile.exists()).toBe(true)
-    expect(tile.text()).toContain('規劃中')
+    expect(tile.text()).toContain('7')
     expect(tile.text()).toContain('活動紀錄')
-    // Placeholder is a div, not a button — no router push on click.
-    expect(tile.element.tagName.toLowerCase()).toBe('div')
-    expect(tile.attributes('aria-disabled')).toBe('true')
+  })
+
+  it('clicking the activities mini-stat navigates to /events', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'alice', role: 'admin' }
+    const wrapper = mount(Home)
+    await flushPromises()
+    await wrapper.find('[data-test="mini-stat-activities"]').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/events')
+  })
+
+  it('clicking the events feature card navigates to /events', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'alice', role: 'admin' }
+    const wrapper = mount(Home)
+    await flushPromises()
+    await wrapper.find('[data-test="card-events"]').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/events')
   })
 
   it('still renders cleanly when the stats API rejects', async () => {

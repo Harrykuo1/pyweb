@@ -19,7 +19,7 @@ import { useCounter } from '../utils/useCounter'
 const router = useRouter()
 
 // ---------- Stats + recent members for the avatar pile ----------
-const stats = ref({ total_members: 0, total_jobs: 0 })
+const stats = ref({ total_members: 0, total_jobs: 0, total_events: 0 })
 const statsLoaded = ref(false)
 const PILE_LIMIT = 6
 const PILE_MIN_TO_SHOW = 3
@@ -53,6 +53,7 @@ onMounted(async () => {
 
 const membersCount = useCounter(() => stats.value.total_members)
 const jobsCount = useCounter(() => stats.value.total_jobs)
+const eventsCount = useCounter(() => stats.value.total_events)
 
 const showPile = computed(
   () =>
@@ -206,19 +207,20 @@ function focusMember(id) {
               </span>
             </button>
 
-            <div
-              class="mini-stat mini-stat--placeholder"
+            <button
+              type="button"
+              class="mini-stat mini-stat--clickable"
               data-test="mini-stat-activities"
-              aria-disabled="true"
+              @click="router.push('/events')"
             >
               <span class="mini-stat-icon mini-stat-icon--activities">
                 <el-icon :size="16"><Calendar /></el-icon>
               </span>
               <span class="mini-stat-body">
-                <span class="mini-stat-pill">規劃中</span>
+                <span class="mini-stat-value">{{ eventsCount }}</span>
                 <span class="mini-stat-label">活動紀錄</span>
               </span>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -259,14 +261,20 @@ function focusMember(id) {
         </span>
       </article>
 
-      <article class="feature-card is-disabled">
+      <article
+        class="feature-card"
+        data-test="card-events"
+        @click="router.push('/events')"
+      >
         <span class="feature-accent feature-accent-warm"></span>
         <div class="feature-icon-wrap feature-icon-warm">
           <el-icon :size="22"><Calendar /></el-icon>
         </div>
         <h3 class="feature-title">活動紀錄</h3>
-        <p class="feature-desc">未來規劃中，記錄社群聚會、講座與工作坊。</p>
-        <span class="feature-status feature-status-warm">規劃中</span>
+        <p class="feature-desc">用照片與文字記錄社群的聚餐、出遊、比賽與講座。</p>
+        <span class="feature-cta feature-cta--warm">
+          查看時間軸 <span aria-hidden="true">→</span>
+        </span>
       </article>
     </section>
 
@@ -889,6 +897,14 @@ function focusMember(id) {
 }
 .feature-card:hover .feature-cta--career {
   color: var(--accent-career-ink);
+}
+/* Warm-themed CTA inherits the amber ink so the link colour matches the
+   activities card's accent strip + icon. */
+.feature-cta--warm {
+  color: var(--accent-warm-ink);
+}
+.feature-card:hover .feature-cta--warm {
+  color: var(--accent-warm-ink);
 }
 
 .feature-status {
