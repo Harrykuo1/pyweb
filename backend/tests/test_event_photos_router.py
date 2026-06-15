@@ -159,3 +159,45 @@ def test_max_photos_per_event(client_factory, monkeypatch):
     monkeypatch.setattr("app.routers.event_photos.MAX_PHOTOS_PER_EVENT", 1)
     assert _upload(client, name="a.png").status_code == 201
     assert _upload(client, name="b.png").status_code == 409
+
+
+def test_caption_update_requires_admin(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    pid = _upload(client).json()["id"]
+    login_as("viewer")
+    r = client.put(f"/api/events/1/photos/{pid}", json={"caption": "改說明"})
+    assert r.status_code == 403
+
+
+def test_delete_photo_requires_admin(client_factory, db_session, uploads_dir):
+    client, login_as = client_factory
+    login_as("admin")
+    pid = _upload(client).json()["id"]
+    on_disk = uploads_dir / "events" / "1" / f"{pid}.png"
+    login_as("viewer")
+    r = client.request("DELETE", f"/api/events/1/photos/{pid}", json={"password": "x"})
+    assert r.status_code == 403
+    assert on_disk.exists()  # viewer cannot delete
+    assert db_session.query(EventPhoto).count() == 1
+
+
+def test_upload_rejects_oversized(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    big = b"x" * (8 * 1024 * 1024 + 1)  # PHOTO_MAX_BYTES + 1
+    r = _upload(client, data=big, mime="image/png", name="big.png")
+    assert r.status_code == 413
+
+
+def test_get_photo_isolated_per_event(client_factory, db_session):
+    # A photo on event 1 must not be reachable via another event's id —
+    # _get_photo_or_404 filters by (id, event_id).
+    client, login_as = client_factory
+    db_session.add(Event(id=2, title="另一場", event_date=date(2026, 5, 1)))
+    db_session.commit()
+    login_as("admin")
+    pid = _upload(client, event_id=1).json()["id"]
+    login_as("viewer")
+    assert client.get(f"/api/events/2/photos/{pid}").status_code == 404
+    assert client.get(f"/api/events/1/photos/{pid}").status_code == 200
