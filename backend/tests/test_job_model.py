@@ -125,3 +125,19 @@ def test_job_kind_rejects_invalid_value(db_session):
     with pytest.raises((StatementError, IntegrityError)):
         db_session.commit()
     db_session.rollback()
+
+
+def test_job_experience_md_required(db_session):
+    j = Job(job_year=2025, job_month=1, company="Acme", kind=JobKind.INTERNSHIP)
+    db_session.add(j)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_job_year_required(db_session):
+    j = Job(job_month=1, company="Acme", kind=JobKind.INTERNSHIP, experience_md="x")
+    db_session.add(j)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
