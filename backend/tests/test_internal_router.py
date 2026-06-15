@@ -94,3 +94,20 @@ def test_serve_source_resolves_multi_segment_relpath(client, uploads_dir):
     assert r.content == b"nested"
 
 
+def test_serve_source_uses_octet_stream_content_type(client, uploads_dir):
+    # Served as a download, never inline — an inline-renderable content-type
+    # would be an XSS foothold for an uploaded .html / .svg.
+    _seed_file(uploads_dir, 7, "deck.pptx", b"abc")
+    r = client.get("/internal/source/7/deck.pptx")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/octet-stream"
+
+
+def test_serve_source_rejects_backslash_filename(client, uploads_dir):
+    # Backslashes (Windows separators) are rejected by sanitize_relpath, so
+    # a crafted path can't smuggle a traversal segment past the checks.
+    _seed_file(uploads_dir, 7, "deck.pptx", b"abc")
+    r = client.get("/internal/source/7/..%5C..%5Csecret.txt")
+    assert r.status_code == 404
+
+
