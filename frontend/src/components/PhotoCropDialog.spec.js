@@ -46,6 +46,8 @@ vi.mock('element-plus', async (importOriginal) => {
   }
 })
 
+import { ElMessage } from 'element-plus'
+
 beforeEach(() => {
   // happy-dom does not implement URL.createObjectURL out of the box.
   if (typeof URL.createObjectURL !== 'function') {
@@ -134,5 +136,36 @@ describe('PhotoCropDialog', () => {
     })
     await flushPromises()
     expect(document.body.innerHTML).toContain('裁切 Logo')
+  })
+
+  it('confirms via the footer button (not just the exposed method)', async () => {
+    const wrapper = mount(PhotoCropDialog, {
+      props: { modelValue: false, sourceFile: null },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ modelValue: true, sourceFile: makeFile() })
+    await flushPromises()
+
+    document.querySelector('[data-test="crop-confirm"]').click()
+    await flushPromises()
+
+    expect(wrapper.emitted('cropped')).toBeTruthy()
+  })
+
+  it('shows an error and does not emit when there is no selection', async () => {
+    const wrapper = mount(PhotoCropDialog, {
+      props: { modelValue: false, sourceFile: null },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ modelValue: true, sourceFile: makeFile() })
+    await flushPromises()
+
+    // Cropper returns no selection on confirm (e.g. user cleared it).
+    Cropper.mock.results[0].value.getCropperSelection.mockReturnValueOnce(null)
+    document.querySelector('[data-test="crop-confirm"]').click()
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith('裁切失敗，請重新選擇照片')
+    expect(wrapper.emitted('cropped')).toBeFalsy()
   })
 })

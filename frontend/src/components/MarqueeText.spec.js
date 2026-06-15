@@ -48,4 +48,27 @@ describe('MarqueeText.vue', () => {
     const wrapper = mount(MarqueeText, { props: { text: 2024 } })
     expect(wrapper.text()).toContain('2024')
   })
+
+  it('measures overflow and derives the scroll duration', async () => {
+    const wrapper = mount(MarqueeText, { props: { text: 'long', speed: 28, gap: 32 } })
+    Object.defineProperty(wrapper.vm.containerRef, 'clientWidth', { configurable: true, value: 100 })
+    Object.defineProperty(wrapper.vm.probeRef, 'scrollWidth', { configurable: true, value: 300 })
+    await wrapper.vm.measure()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.overflowing).toBe(true)
+    // duration = (textW + gap) / speed = (300 + 32) / 28
+    expect(wrapper.vm.duration).toBeCloseTo((300 + 32) / 28, 5)
+  })
+
+  it('reports no overflow when the text fits', async () => {
+    const wrapper = mount(MarqueeText, { props: { text: 'x' } })
+    Object.defineProperty(wrapper.vm.containerRef, 'clientWidth', { configurable: true, value: 300 })
+    Object.defineProperty(wrapper.vm.probeRef, 'scrollWidth', { configurable: true, value: 100 })
+    await wrapper.vm.measure()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.overflowing).toBe(false)
+    expect(wrapper.vm.duration).toBe(0)
+  })
 })
