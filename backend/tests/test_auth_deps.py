@@ -115,3 +115,25 @@ def test_require_admin_rejects_unauthenticated(db_session):
 
     r = client.get("/test/admin-only")
     assert r.status_code == 401
+
+
+def test_get_current_user_evicts_session_after_password_version_bump(db_session):
+    seed = [User(id=3, username="rot", password_hash="h", role=UserRole.VIEWER)]
+    app = _build_app(db_session, seed_users=seed)
+    client = TestClient(app)
+
+    client.post("/test/_login_as/3")
+    assert client.get("/test/me").status_code == 200  # valid at version 1
+
+    # Rotate the password version out from under the live session, exactly
+    # like reset_password / update_password do on the real path.
+    user = db_session.query(User).filter_by(id=3).one()
+    user.password_version += 1
+    db_session.commit()
+
+    r = client.get("/test/me")
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Session expired due to password change"
+
+    # Dependency cleared the cookie, so a second call is still 401.
+    assert client.get("/test/me").status_code == 401
