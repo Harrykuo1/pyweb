@@ -27,6 +27,7 @@ import JobDetailDialog from '../components/JobDetailDialog.vue'
 import JobFormDialog from '../components/JobFormDialog.vue'
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
+import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 
 const auth = useAuthStore()
 
@@ -188,42 +189,25 @@ function onCardLeave(e, item) {
   chip.style.removeProperty('--marquee-duration')
 }
 
-const deleteDialogOpen = ref(false)
-const deleteTarget = ref(null)
-const deleteSubmitting = ref(false)
-const deleteError = ref('')
-
-function askDelete(job) {
-  deleteTarget.value = job
-  deleteError.value = ''
-  deleteDialogOpen.value = true
-}
-
-async function handleDeleteConfirm(password) {
-  const target = deleteTarget.value
-  if (!target) return
-  deleteSubmitting.value = true
-  deleteError.value = ''
-  try {
-    await jobsApi.remove(target.id, password)
-    ElMessage.success(`已刪除「${target.company}」的紀錄`)
-    deleteDialogOpen.value = false
-    deleteTarget.value = null
+const {
+  dialogOpen: deleteDialogOpen,
+  target: deleteTarget,
+  submitting: deleteSubmitting,
+  error: deleteError,
+  open: askDelete,
+  confirm: handleDeleteConfirm,
+} = useDeleteWithPassword({
+  remove: (job, password) => jobsApi.remove(job.id, password),
+  messages: { 404: '紀錄已不存在' },
+  onSuccess: (job) => {
+    ElMessage.success(`已刪除「${job.company}」的紀錄`)
     // Close the detail dialog too if it was open on this same row.
-    if (detailOpen.value && detailJob.value?.id === target.id) {
+    if (detailOpen.value && detailJob.value?.id === job.id) {
       detailOpen.value = false
     }
     loadItems()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) deleteError.value = '密碼錯誤'
-    else if (status === 403) deleteError.value = '權限不足'
-    else if (status === 404) deleteError.value = '紀錄已不存在'
-    else deleteError.value = '刪除失敗，請稍後再試'
-  } finally {
-    deleteSubmitting.value = false
-  }
-}
+  },
+})
 
 async function loadItems() {
   loading.value = true
