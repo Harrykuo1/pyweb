@@ -240,7 +240,7 @@ const {
     if (detailOpen.value && detailJob.value?.id === job.id) {
       detailOpen.value = false
     }
-    loadItems()
+    reloadFresh()
   },
 })
 
@@ -258,6 +258,13 @@ async function loadItems() {
   } catch (err) {
     ElMessage.error('載入求職紀錄失敗')
   }
+}
+
+// After a create/update/delete the cache would otherwise serve a stale
+// row, so drop it before reloading the current view authoritatively.
+function reloadFresh() {
+  jobsStore.invalidate()
+  loadItems()
 }
 
 function toggleSort(key) {
@@ -618,7 +625,7 @@ onMounted(loadItems)
     <JobFormDialog
       v-model="formOpen"
       :job="editingJob"
-      @saved="loadItems"
+      @saved="reloadFresh"
     />
 
     <DeleteWithPasswordDialog
