@@ -25,8 +25,11 @@ import {
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import JobDetailDialog from '../components/JobDetailDialog.vue'
 import JobFormDialog from '../components/JobFormDialog.vue'
+import { storeToRefs } from 'pinia'
+
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
+import { useJobsStore } from '../stores/jobs'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useDialogRouteSync } from '../composables/useDialogRouteSync'
 import { useUrlQuerySync } from '../composables/useUrlQuerySync'
@@ -149,9 +152,8 @@ const { sortKey, sortOrder, year, company, category, kind, q } =
     },
   })
 
-const items = ref([])
-const total = ref(0)
-const loading = ref(false)
+const jobsStore = useJobsStore()
+const { items, total, loading } = storeToRefs(jobsStore)
 
 const formOpen = ref(false)
 const editingJob = ref(null)
@@ -243,9 +245,8 @@ const {
 })
 
 async function loadItems() {
-  loading.value = true
   try {
-    const data = await jobsApi.list({
+    await jobsStore.fetch({
       sort: sortKey.value,
       order: sortOrder.value,
       year: year.value ?? undefined,
@@ -254,12 +255,8 @@ async function loadItems() {
       kind: kind.value || undefined,
       q: q.value || undefined,
     })
-    items.value = data.items
-    total.value = data.total
   } catch (err) {
     ElMessage.error('載入求職紀錄失敗')
-  } finally {
-    loading.value = false
   }
 }
 
