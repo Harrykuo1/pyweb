@@ -18,6 +18,13 @@ import { onUnmounted, reactive, toRefs, watch } from 'vue'
 // `preserveKeys` are query params owned by something else (e.g. a detail
 // deep-link) that must survive every filter rewrite. `onChange` fires
 // after each sync so the caller can refetch.
+function valuesEqual(a, b) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => v === b[i])
+  }
+  return a === b
+}
+
 export function useUrlQuerySync({
   route,
   router,
@@ -76,6 +83,23 @@ export function useUrlQuerySync({
       },
     )
   }
+
+  // React to URL changes that originate OUTSIDE this composable — a nav-bar
+  // link to a bare path, browser back/forward, or an in-app link carrying a
+  // query — by re-seeding each field from the URL. The state watches above
+  // then handle the write-back and refetch. Our own syncUrl writes are
+  // naturally ignored: parsing the URL we just wrote yields the values
+  // already in state, so valuesEqual short-circuits and nothing re-seeds.
+  watch(
+    () => route.query,
+    (query) => {
+      for (const [name, cfg] of entries) {
+        const parsed = cfg.parse(query[queryKeyOf(name)])
+        if (!valuesEqual(state[name], parsed)) state[name] = parsed
+      }
+    },
+    { deep: true },
+  )
 
   onUnmounted(() => {
     for (const t of Object.values(timers)) if (t) clearTimeout(t)

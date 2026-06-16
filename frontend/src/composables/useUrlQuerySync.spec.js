@@ -133,6 +133,47 @@ describe('useUrlQuerySync', () => {
     })
   })
 
+  it('re-seeds state when the URL changes externally (nav-bar reset)', async () => {
+    const route = reactive({ query: { kind: 'fulltime', sort: 'company' } })
+    const router = { replace: vi.fn() }
+    const onChange = vi.fn()
+    const { result } = run(() =>
+      useUrlQuerySync({ route, router, fields: makeFields(), onChange }),
+    )
+    expect(result.kind.value).toBe('fulltime')
+
+    // A nav-bar click to a bare path clears the query.
+    route.query = {}
+    await nextTick()
+
+    expect(result.kind.value).toBe('')
+    expect(result.sortKey.value).toBe('created_at')
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('does not loop or double-fetch on its own URL writes', async () => {
+    const route = reactive({ query: {} })
+    // A faithful router reflects the write back into route.query, making the
+    // URL the single source of truth.
+    const router = {
+      replace: vi.fn(({ query }) => {
+        route.query = { ...query }
+      }),
+    }
+    const onChange = vi.fn()
+    const { result } = run(() =>
+      useUrlQuerySync({ route, router, fields: makeFields(), onChange }),
+    )
+
+    result.kind.value = 'internship'
+    await nextTick()
+    await nextTick()
+
+    expect(result.kind.value).toBe('internship')
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(router.replace).toHaveBeenCalledTimes(1)
+  })
+
   it('clears pending debounce timers on unmount', async () => {
     const route = reactive({ query: {} })
     const router = { replace: vi.fn() }
