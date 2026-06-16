@@ -35,6 +35,7 @@ import {
 } from '../../utils/attachmentTree'
 import AttachmentConflictDialog from './AttachmentConflictDialog.vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import { useAttachmentDragDrop } from '../../composables/useAttachmentDragDrop'
 
 const props = defineProps({
   jobId: { type: Number, required: true },
@@ -79,11 +80,13 @@ let resolveConflictPromise = null
 
 const folderInputRef = ref(null)
 const fileInputRef = ref(null)
-// Visual drop-zone state — only flips true while files are actually
-// being dragged over the file card. Showing the overlay all the time
-// would just add visual noise; only highlighting on dragover keeps the
-// affordance discoverable without dominating the UI.
-const isDragOver = ref(false)
+
+// Drag-and-drop highlight + drop handling live in a composable; it hands
+// each dropped file (folders expanded recursively) to pushPending, the
+// same entry point the file/folder inputs use.
+const { isDragOver, onDragEnter, onDragLeave, onDrop } = useAttachmentDragDrop({
+  onFiles: (file) => pushPending(file),
+})
 
 // Selection state for the bulk-delete UX. Files are tracked by row
 // id; folders by their *full* path (e.g. "src/components") because
@@ -363,96 +366,6 @@ function handleFileInputChange(event) {
   if (!files) return
   for (const file of files) pushPending(file)
   event.target.value = ''
-}
-
-function onDragEnter(event) {
-  // Only react to file drags — ignoring text/link drags keeps random
-  // browser-internal drags from flickering the overlay.
-  if (event.dataTransfer?.types?.includes('Files')) {
-    isDragOver.value = true
-  }
-}
-
-function onDragLeave(event) {
-  // dragleave fires every time the pointer crosses a child boundary;
-  // only clear the highlight when truly leaving the card.
-  if (!event.currentTarget.contains(event.relatedTarget)) {
-    isDragOver.value = false
-  }
-}
-
-async function onDrop(event) {
-  isDragOver.value = false
-  const items = event.dataTransfer?.items
-  // Modern path: walk DataTransferItems with webkitGetAsEntry so a
-  // dropped folder expands recursively. Falls back to dataTransfer.files
-  // (flat) if the items API isn't available (very old browsers).
-  if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
-    const entries = []
-    for (const item of items) {
-      const entry = item.webkitGetAsEntry()
-      if (entry) entries.push(entry)
-    }
-    const files = []
-    for (const entry of entries) {
-      const collected = await readFilesFromEntry(entry, '')
-      files.push(...collected)
-    }
-    for (const file of files) pushPending(file)
-    return
-  }
-  const files = event.dataTransfer?.files
-  if (!files || files.length === 0) return
-  for (const file of files) pushPending(file)
-}
-
-async function readFilesFromEntry(entry, pathPrefix) {
-  // FileSystemEntry tree walker. For files we stamp a synthetic
-  // webkitRelativePath so the existing relpathOf() helper can pick
-  // up the folder structure — matches what the <input webkitdirectory>
-  // path produces, no other code in pushPending needs to change.
-  if (entry.isFile) {
-    return new Promise((resolve, reject) => {
-      entry.file(
-        (file) => {
-          try {
-            Object.defineProperty(file, 'webkitRelativePath', {
-              value: pathPrefix + entry.name,
-              configurable: true,
-            })
-          } catch {
-            /* Some browsers seal File; harmless — relpathOf falls back
-               to file.name and we lose folder structure for that one
-               file, which is the best we can do. */
-          }
-          resolve([file])
-        },
-        reject,
-      )
-    })
-  }
-  if (entry.isDirectory) {
-    const reader = entry.createReader()
-    // readEntries returns at most 100 per call — loop until exhausted.
-    const directChildren = []
-    let batch
-    do {
-      batch = await new Promise((resolve, reject) => {
-        reader.readEntries(resolve, reject)
-      })
-      directChildren.push(...batch)
-    } while (batch.length > 0)
-    const all = []
-    for (const child of directChildren) {
-      const collected = await readFilesFromEntry(
-        child,
-        pathPrefix + entry.name + '/',
-      )
-      all.push(...collected)
-    }
-    return all
-  }
-  return []
 }
 
 function handleFolderPicked(event) {
