@@ -53,6 +53,9 @@ pnpm-debug.log*
 # Claude Code local settings
 .claude/
 
+# Superpowers plan / scratch docs (tool-generated, kept local)
+docs/superpowers/
+
 # rclone — never commit; contains OAuth refresh token + (if used) crypt password
 rclone.conf
 .rclone.conf
