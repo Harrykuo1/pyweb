@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -29,6 +29,7 @@ import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useDialogRouteSync } from '../composables/useDialogRouteSync'
+import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 
 const auth = useAuthStore()
 
@@ -103,15 +104,50 @@ function _safeStringList(v, limit) {
   return out
 }
 
-const sortKey = ref(_safeSort(route.query.sort))
-const sortOrder = ref(_safeOrder(route.query.order))
-const year = ref(_safeYear(route.query.year))
-const company = ref(_safeStringList(route.query.company, COMPANY_FILTER_LIMIT))
-const category = ref(
-  _safeStringList(route.query.category, CATEGORY_FILTER_LIMIT),
-)
-const kind = ref(_safeKind(route.query.kind))
-const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
+// Filter state lives in the URL: each field is parsed from the query on
+// load and written back (sans defaults) on change, with `q` debounced.
+// `detail` is preserved across rewrites — it belongs to the deep-link
+// dialog below, not the filter set. onChange refetches after each sync.
+const { sortKey, sortOrder, year, company, category, kind, q } =
+  useUrlQuerySync({
+    route,
+    router,
+    preserveKeys: ['detail'],
+    onChange: () => loadItems(),
+    fields: {
+      sortKey: {
+        queryKey: 'sort',
+        parse: _safeSort,
+        serialize: (v) => (v !== 'created_at' ? v : undefined),
+      },
+      sortOrder: {
+        queryKey: 'order',
+        parse: _safeOrder,
+        serialize: (v) => (v !== 'desc' ? v : undefined),
+      },
+      year: {
+        parse: _safeYear,
+        serialize: (v) => (v ? String(v) : undefined),
+      },
+      company: {
+        parse: (v) => _safeStringList(v, COMPANY_FILTER_LIMIT),
+        serialize: (v) => (v.length > 0 ? [...v] : undefined),
+      },
+      category: {
+        parse: (v) => _safeStringList(v, CATEGORY_FILTER_LIMIT),
+        serialize: (v) => (v.length > 0 ? [...v] : undefined),
+      },
+      kind: {
+        parse: _safeKind,
+        serialize: (v) => v || undefined,
+      },
+      q: {
+        parse: (v) => (typeof v === 'string' ? v : ''),
+        serialize: (v) => v || undefined,
+        debounce: SEARCH_DEBOUNCE_MS,
+      },
+    },
+  })
 
 const items = ref([])
 const total = ref(0)
@@ -235,48 +271,6 @@ function toggleSort(key) {
     sortOrder.value = 'asc'
   }
 }
-
-function syncUrl() {
-  const query = {}
-  if (sortKey.value !== 'created_at') query.sort = sortKey.value
-  if (sortOrder.value !== 'desc') query.order = sortOrder.value
-  if (year.value) query.year = String(year.value)
-  if (company.value.length > 0) query.company = [...company.value]
-  if (category.value.length > 0) query.category = [...category.value]
-  if (kind.value) query.kind = kind.value
-  if (q.value) query.q = q.value
-  // Preserve ?detail=<id> across filter edits — syncUrl owns the filter
-  // keys, but the detail-deep-link key belongs to the dialog's own
-  // open/close lifecycle below. Stripping it here would surprise-close
-  // the dialog whenever the user tweaked a filter.
-  if (route.query.detail !== undefined) query.detail = route.query.detail
-  router.replace({ query })
-}
-
-// Sort/year/company/category/kind changes are immediate. Search input is
-// debounced so a user typing doesn't fire a request per keystroke.
-watch(
-  [sortKey, sortOrder, year, company, category, kind],
-  () => {
-    syncUrl()
-    loadItems()
-  },
-  { deep: true },
-)
-
-let qTimer = null
-watch(q, () => {
-  if (qTimer !== null) clearTimeout(qTimer)
-  qTimer = setTimeout(() => {
-    qTimer = null
-    syncUrl()
-    loadItems()
-  }, SEARCH_DEBOUNCE_MS)
-})
-
-onUnmounted(() => {
-  if (qTimer !== null) clearTimeout(qTimer)
-})
 
 // el-select with `remote` calls this on every keystroke. The dropdown
 // shows only what the API returned for the current keyword — chips
