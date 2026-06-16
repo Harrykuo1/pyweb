@@ -34,4 +34,20 @@ describe('relativeTime', () => {
   it('returns empty string for unparseable input', () => {
     expect(relativeTime('not-a-date', NOW)).toBe('')
   })
+
+  it('locks the exact unit value so a wrong divisor is caught', () => {
+    // 5 min ago must read "5 分鐘前"; dividing by HOUR would round to 0.
+    expect(relativeTime(ago(5 * 60), NOW)).toMatch(/5\s*分鐘/)
+    expect(relativeTime(ago(2 * 60 * 60), NOW)).toMatch(/2\s*小時/)
+  })
+
+  it('locks the "剛剛" threshold at 5 seconds', () => {
+    expect(relativeTime(ago(4), NOW)).toBe('剛剛')   // < 5 → 剛剛
+    expect(relativeTime(ago(5), NOW)).toMatch(/秒/)  // >= 5 → seconds
+  })
+
+  it('locks the seconds→minutes boundary at 60 seconds', () => {
+    expect(relativeTime(ago(59), NOW)).toMatch(/秒/)
+    expect(relativeTime(ago(60), NOW)).toMatch(/分鐘/)
+  })
 })

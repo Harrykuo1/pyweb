@@ -227,3 +227,21 @@ def test_delete_cascades_tags(client_factory, db_session):
 
     client.request("DELETE", f"/api/events/{ev.id}", json={"password": "admin-pw"})
     assert db_session.query(EventTag).count() == 0
+
+
+def test_update_requires_admin(client_factory, db_session):
+    client, login_as = client_factory
+    ev = _seed_event(db_session, title="A", event_date=date(2026, 1, 1))
+    login_as("viewer")
+    r = client.put(f"/api/events/{ev.id}", json={"title": "新"})
+    assert r.status_code == 403
+
+
+def test_delete_requires_admin(client_factory, db_session):
+    client, login_as = client_factory
+    ev = _seed_event(db_session, title="A", event_date=date(2026, 1, 1))
+    login_as("viewer")
+    # Valid-shaped body so the request reaches require_admin, not 422.
+    r = client.request("DELETE", f"/api/events/{ev.id}", json={"password": "x"})
+    assert r.status_code == 403
+    assert db_session.query(Event).count() == 1  # nothing deleted

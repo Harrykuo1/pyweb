@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import Events from './Events.vue'
+import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
 
@@ -37,7 +38,13 @@ vi.mock('../components/EventFormDialog.vue', () => ({
   default: { name: 'EventFormDialog', props: ['modelValue', 'event'], template: '<div />' },
 }))
 vi.mock('../components/EventDetailDialog.vue', () => ({
-  default: { name: 'EventDetailDialog', props: ['modelValue', 'event'], template: '<div />' },
+  default: {
+    name: 'EventDetailDialog',
+    props: ['modelValue', 'event'],
+    // Render the footer-extra slot so the admin-only delete button passed
+    // in from Events.vue becomes testable.
+    template: '<div><slot name="footer-extra" /></div>',
+  },
 }))
 
 const sample = [
@@ -131,5 +138,79 @@ describe('Events — admin', () => {
     const wrapper = await mountPage(sample, 2, 'admin')
     expect(wrapper.find('[data-test="edit-event-button"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="delete-event-button"]').exists()).toBe(false)
+  })
+})
+
+describe('Events — delete', () => {
+  it('confirms deletion with the typed password and reloads', async () => {
+    const wrapper = await mountPage(sample, 2, 'admin')
+    const remove = vi.spyOn(eventsApi, 'remove').mockResolvedValue()
+    const listSpy = vi
+      .spyOn(eventsApi, 'list')
+      .mockResolvedValue({ items: sample, total: 2 })
+
+    wrapper.vm.askDelete(sample[0])
+    await flushPromises()
+    wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'admin-pw')
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledWith(1, 'admin-pw')
+    expect(listSpy).toHaveBeenCalled() // reloaded after delete
+  })
+
+  it('maps a 422 delete error to a password message and keeps the dialog open', async () => {
+    const wrapper = await mountPage(sample, 2, 'admin')
+    vi.spyOn(eventsApi, 'remove').mockRejectedValue({ response: { status: 422 } })
+
+    wrapper.vm.askDelete(sample[0])
+    await flushPromises()
+    wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'wrong')
+    await flushPromises()
+
+    const dialog = wrapper.findComponent(DeleteWithPasswordDialog)
+    expect(dialog.props('errorMessage')).toBe('密碼錯誤')
+    expect(dialog.props('modelValue')).toBe(true)
+  })
+})
+
+describe('Events — detail delete permission', () => {
+  it('shows the detail delete button only for admins', async () => {
+    const admin = await mountPage(sample, 2, 'admin')
+    admin.vm.detailEvent = sample[0]
+    await flushPromises()
+    expect(admin.find('[data-test="detail-delete-button"]').exists()).toBe(true)
+
+    const viewer = await mountPage(sample, 2, 'viewer')
+    viewer.vm.detailEvent = sample[0]
+    await flushPromises()
+    expect(viewer.find('[data-test="detail-delete-button"]').exists()).toBe(false)
+  })
+})
+
+describe('Events — filter params', () => {
+  it('passes the year filter to the API', async () => {
+    const wrapper = await mountPage()
+    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: [], total: 0 })
+    wrapper.vm.year = 2026
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ year: 2026 }))
+  })
+
+  it('passes selected tags to the API', async () => {
+    const wrapper = await mountPage()
+    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: [], total: 0 })
+    wrapper.vm.tag = ['出遊']
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ tag: ['出遊'] }))
+  })
+
+  it('passes the debounced search query to the API', async () => {
+    const wrapper = await mountPage()
+    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: [], total: 0 })
+    vi.useFakeTimers()
+    wrapper.vm.q = '桌遊'
+    await vi.advanceTimersByTimeAsync(300)
+    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ q: '桌遊' }))
+    vi.useRealTimers()
   })
 })

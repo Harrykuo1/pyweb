@@ -245,4 +245,45 @@ describe('AccountSection.vue', () => {
       '新密碼與另一個帳號相同，請改用其他密碼',
     )
   })
+
+  it('password update sends role, current, then new password in order', async () => {
+    const auth = useAuthStore()
+    const updateSpy = vi.spyOn(auth, 'updatePassword').mockResolvedValue()
+
+    await mountSection()
+    setInput('[data-test="password-current-admin"]', 'admin-pw')
+    setInput('[data-test="password-new-admin"]', 'fresh-pw')
+    setInput('[data-test="password-confirm-admin"]', 'fresh-pw')
+    document.querySelector('[data-test="password-submit-admin"]').click()
+    await flushPromises()
+
+    expect(updateSpy).toHaveBeenCalledWith('admin', 'admin-pw', 'fresh-pw')
+  })
+
+  it('blocks the password submit when a field is incomplete', async () => {
+    const auth = useAuthStore()
+    const updateSpy = vi.spyOn(auth, 'updatePassword')
+
+    await mountSection()
+    // current-password left blank; only the new field filled
+    setInput('[data-test="password-new-admin"]', 'fresh-pw')
+    document.querySelector('[data-test="password-submit-admin"]').click()
+    await flushPromises()
+
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalled()
+  })
+
+  it('blocks the username submit when the field is blank', async () => {
+    const auth = useAuthStore()
+    const updateSpy = vi.spyOn(auth, 'updateUsername')
+
+    await mountSection()
+    setInput('[data-test="username-input-admin"]', '   ')  // whitespace only
+    document.querySelector('[data-test="username-submit-admin"]').click()
+    await flushPromises()
+
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalled()
+  })
 })
