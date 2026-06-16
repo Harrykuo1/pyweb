@@ -28,6 +28,7 @@ import JobFormDialog from '../components/JobFormDialog.vue'
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useDialogRouteSync } from '../composables/useDialogRouteSync'
 
 const auth = useAuthStore()
 
@@ -102,16 +103,6 @@ function _safeStringList(v, limit) {
   return out
 }
 
-// Coerce ?detail=<id> into a positive integer or null. Anything else (NaN,
-// arrays from a duplicated ?detail=A&detail=B, negative values) drops to
-// null so a malformed URL just no-ops instead of crashing the fetch.
-function _safeId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
-
 const sortKey = ref(_safeSort(route.query.sort))
 const sortOrder = ref(_safeOrder(route.query.order))
 const year = ref(_safeYear(route.query.year))
@@ -129,8 +120,19 @@ const loading = ref(false)
 const formOpen = ref(false)
 const editingJob = ref(null)
 
-const detailOpen = ref(false)
-const detailJob = ref(null)
+// ?detail=<id> deep-link ↔ detail dialog. A deep-link URL fetches the
+// record and opens the dialog; closing it drops `detail` from the URL.
+// The query-key shape is owned by jobsApi.detailRoute() — see api/jobs.js.
+const {
+  open: detailOpen,
+  item: detailJob,
+  show: openDetail,
+} = useDialogRouteSync({
+  route,
+  router,
+  queryKey: 'detail',
+  fetchItem: (id) => jobsApi.get(id),
+})
 
 function openCreate() {
   editingJob.value = null
@@ -140,11 +142,6 @@ function openCreate() {
 function openEdit(job) {
   editingJob.value = { ...job }
   formOpen.value = true
-}
-
-function openDetail(job) {
-  detailJob.value = job
-  detailOpen.value = true
 }
 
 function onDetailEdit(job) {
@@ -279,45 +276,6 @@ watch(q, () => {
 
 onUnmounted(() => {
   if (qTimer !== null) clearTimeout(qTimer)
-})
-
-// ---------- ?detail=<id> deep-link ----------
-// Two-way binding between route.query.detail and the dialog's
-// open/closed state, so a deep-link URL opens the dialog and closing
-// the dialog drops `detail` from the URL. The shape of the query key
-// is owned by jobsApi.detailRoute() — see api/jobs.js.
-
-async function _openDetailById(id) {
-  try {
-    const job = await jobsApi.get(id)
-    openDetail(job)
-  } catch {
-    // 404 most often — the URL points at a record that was deleted
-    // (or the user pasted a wrong id). A toast here would distract
-    // from the still-usable list, so swallow silently.
-  }
-}
-
-watch(
-  () => route.query.detail,
-  (val) => {
-    const id = _safeId(val)
-    if (id === null) return
-    // Skip if the dialog is already showing this exact record — avoids
-    // a redundant fetch when the watcher fires due to syncUrl rewriting
-    // the same query value.
-    if (detailOpen.value && detailJob.value?.id === id) return
-    _openDetailById(id)
-  },
-  { immediate: true },
-)
-
-watch(detailOpen, (val) => {
-  if (val) return
-  if (route.query.detail === undefined) return
-  const next = { ...route.query }
-  delete next.detail
-  router.replace({ query: next })
 })
 
 // el-select with `remote` calls this on every keystroke. The dropdown
