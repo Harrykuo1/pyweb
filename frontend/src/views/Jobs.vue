@@ -26,6 +26,7 @@ import JobCardSkeleton from '../components/jobs/JobCardSkeleton.vue'
 import JobDetailDialog from '../components/jobs/JobDetailDialog.vue'
 import JobFormDialog from '../components/jobs/JobFormDialog.vue'
 import JobRecordCard from '../components/jobs/JobRecordCard.vue'
+import JobSortRow from '../components/jobs/JobSortRow.vue'
 
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
@@ -434,22 +435,12 @@ onMounted(loadItems)
       />
     </div>
 
-    <div class="sort-row">
-      <span class="sort-label">排序</span>
-      <button
-        v-for="opt in SORT_OPTIONS"
-        :key="opt.key"
-        type="button"
-        :class="['sort-pill', { 'is-active': sortKey === opt.key }]"
-        :data-test="`sort-${opt.key}`"
-        @click="toggleSort(opt.key)"
-      >
-        {{ opt.label }}
-        <span v-if="sortKey === opt.key" class="sort-arrow" aria-hidden="true">
-          {{ sortOrder === 'asc' ? '↑' : '↓' }}
-        </span>
-      </button>
-    </div>
+    <JobSortRow
+      :options="SORT_OPTIONS"
+      :sort-key="sortKey"
+      :sort-order="sortOrder"
+      @toggle="toggleSort"
+    />
 
     <div v-if="loading" class="card-grid" data-test="grid-skeleton">
       <JobCardSkeleton v-for="i in 6" :key="`skel-${i}`" />
@@ -712,56 +703,6 @@ onMounted(loadItems)
 }
 
 /* ============================================================
-   Sort pills
-   ============================================================ */
-.sort-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.sort-label {
-  font-size: 12px;
-  color: var(--ink-500);
-  margin-right: 4px;
-  letter-spacing: 0.04em;
-}
-
-.sort-pill {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: #ffffff;
-  color: var(--ink-700);
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 999px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-
-.sort-pill:hover {
-  border-color: rgba(124, 58, 237, 0.32);
-  color: #7c3aed;
-}
-
-.sort-pill.is-active {
-  background: linear-gradient(135deg, #7c3aed, #d946ef);
-  color: #ffffff;
-  border-color: transparent;
-  box-shadow: 0 6px 16px -4px rgba(124, 58, 237, 0.45);
-}
-
-.sort-arrow {
-  font-size: 11px;
-}
-
-/* ============================================================
    Card grid
    ============================================================ */
 .card-grid {
@@ -848,21 +789,6 @@ onMounted(loadItems)
   .filter-company,
   .filter-category {
     width: 100%;
-  }
-
-  /* Compact sort row: drop the "排序" label and tighten pills so the
-     options sit on one or two cleaner lines. Mirrors Members. */
-  .sort-label {
-    display: none;
-  }
-
-  .sort-row {
-    gap: 4px;
-  }
-
-  .sort-pill {
-    padding: 4px 10px;
-    font-size: 11px;
   }
 
   .card-grid {
