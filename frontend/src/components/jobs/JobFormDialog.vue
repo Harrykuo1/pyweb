@@ -26,9 +26,9 @@ import { FullScreen, Loading } from '@element-plus/icons-vue'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
-import { jobsApi } from '../api/jobs'
+import { jobsApi } from '../../api/jobs'
 import JobAttachmentsManager from './JobAttachmentsManager.vue'
-import TimelineEditor from './TimelineEditor.vue'
+import TimelineEditor from '../TimelineEditor.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },

@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import JobDetailDialog from './JobDetailDialog.vue'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore } from '../../stores/auth'
 
 vi.mock('md-editor-v3', () => ({
   MdPreview: {

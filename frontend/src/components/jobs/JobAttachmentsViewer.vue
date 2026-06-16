@@ -27,11 +27,11 @@ import {
   attachmentPreviewUrl,
   attachmentUrl,
   jobAttachmentsApi,
-} from '../api/jobAttachments'
+} from '../../api/jobAttachments'
 import {
   breadcrumbSegments as buildBreadcrumb,
   buildListing,
-} from '../utils/attachmentTree'
+} from '../../utils/attachmentTree'
 
 const props = defineProps({
   jobId: { type: Number, required: true },

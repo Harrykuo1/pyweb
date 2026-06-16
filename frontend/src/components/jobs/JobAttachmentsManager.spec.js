@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { jobAttachmentsApi } from '../api/jobAttachments'
-import { settingsApi } from '../api/settings'
+import { jobAttachmentsApi } from '../../api/jobAttachments'
+import { settingsApi } from '../../api/settings'
 import JobAttachmentsManager from './JobAttachmentsManager.vue'
 import AttachmentConflictDialog from './AttachmentConflictDialog.vue'
-import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
+import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 
 const SAMPLE_CONFIG = {
   fields: [

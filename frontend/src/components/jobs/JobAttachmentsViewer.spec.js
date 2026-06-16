@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import { jobAttachmentsApi } from '../api/jobAttachments'
+import { jobAttachmentsApi } from '../../api/jobAttachments'
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
 
 // Fixtures exercise both happy-path (LibreOffice produced a preview PDF

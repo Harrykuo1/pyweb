@@ -25,16 +25,16 @@ import {
   UploadFilled,
 } from '@element-plus/icons-vue'
 
-import { jobAttachmentsApi } from '../api/jobAttachments'
-import { settingsApi } from '../api/settings'
+import { jobAttachmentsApi } from '../../api/jobAttachments'
+import { settingsApi } from '../../api/settings'
 import {
   attachmentsUnder,
   breadcrumbSegments as buildBreadcrumb,
   buildListing,
   joinPath,
-} from '../utils/attachmentTree'
+} from '../../utils/attachmentTree'
 import AttachmentConflictDialog from './AttachmentConflictDialog.vue'
-import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
+import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 
 const props = defineProps({
   jobId: { type: Number, required: true },

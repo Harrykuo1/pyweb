@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { jobsApi } from '../api/jobs'
+import { jobsApi } from '../../api/jobs'
 import JobFormDialog from './JobFormDialog.vue'
 
 // MdEditor is heavy and brings in CSS / DOM measurement; stub it to a

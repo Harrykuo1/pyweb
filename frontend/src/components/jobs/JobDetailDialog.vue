@@ -5,9 +5,9 @@ import { Calendar, Edit, OfficeBuilding, School, User } from '@element-plus/icon
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
-import TimelineDisplay from './TimelineDisplay.vue'
+import TimelineDisplay from '../TimelineDisplay.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },

@@ -23,8 +23,8 @@ import {
 } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
-import JobDetailDialog from '../components/JobDetailDialog.vue'
-import JobFormDialog from '../components/JobFormDialog.vue'
+import JobDetailDialog from '../components/jobs/JobDetailDialog.vue'
+import JobFormDialog from '../components/jobs/JobFormDialog.vue'
 import { storeToRefs } from 'pinia'
 
 import { jobsApi } from '../api/jobs'
