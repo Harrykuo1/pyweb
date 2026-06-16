@@ -1,32 +1,27 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  ElButton,
-  ElIcon,
-  ElInput,
-  ElMessage,
-  ElOption,
-  ElSelect,
-} from 'element-plus'
-import {
-  Briefcase,
-  Calendar,
-  Delete,
-  OfficeBuilding,
-  Operation,
-  Plus,
-  Refresh,
-  Search,
-} from '@element-plus/icons-vue'
+import { ElButton, ElIcon, ElMessage } from 'element-plus'
+import { Briefcase, Delete, Plus, Refresh } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import JobCardSkeleton from '../components/jobs/JobCardSkeleton.vue'
 import JobDetailDialog from '../components/jobs/JobDetailDialog.vue'
+import JobFilterBar from '../components/jobs/JobFilterBar.vue'
 import JobFormDialog from '../components/jobs/JobFormDialog.vue'
 import JobRecordCard from '../components/jobs/JobRecordCard.vue'
 import JobSortRow from '../components/jobs/JobSortRow.vue'
+import {
+  COMPANY_FILTER_LIMIT,
+  CATEGORY_FILTER_LIMIT,
+  SORT_OPTIONS,
+  safeKind,
+  safeOrder,
+  safeSort,
+  safeStringList,
+  safeYear,
+} from '../components/jobs/jobFilters'
 
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
@@ -40,68 +35,7 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const SORT_OPTIONS = [
-  { key: 'created_at', label: '發布日期' },
-  { key: 'job_year', label: '求職年月' },
-  { key: 'company', label: '公司' },
-  { key: 'real_name', label: '名字' },
-  { key: 'kind', label: '類型' },
-]
-const ALLOWED_SORTS = SORT_OPTIONS.map((o) => o.key)
-const ALLOWED_ORDERS = ['asc', 'desc']
-
-const KIND_FILTER_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '實習', value: 'internship' },
-  { label: '正職', value: 'fulltime' },
-]
-const ALLOWED_KIND_FILTERS = KIND_FILTER_OPTIONS.map((o) => o.value)
-
-const CURRENT_YEAR = new Date().getFullYear()
-const MIN_JOB_YEAR = 2000
-const YEAR_OPTIONS = (() => {
-  const out = []
-  for (let y = CURRENT_YEAR; y >= MIN_JOB_YEAR; y--) out.push(y)
-  return out
-})()
-
 const SEARCH_DEBOUNCE_MS = 300
-
-function _safeSort(v) {
-  return ALLOWED_SORTS.includes(v) ? v : 'created_at'
-}
-function _safeOrder(v) {
-  return ALLOWED_ORDERS.includes(v) ? v : 'desc'
-}
-function _safeKind(v) {
-  return ALLOWED_KIND_FILTERS.includes(v) ? v : ''
-}
-function _safeYear(v) {
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  if (!Number.isFinite(n)) return null
-  if (n < MIN_JOB_YEAR || n > CURRENT_YEAR) return null
-  return n
-}
-
-const COMPANY_FILTER_LIMIT = 10
-const CATEGORY_FILTER_LIMIT = 10
-
-// route.query.{company,category} is `string | string[] | undefined` depending
-// on how many params the URL carries. Normalize to a deduped array of trimmed
-// strings so each select's v-model has a stable shape.
-function _safeStringList(v, limit) {
-  const raw = v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]
-  const out = []
-  for (const item of raw) {
-    if (typeof item !== 'string') continue
-    const trimmed = item.trim()
-    if (!trimmed) continue
-    if (!out.includes(trimmed)) out.push(trimmed)
-    if (out.length >= limit) break
-  }
-  return out
-}
 
 // Filter state lives in the URL: each field is parsed from the query on
 // load and written back (sans defaults) on change, with `q` debounced.
@@ -116,28 +50,28 @@ const { sortKey, sortOrder, year, company, category, kind, q } =
     fields: {
       sortKey: {
         queryKey: 'sort',
-        parse: _safeSort,
+        parse: safeSort,
         serialize: (v) => (v !== 'created_at' ? v : undefined),
       },
       sortOrder: {
         queryKey: 'order',
-        parse: _safeOrder,
+        parse: safeOrder,
         serialize: (v) => (v !== 'desc' ? v : undefined),
       },
       year: {
-        parse: _safeYear,
+        parse: safeYear,
         serialize: (v) => (v ? String(v) : undefined),
       },
       company: {
-        parse: (v) => _safeStringList(v, COMPANY_FILTER_LIMIT),
+        parse: (v) => safeStringList(v, COMPANY_FILTER_LIMIT),
         serialize: (v) => (v.length > 0 ? [...v] : undefined),
       },
       category: {
-        parse: (v) => _safeStringList(v, CATEGORY_FILTER_LIMIT),
+        parse: (v) => safeStringList(v, CATEGORY_FILTER_LIMIT),
         serialize: (v) => (v.length > 0 ? [...v] : undefined),
       },
       kind: {
-        parse: _safeKind,
+        parse: safeKind,
         serialize: (v) => v || undefined,
       },
       q: {
@@ -238,68 +172,6 @@ function toggleSort(key) {
   }
 }
 
-// el-select with `remote` calls this on every keystroke. The dropdown
-// shows only what the API returned for the current keyword — chips
-// already in `company` render straight from their string value, so we
-// don't inject them into options (that would surface unrelated chips
-// during a fresh keyword search).
-const companySuggestions = ref([])
-const categorySuggestions = ref([])
-
-async function fetchCompanySuggestions(queryString) {
-  try {
-    companySuggestions.value = await jobsApi.listCompanies(queryString || undefined)
-  } catch {
-    companySuggestions.value = []
-  }
-}
-
-async function fetchCategorySuggestions(queryString) {
-  try {
-    categorySuggestions.value = await jobsApi.listCategories(
-      queryString || undefined,
-    )
-  } catch {
-    categorySuggestions.value = []
-  }
-}
-
-// Block auto-repeat Backspace when the inline editor is empty so a
-// held key can't rapid-fire delete every selected chip. The first
-// press still removes one chip; the user has to release and press
-// again to delete the next one.
-function onChipFilterKeydown(event) {
-  if (
-    event.key === 'Backspace' &&
-    event.repeat &&
-    event.target instanceof HTMLInputElement &&
-    event.target.value === ''
-  ) {
-    event.preventDefault()
-    event.stopPropagation()
-  }
-}
-
-// Push already-selected matches to the bottom so the user always sees
-// new options first; each group keeps the API's alphabetical order.
-function _reorderSuggestions(selected, suggestions) {
-  const sel = new Set(selected)
-  const fresh = []
-  const stale = []
-  for (const item of suggestions) {
-    if (sel.has(item)) stale.push(item)
-    else fresh.push(item)
-  }
-  return [...fresh, ...stale]
-}
-
-const displayedCompanySuggestions = computed(() =>
-  _reorderSuggestions(company.value, companySuggestions.value),
-)
-const displayedCategorySuggestions = computed(() =>
-  _reorderSuggestions(category.value, categorySuggestions.value),
-)
-
 onMounted(loadItems)
 </script>
 
@@ -335,105 +207,13 @@ onMounted(loadItems)
       </div>
     </header>
 
-    <div class="filter-bar">
-      <div class="filter-row filter-row--meta">
-        <div class="kind-chips" role="tablist" aria-label="類型篩選">
-          <button
-            v-for="opt in KIND_FILTER_OPTIONS"
-            :key="opt.value || 'all'"
-            type="button"
-            role="tab"
-            :aria-selected="kind === opt.value"
-            :class="[
-              'kind-chip',
-              `kind-chip--${opt.value || 'all'}`,
-              { 'is-active': kind === opt.value },
-            ]"
-            :data-test="`filter-kind-${opt.value || 'all'}`"
-            @click="kind = opt.value"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
-
-        <el-select
-          v-model="year"
-          placeholder="年份"
-          clearable
-          data-test="filter-year"
-          class="filter-year"
-        >
-          <template #prefix>
-            <el-icon><Calendar /></el-icon>
-          </template>
-          <el-option
-            v-for="y in YEAR_OPTIONS"
-            :key="y"
-            :label="`${y} 年`"
-            :value="y"
-          />
-        </el-select>
-
-        <el-select
-          v-model="company"
-          multiple
-          filterable
-          remote
-          :remote-method="fetchCompanySuggestions"
-          :reserve-keyword="false"
-          :multiple-limit="10"
-          placeholder="公司（可多選）"
-          clearable
-          data-test="filter-company"
-          class="filter-company"
-          @keydown.capture="onChipFilterKeydown"
-        >
-          <template #prefix>
-            <el-icon><OfficeBuilding /></el-icon>
-          </template>
-          <el-option
-            v-for="c in displayedCompanySuggestions"
-            :key="c"
-            :label="c"
-            :value="c"
-          />
-        </el-select>
-
-        <el-select
-          v-model="category"
-          multiple
-          filterable
-          remote
-          :remote-method="fetchCategorySuggestions"
-          :reserve-keyword="false"
-          :multiple-limit="10"
-          placeholder="職類（可多選）"
-          clearable
-          data-test="filter-category"
-          class="filter-category"
-          @keydown.capture="onChipFilterKeydown"
-        >
-          <template #prefix>
-            <el-icon><Operation /></el-icon>
-          </template>
-          <el-option
-            v-for="c in displayedCategorySuggestions"
-            :key="c"
-            :label="c"
-            :value="c"
-          />
-        </el-select>
-      </div>
-
-      <el-input
-        v-model="q"
-        placeholder="搜尋姓名、心得內文"
-        :prefix-icon="Search"
-        clearable
-        data-test="filter-search"
-        class="filter-search"
-      />
-    </div>
+    <JobFilterBar
+      v-model:kind="kind"
+      v-model:year="year"
+      v-model:company="company"
+      v-model:category="category"
+      v-model:q="q"
+    />
 
     <JobSortRow
       :options="SORT_OPTIONS"
@@ -581,128 +361,6 @@ onMounted(loadItems)
 }
 
 /* ============================================================
-   Filter bar
-   ============================================================ */
-.filter-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  background: #ffffff;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-/* Row 1 — narrow widgets (kind chips, year, company autocomplete) so
-   the row stays compact and the search input can take a full-width
-   line of its own below. */
-.filter-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  flex-wrap: wrap;
-}
-
-/* ----- Kind segmented chips ----- */
-.kind-chips {
-  display: inline-flex;
-  background: var(--surface-2, #f1f5f9);
-  border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.kind-chip {
-  border: 0;
-  background: transparent;
-  padding: 5px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-500);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
-}
-
-.kind-chip:hover {
-  color: var(--ink-700);
-}
-
-.kind-chip.is-active {
-  background: #ffffff;
-  color: var(--ink-900);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-}
-
-.kind-chip--internship.is-active {
-  color: var(--kind-internship-ink);
-}
-
-.kind-chip--fulltime.is-active {
-  color: var(--kind-fulltime-ink);
-}
-
-.filter-year {
-  width: 130px;
-}
-
-/* Company is given roughly twice the horizontal real-estate of category
-   on desktop because company names tend to be longer (and there are
-   typically more of them in the dropdown). flex-wrap on the parent row
-   handles the narrow-viewport stack automatically once the combined
-   widths exceed the row. */
-.filter-company {
-  flex: 2;
-  min-width: 200px;
-}
-
-.filter-category {
-  flex: 1;
-  min-width: 160px;
-}
-
-/* Suppress the nested border that would otherwise appear around the
-   chips' inline editor — el-select renders an internal input wrapper
-   when filterable+multiple, and our generic .filter-bar input shadow
-   leaks into it. We want only the outer wrapper to show a border. */
-.filter-company :deep(.el-select__input),
-.filter-company :deep(.el-select__selection) input,
-.filter-category :deep(.el-select__input),
-.filter-category :deep(.el-select__selection) input {
-  box-shadow: none !important;
-  border: none !important;
-  outline: none !important;
-}
-
-/* Row 2 — search takes the full width of the filter bar so users can
-   read most of what they're typing without truncation. */
-.filter-search {
-  width: 100%;
-}
-
-/* Element Plus inputs all share these radii / shadows so the filter
-   bar reads as one cohesive surface instead of a row of mismatched
-   widgets. */
-.filter-bar :deep(.el-input__wrapper),
-.filter-bar :deep(.el-select__wrapper) {
-  border-radius: var(--radius-md);
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06) inset;
-  transition: box-shadow var(--dur) var(--ease);
-}
-
-.filter-bar :deep(.el-input__wrapper):hover,
-.filter-bar :deep(.el-select__wrapper):hover {
-  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.32) inset;
-}
-
-.filter-bar :deep(.el-input__wrapper.is-focus),
-.filter-bar :deep(.el-select__wrapper.is-focused) {
-  box-shadow: 0 0 0 1.5px #7c3aed inset;
-}
-
-/* ============================================================
    Card grid
    ============================================================ */
 .card-grid {
@@ -772,23 +430,6 @@ onMounted(loadItems)
      themselves tappable controls, no instructional copy needed. */
   .subtitle {
     display: none;
-  }
-
-  .filter-bar {
-    padding: 8px;
-  }
-
-  .filter-row {
-    /* Each control on phones gets its own line so the labels and clear
-       buttons aren't cramped against each other. */
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-year,
-  .filter-company,
-  .filter-category {
-    width: 100%;
   }
 
   .card-grid {
