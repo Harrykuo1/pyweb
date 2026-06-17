@@ -27,6 +27,10 @@ const auth = useAuthStore()
 
 const photos = ref([])
 const loadingPhotos = ref(false)
+// Declared up here (not in the lightbox section below) because the
+// immediate modelValue watcher resets it on close — a forward reference
+// from that watcher would hit the temporal dead zone during setup.
+const lightboxIndex = ref(-1)
 
 const hasDescription = computed(
   () => !!props.event?.description_md && props.event.description_md.trim().length > 0,
@@ -83,7 +87,6 @@ function formatDate(iso) {
 }
 
 // ---------- lightbox ----------
-const lightboxIndex = ref(-1)
 const lightboxOpen = computed(() => lightboxIndex.value >= 0)
 const lightboxPhoto = computed(() =>
   lightboxIndex.value >= 0 ? photos.value[lightboxIndex.value] : null,

@@ -52,6 +52,21 @@ async function mountDialog(props = {}, role = 'admin') {
   return wrapper
 }
 
+describe('EventDetailDialog — mounts closed (regression)', () => {
+  it('mounts with modelValue=false without a TDZ error in the immediate watcher', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() =>
+      mount(EventDetailDialog, { props: { modelValue: false, event: sample } }),
+    ).not.toThrow()
+    const tdz = errorSpy.mock.calls
+      .flat()
+      .some((a) => String(a?.message ?? a).includes('before initialization'))
+    expect(tdz).toBe(false)
+  })
+})
+
 describe('EventDetailDialog — header', () => {
   it('shows title, tags and location', async () => {
     const wrapper = await mountDialog()
