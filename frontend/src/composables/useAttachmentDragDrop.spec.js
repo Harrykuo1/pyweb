@@ -108,4 +108,19 @@ describe('useAttachmentDragDrop', () => {
     await onDrop({ dataTransfer: { files: [f] } })
     expect(onFiles).toHaveBeenCalledWith(f)
   })
+
+  it('falls back to dataTransfer.files when webkitGetAsEntry returns null (Linux/Chromium)', async () => {
+    // The item API is present and reports a file, but webkitGetAsEntry
+    // yields null — the platform quirk that left drag-drop silently broken.
+    const onFiles = vi.fn()
+    const { onDrop } = useAttachmentDragDrop({ onFiles })
+    const f = new File([new Uint8Array([1])], 'dropped.pdf')
+    await onDrop({
+      dataTransfer: {
+        items: [{ webkitGetAsEntry: () => null }],
+        files: [f],
+      },
+    })
+    expect(onFiles).toHaveBeenCalledWith(f)
+  })
 })

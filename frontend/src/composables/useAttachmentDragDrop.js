@@ -73,9 +73,16 @@ export function useAttachmentDragDrop({ onFiles }) {
   async function onDrop(event) {
     isDragOver.value = false
     const items = event.dataTransfer?.items
-    // Modern path: walk DataTransferItems with webkitGetAsEntry so a
-    // dropped folder expands recursively. Falls back to dataTransfer.files
-    // (flat) if the items API isn't available (very old browsers).
+    // Capture the flat file list synchronously — dataTransfer is only
+    // valid during the event dispatch, and the entry-walk path below
+    // awaits, after which dataTransfer.files would read empty.
+    const flatFiles = event.dataTransfer?.files
+      ? [...event.dataTransfer.files]
+      : []
+
+    // Preferred path: walk DataTransferItems with webkitGetAsEntry so a
+    // dropped folder expands recursively. Collect every entry first, all
+    // synchronously, before any await.
     if (
       items &&
       items.length > 0 &&
@@ -86,14 +93,22 @@ export function useAttachmentDragDrop({ onFiles }) {
         const entry = item.webkitGetAsEntry()
         if (entry) entries.push(entry)
       }
-      for (const entry of entries) {
-        for (const file of await readFilesFromEntry(entry, '')) onFiles(file)
+      // webkitGetAsEntry returns null for dragged files on some platforms
+      // (notably Linux/Chromium) even when dataTransfer.files has them.
+      // Only trust the entry walk when it actually yielded entries;
+      // otherwise fall through to the flat list below.
+      if (entries.length > 0) {
+        for (const entry of entries) {
+          for (const file of await readFilesFromEntry(entry, '')) onFiles(file)
+        }
+        return
       }
-      return
     }
-    const files = event.dataTransfer?.files
-    if (!files || files.length === 0) return
-    for (const file of files) onFiles(file)
+
+    // Fallback: the items/entry API was unavailable or produced nothing —
+    // upload the flat files (no folder structure, which is fine for a
+    // plain file drop). Captured synchronously above.
+    for (const file of flatFiles) onFiles(file)
   }
 
   return { isDragOver, onDragEnter, onDragLeave, onDrop }
