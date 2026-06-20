@@ -35,6 +35,7 @@ import {
 } from '../../utils/attachmentTree'
 import AttachmentConflictDialog from './AttachmentConflictDialog.vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import { useAttachmentDelete } from '../../composables/useAttachmentDelete'
 import { useAttachmentDragDrop } from '../../composables/useAttachmentDragDrop'
 import { useAttachmentUpload } from '../../composables/useAttachmentUpload'
 
@@ -316,21 +317,37 @@ async function handleCreateFolder() {
   )
 }
 
-// Three delete entry points all funnel through one password-confirm
-// dialog: single file, single folder (expanded to descendants), and
-// the multi-select bulk action. The "pending" descriptor carries
-// everything the confirm handler needs to do the right thing, plus
-// the user-facing title/itemName/warning for the dialog.
-const deleteDialogOpen = ref(false)
-const deleteSubmitting = ref(false)
-const deleteError = ref('')
-const pendingDelete = ref(null)
-
-function openDeleteDialog(descriptor) {
-  pendingDelete.value = descriptor
-  deleteError.value = ''
-  deleteDialogOpen.value = true
-}
+// Three delete entry points (single file, whole folder, multi-select
+// bulk) build a descriptor and funnel through one password-confirm dialog.
+// The composable owns the dialog state, the API call by mode and the row
+// removal; the onDeleted callback does the selection/path cleanup that
+// depends on this component's spine. A descriptor carries mode + ids plus
+// the user-facing title/itemName/warning/successMsg.
+const {
+  deleteDialogOpen,
+  deleteSubmitting,
+  deleteError,
+  pendingDelete,
+  openDeleteDialog,
+  onDeleteConfirm,
+} = useAttachmentDelete({
+  jobId: toRef(props, 'jobId'),
+  attachments,
+  onDeleted: (pending) => {
+    // Drop any deleted ids from the selection so the bulk bar's counter
+    // doesn't keep referring to vanished rows.
+    if (pending.ids.some((id) => selectedFileIds.value.has(id))) {
+      const nextFiles = new Set(selectedFileIds.value)
+      for (const id of pending.ids) nextFiles.delete(id)
+      selectedFileIds.value = nextFiles
+    }
+    // A toolbar bulk delete means "wipe my selection"; clear the rest too.
+    if (pending.mode === 'bulk') clearSelection()
+    // If the user just emptied the folder they were standing in, climb back
+    // to the nearest ancestor that still has content.
+    reconcileCurrentPath()
+  },
+})
 
 function handleDelete(row) {
   openDeleteDialog({
@@ -396,44 +413,6 @@ async function handleBulkDownload() {
   }
 }
 
-async function onDeleteConfirm(password) {
-  const pending = pendingDelete.value
-  if (!pending) return
-  deleteSubmitting.value = true
-  deleteError.value = ''
-  try {
-    if (pending.mode === 'single') {
-      await jobAttachmentsApi.remove(props.jobId, pending.ids[0], password)
-    } else {
-      await jobAttachmentsApi.bulkRemove(props.jobId, pending.ids, password)
-    }
-    const idSet = new Set(pending.ids)
-    attachments.value = attachments.value.filter((a) => !idSet.has(a.id))
-    // Drop any of the deleted ids from the selection set so the bulk
-    // bar's counter doesn't keep referring to vanished rows.
-    if (pending.ids.some((id) => selectedFileIds.value.has(id))) {
-      const nextFiles = new Set(selectedFileIds.value)
-      for (const id of pending.ids) nextFiles.delete(id)
-      selectedFileIds.value = nextFiles
-    }
-    // For bulk deletes triggered from the toolbar, the user clearly
-    // meant "wipe my selection"; clear the rest too.
-    if (pending.mode === 'bulk') clearSelection()
-    // If the user just emptied the folder they were standing in,
-    // climb back to the nearest ancestor that still has content.
-    reconcileCurrentPath()
-    ElMessage.success(pending.successMsg)
-    deleteDialogOpen.value = false
-    pendingDelete.value = null
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) deleteError.value = '密碼錯誤'
-    else if (status === 403) deleteError.value = '權限不足'
-    else deleteError.value = '刪除失敗，請稍後再試'
-  } finally {
-    deleteSubmitting.value = false
-  }
-}
 </script>
 
 <template>
