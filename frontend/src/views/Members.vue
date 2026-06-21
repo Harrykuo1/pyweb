@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -32,6 +32,7 @@ import PhotoCropDialog from '../components/PhotoCropDialog.vue'
 import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
+import { useDeepLinkFocus } from '../composables/useDeepLinkFocus'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useMediaQuery } from '../composables/useMediaQuery'
 import { useMemberFiltering } from '../composables/useMemberFiltering'
@@ -189,50 +190,15 @@ function formatDate(iso) {
 // scroll the matching anchor into view + briefly highlight it. The URL
 // shape is owned by membersApi.focusRoute() — see api/members.js.
 
-function _safeId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
-
-const FLASH_DURATION_MS = 1500
-const pendingFocusId = ref(null)
-
-async function attemptFocus() {
-  if (pendingFocusId.value === null) return
-  // Wait one tick so any just-rendered card / row is in the DOM.
-  await nextTick()
-  const id = pendingFocusId.value
-  if (id === null) return
-  const el = document.querySelector(`.member-anchor-${id}`)
-  if (!el) return
-  if (typeof el.scrollIntoView === 'function') {
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }
-  el.classList.add('is-flash')
-  setTimeout(() => el.classList.remove('is-flash'), FLASH_DURATION_MS)
-  pendingFocusId.value = null
-}
-
-function consumeFocusFromQuery() {
-  const id = _safeId(route.query.focus)
-  if (id === null) return
-  // Strip ?focus= so refresh doesn't re-flash and so back/forward
-  // doesn't replay the highlight.
-  const next = { ...route.query }
-  delete next.focus
-  router.replace({ query: next })
-  pendingFocusId.value = id
-  attemptFocus()
-}
-
-// Re-try focus after data loads — initial mount has no rendered cards
-// yet, so the first attemptFocus inside consumeFocusFromQuery will
-// no-op. The watcher fires when sortedMembers updates and tries again.
-watch(() => members.value.length, attemptFocus)
-
-watch(() => route.query.focus, () => consumeFocusFromQuery())
+const { consume: consumeFocusFromQuery } = useDeepLinkFocus({
+  route,
+  router,
+  queryKey: 'focus',
+  anchorClass: (id) => `member-anchor-${id}`,
+  // Re-try after data loads — the first attempt may run before the cards
+  // are rendered; this fires again when the list length changes.
+  watchSource: () => members.value.length,
+})
 
 onMounted(() => {
   loadMembers()
