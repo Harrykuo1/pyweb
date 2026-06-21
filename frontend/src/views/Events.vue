@@ -17,44 +17,23 @@ import {
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import EventDetailDialog from '../components/events/EventDetailDialog.vue'
 import EventFormDialog from '../components/events/EventFormDialog.vue'
+import {
+  TAG_FILTER_LIMIT,
+  YEAR_OPTIONS,
+  safeOrder,
+  safeStringList,
+  safeYear,
+} from '../components/events/eventFilters'
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
+import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const CURRENT_YEAR = new Date().getFullYear()
-const MIN_YEAR = 2000
-const YEAR_OPTIONS = (() => {
-  const out = []
-  for (let y = CURRENT_YEAR; y >= MIN_YEAR; y--) out.push(y)
-  return out
-})()
-const TAG_FILTER_LIMIT = 20
 const SEARCH_DEBOUNCE_MS = 300
 
-function _safeOrder(v) {
-  return v === 'asc' ? 'asc' : 'desc'
-}
-function _safeYear(v) {
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  if (!Number.isFinite(n) || n < MIN_YEAR || n > CURRENT_YEAR) return null
-  return n
-}
-function _safeStringList(v, limit) {
-  const raw = v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]
-  const out = []
-  for (const item of raw) {
-    if (typeof item !== 'string') continue
-    const trimmed = item.trim()
-    if (!trimmed || out.includes(trimmed)) continue
-    out.push(trimmed)
-    if (out.length >= limit) break
-  }
-  return out
-}
 function _safeId(v) {
   if (Array.isArray(v)) v = v[0]
   if (v === undefined || v === null || v === '') return null
@@ -62,10 +41,34 @@ function _safeId(v) {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
-const sortOrder = ref(_safeOrder(route.query.order))
-const year = ref(_safeYear(route.query.year))
-const tag = ref(_safeStringList(route.query.tag, TAG_FILTER_LIMIT))
-const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
+// Filter state lives in the URL; `detail` is preserved across rewrites for
+// the deep-link dialog. onChange refetches after each sync. Mirrors Jobs.
+const { sortOrder, year, tag, q } = useUrlQuerySync({
+  route,
+  router,
+  preserveKeys: ['detail'],
+  onChange: () => loadItems(),
+  fields: {
+    sortOrder: {
+      queryKey: 'order',
+      parse: safeOrder,
+      serialize: (v) => (v !== 'desc' ? v : undefined),
+    },
+    year: {
+      parse: safeYear,
+      serialize: (v) => (v ? String(v) : undefined),
+    },
+    tag: {
+      parse: (v) => safeStringList(v, TAG_FILTER_LIMIT),
+      serialize: (v) => (v.length > 0 ? [...v] : undefined),
+    },
+    q: {
+      parse: (v) => (typeof v === 'string' ? v : ''),
+      serialize: (v) => v || undefined,
+      debounce: SEARCH_DEBOUNCE_MS,
+    },
+  },
+})
 
 const items = ref([])
 const total = ref(0)
@@ -292,34 +295,6 @@ async function loadItems() {
     loading.value = false
   }
 }
-
-function syncUrl() {
-  const query = {}
-  if (sortOrder.value !== 'desc') query.order = sortOrder.value
-  if (year.value) query.year = String(year.value)
-  if (tag.value.length > 0) query.tag = [...tag.value]
-  if (q.value) query.q = q.value
-  if (route.query.detail !== undefined) query.detail = route.query.detail
-  router.replace({ query })
-}
-
-watch([sortOrder, year, tag], () => {
-  syncUrl()
-  loadItems()
-}, { deep: true })
-
-let qTimer = null
-watch(q, () => {
-  if (qTimer !== null) clearTimeout(qTimer)
-  qTimer = setTimeout(() => {
-    qTimer = null
-    syncUrl()
-    loadItems()
-  }, SEARCH_DEBOUNCE_MS)
-})
-onUnmounted(() => {
-  if (qTimer !== null) clearTimeout(qTimer)
-})
 
 // ---- tag filter suggestions ----
 const tagSuggestions = ref([])
