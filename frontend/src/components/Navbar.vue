@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ElButton,
@@ -18,6 +18,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '../stores/auth'
+import { useOutsideClick } from '../composables/useOutsideClick'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -59,29 +60,12 @@ async function handleLogout() {
   }
 }
 
-// Close the dropdown when the user clicks anywhere outside the chip or
-// the menu itself. The listener is registered at document-level so it
-// runs before any inner handler — refs let us check whether the click
-// landed inside our own subtree.
-function onDocClick(event) {
-  if (!userMenuOpen.value) return
-  if (chipRef.value?.contains(event.target)) return
-  if (menuRef.value?.contains(event.target)) return
-  userMenuOpen.value = false
-}
-
-function onKeydown(event) {
-  if (event.key === 'Escape' && userMenuOpen.value) closeUserMenu()
-}
-
-onMounted(() => {
-  document.addEventListener('click', onDocClick)
-  document.addEventListener('keydown', onKeydown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocClick)
-  document.removeEventListener('keydown', onKeydown)
+// Close the dropdown on an outside click (anywhere not inside the chip or
+// the menu) or Escape — document-level listeners, lifecycle-managed.
+useOutsideClick({
+  isOpen: userMenuOpen,
+  refs: [chipRef, menuRef],
+  onClose: closeUserMenu,
 })
 </script>
 
