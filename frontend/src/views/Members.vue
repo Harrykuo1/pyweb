@@ -40,8 +40,8 @@ import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useMemberFiltering } from '../composables/useMemberFiltering'
 import { useMemberPhoto } from '../composables/useMemberPhoto'
-import { matchHaystack, parseQuery } from '../utils/searchQuery'
 
 const auth = useAuthStore()
 
@@ -100,17 +100,18 @@ const SORT_OPTIONS = [
   { key: 'real_name', label: '本名' },
   { key: 'institution', label: '學校／公司' },
 ]
-const sortKey = ref('joined_at')
-const sortOrder = ref('asc')
-
-function toggleSort(key) {
-  if (sortKey.value === key) {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortKey.value = key
-    sortOrder.value = 'asc'
-  }
-}
+// Client-side filtering + sorting (grid uses sortedMembers; the el-table
+// list sorts itself off filteredMembers via the helpers below).
+const {
+  sortKey,
+  sortOrder,
+  toggleSort,
+  searchQuery,
+  filteredMembers,
+  sortedMembers,
+  memberCount,
+  filteredCount,
+} = useMemberFiltering(members)
 
 // Sort orders are restricted to two states so a click cycles asc → desc →
 // asc instead of the el-table default asc → desc → none.
@@ -121,46 +122,6 @@ const SORT_ORDERS = ['ascending', 'descending']
 const stringSort = (key) => (a, b) =>
   String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
 
-// ---------- Search ----------
-// Client-side boolean search across name / position / graduation year.
-// Supports `AND` (implicit), uppercase `OR`, `-` / `NOT` negation, and
-// "quoted phrases" — same syntax as the Jobs backend search. The parser
-// is shared with the backend in spirit (mirrored Python ↔ JS).
-const searchQuery = ref('')
-
-const filteredMembers = computed(() => {
-  const parsed = parseQuery(searchQuery.value)
-  if (parsed.length === 0) return members.value
-  return members.value.filter((m) => {
-    const haystack = [
-      m.real_name,
-      m.institution,
-      m.position,
-      String(m.graduation_year ?? ''),
-    ]
-      .filter(Boolean)
-      .join(' ')
-    return matchHaystack(parsed, haystack)
-  })
-})
-
-const sortedMembers = computed(() => {
-  const arr = [...filteredMembers.value]
-  const k = sortKey.value
-  const dir = sortOrder.value === 'asc' ? 1 : -1
-  arr.sort((a, b) => {
-    const av = a[k]
-    const bv = b[k]
-    if (typeof av === 'number' && typeof bv === 'number') {
-      return (av - bv) * dir
-    }
-    return String(av ?? '').localeCompare(String(bv ?? ''), 'zh-Hant') * dir
-  })
-  return arr
-})
-
-const memberCount = computed(() => members.value.length)
-const filteredCount = computed(() => filteredMembers.value.length)
 
 async function loadMembers() {
   loading.value = true
