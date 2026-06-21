@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElInput, ElMessage, ElOption, ElSelect } from 'element-plus'
 import {
@@ -27,6 +27,7 @@ import {
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useEventPeek } from '../composables/useEventPeek'
 import { useDialogRouteSync } from '../composables/useDialogRouteSync'
 import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 
@@ -69,43 +70,11 @@ const items = ref([])
 const total = ref(0)
 const loading = ref(false)
 
-// Rail fill: a single CSS var (--tl-progress, 0..1) scales the warm fill
-// on the spine via .timeline::after. It's hover-driven — hovering a card
-// extends the fill from the top of the rail down to THAT card's node, and
-// leaving collapses it. 0 = empty rail.
-const timelineRef = ref(null)
-const tlProgress = ref(0)
-let _tlReducedMotion = false
-onMounted(() => {
-  _tlReducedMotion =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-})
-
-// Fraction of the rail to fill so it reaches the hovered card's node. The
-// node sits at the card's vertical centre; offsets are taken relative to
-// the timeline, so they're scroll-independent.
-function fillToCard(cardEl) {
-  const tl = timelineRef.value
-  if (!tl || !cardEl) return
-  const tlRect = tl.getBoundingClientRect()
-  if (tlRect.height <= 0) return
-  const cardRect = cardEl.getBoundingClientRect()
-  const nodeY = cardRect.top + cardRect.height / 2 - tlRect.top
-  tlProgress.value = Math.max(0, Math.min(1, nodeY / tlRect.height))
-}
-
-// Card hover: light the rail down to this card's node + start its photo
-// slideshow. Leaving collapses both.
-function onCardEnter(event, ev) {
-  fillToCard(event.currentTarget)
-  startPeek(ev)
-}
-function onCardLeave(ev) {
-  tlProgress.value = 0
-  stopPeek(ev)
-}
+// Timeline card hover: rail fill (--tl-progress, 0..1, lights the warm
+// spine down to the hovered card's node) + lazy photo-peek slideshow
+// (peekLayers cross-dissolve), both driven by onCardEnter/onCardLeave.
+const { timelineRef, tlProgress, peekLayers, onCardEnter, onCardLeave } =
+  useEventPeek()
 
 // ---- Warm Spectrum: deterministic per-event hue, clamped to the
 // amber->rose arc. Pure FNV-1a over char codes — same seed always yields
@@ -133,83 +102,6 @@ function entryStyle(ev, ei) {
   return hue === null ? { '--i': ei } : { '--i': ei, '--ev-hue': hue }
 }
 
-// ---- Lazy 2nd-photo hover peek ----
-// Per-view cache survives re-sorts/re-filters (photo bytes are immutable).
-// Hover slideshow: while a card is hovered, walk the event's photos on an
-// interval. Two stacked layers (a/b) cross-dissolve between consecutive
-// slides; the cover stays underneath. The first switch waits one full
-// interval so the cover holds before the show begins.
-const PEEK_INTERVAL_MS = 1800
-const _peekUrls = new Map() // ev.id -> [url, ...] | null (none/failed)
-const _peekTimers = new Map() // ev.id -> intervalId
-// id -> { a: url|null, b: url|null, active: 'a'|'b' }
-const peekLayers = ref({})
-
-function _setLayer(id, patch) {
-  const cur = peekLayers.value[id] || { a: null, b: null, active: 'a' }
-  peekLayers.value = { ...peekLayers.value, [id]: { ...cur, ...patch } }
-}
-
-async function _loadPeekUrls(ev) {
-  if (_peekUrls.has(ev.id)) return _peekUrls.get(ev.id)
-  _peekUrls.set(ev.id, null) // in-flight sentinel
-  try {
-    const photos = await eventsApi.listPhotos(ev.id)
-    // Cover first, then the rest, so the slideshow walks the whole album.
-    const ordered = [
-      ...photos.filter((p) => p.id === ev.cover_photo_id),
-      ...photos.filter((p) => p.id !== ev.cover_photo_id),
-    ]
-    const urls = ordered.map((p) => eventsApi.photoUrl(ev.id, p.id))
-    _peekUrls.set(ev.id, urls.length > 1 ? urls : null)
-    return _peekUrls.get(ev.id)
-  } catch {
-    _peekUrls.set(ev.id, null)
-    return null
-  }
-}
-
-async function startPeek(ev) {
-  if (_tlReducedMotion) return
-  if (!ev?.cover_photo_id || ev.photo_count < 2) return
-  if (_peekTimers.has(ev.id)) return // already running
-  const urls = await _loadPeekUrls(ev)
-  if (!urls || urls.length < 2) return
-  // Build the rotation. With 2+ non-cover photos, loop ONLY the real
-  // photos so the last cross-dissolves straight back to the first (no
-  // dwell on the cover). With a single extra photo, alternate it with
-  // the cover so there are still two frames to animate between.
-  const rest = urls.slice(1)
-  const slides = rest.length >= 2 ? rest : urls
-  // startI is chosen so the very first tick lands on the first real photo.
-  let i = slides === urls ? 0 : -1
-  // Fresh start: cover only (no peek layers yet) until the first tick.
-  peekLayers.value = { ...peekLayers.value, [ev.id]: { a: null, b: null, active: 'a' } }
-  const id = setInterval(() => {
-    i = (i + 1) % slides.length
-    const cur = peekLayers.value[ev.id] || { active: 'a' }
-    const nextActive = cur.active === 'a' ? 'b' : 'a'
-    // Paint the next slide onto the inactive layer, then flip — the two
-    // layers cross-dissolve via the opacity transition in CSS.
-    _setLayer(ev.id, { [nextActive]: slides[i], active: nextActive })
-  }, PEEK_INTERVAL_MS)
-  _peekTimers.set(ev.id, id)
-}
-
-function stopPeek(ev) {
-  const id = _peekTimers.get(ev.id)
-  if (id !== undefined) {
-    clearInterval(id)
-    _peekTimers.delete(ev.id)
-  }
-  // Keep the layers; CSS gates visibility on :hover, so the active slide
-  // simply fades back to the cover when the pointer leaves.
-}
-
-onUnmounted(() => {
-  for (const id of _peekTimers.values()) clearInterval(id)
-  _peekTimers.clear()
-})
 
 const formOpen = ref(false)
 const editingEvent = ref(null)
