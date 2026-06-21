@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import MemberPhotoCell from './MemberPhotoCell.vue'
 
 vi.mock('element-plus', async (importOriginal) => {

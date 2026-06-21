@@ -13,9 +13,9 @@ import {
 } from 'element-plus'
 import { Delete, Document, Loading, Upload } from '@element-plus/icons-vue'
 
-import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
+import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 
-import { membersApi } from '../api/members'
+import { membersApi } from '../../api/members'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },

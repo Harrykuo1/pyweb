@@ -2,8 +2,8 @@
 import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElUpload } from 'element-plus'
 import { Camera, Delete, Loading, UserFilled } from '@element-plus/icons-vue'
 
-import { membersApi } from '../api/members'
-import { useAuthStore } from '../stores/auth'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
   member: { type: Object, required: true },

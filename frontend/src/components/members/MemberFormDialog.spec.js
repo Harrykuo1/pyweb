@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { membersApi } from '../api/members'
+import { membersApi } from '../../api/members'
 import MemberFormDialog from './MemberFormDialog.vue'
 
 vi.mock('element-plus', async (importOriginal) => {

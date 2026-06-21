@@ -35,10 +35,10 @@ import {
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import MarqueeText from '../components/MarqueeText.vue'
-import MemberFormDialog from '../components/MemberFormDialog.vue'
-import MemberPhotoCell from '../components/MemberPhotoCell.vue'
+import MemberFormDialog from '../components/members/MemberFormDialog.vue'
+import MemberPhotoCell from '../components/members/MemberPhotoCell.vue'
 import PhotoCropDialog from '../components/PhotoCropDialog.vue'
-import ResumeViewerDialog from '../components/ResumeViewerDialog.vue'
+import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 import { matchHaystack, parseQuery } from '../utils/searchQuery'

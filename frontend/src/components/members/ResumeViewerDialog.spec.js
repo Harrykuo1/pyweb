@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { membersApi } from '../api/members'
-import { useAuthStore } from '../stores/auth'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import ResumeViewerDialog from './ResumeViewerDialog.vue'
 
 vi.mock('element-plus', async (importOriginal) => {

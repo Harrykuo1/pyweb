@@ -23,9 +23,9 @@ import {
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
-import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
-import { membersApi } from '../api/members'
-import { useAuthStore } from '../stores/auth'
+import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
