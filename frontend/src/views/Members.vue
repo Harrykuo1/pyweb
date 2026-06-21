@@ -30,8 +30,11 @@ import MemberFormDialog from '../components/members/MemberFormDialog.vue'
 import MemberPhotoCell from '../components/members/MemberPhotoCell.vue'
 import PhotoCropDialog from '../components/PhotoCropDialog.vue'
 import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
+import { storeToRefs } from 'pinia'
+
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
+import { useMembersStore } from '../stores/members'
 import { useDeepLinkFocus } from '../composables/useDeepLinkFocus'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useMediaQuery } from '../composables/useMediaQuery'
@@ -44,8 +47,8 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const members = ref([])
-const loading = ref(false)
+const membersStore = useMembersStore()
+const { members, loading } = storeToRefs(membersStore)
 
 const dialogOpen = ref(false)
 const editingMember = ref(null)
@@ -97,14 +100,18 @@ const stringSort = (key) => (a, b) =>
 
 
 async function loadMembers() {
-  loading.value = true
   try {
-    members.value = await membersApi.list()
+    await membersStore.fetch()
   } catch (err) {
     ElMessage.error('載入成員清單失敗')
-  } finally {
-    loading.value = false
   }
+}
+
+// After a create/update/delete or photo change the cache would serve stale
+// rows, so drop it before reloading authoritatively.
+function reloadFresh() {
+  membersStore.invalidate()
+  return loadMembers()
 }
 
 function openCreate() {
@@ -133,7 +140,7 @@ const {
   deleteError: photoDeleteError,
   onDeleteRequest: onPhotoDeleteRequest,
   onDeleteConfirm: onPhotoDeleteConfirm,
-} = useMemberPhoto({ onChanged: () => loadMembers() })
+} = useMemberPhoto({ onChanged: () => reloadFresh() })
 
 // ---------- Delete *member* with admin-password confirmation ----------
 // Member delete (password-confirmed, shared with Jobs/Events). The
@@ -150,7 +157,7 @@ const {
   messages: { 404: '刪除失敗，請稍後再試' },
   onSuccess: (member) => {
     ElMessage.success(`已刪除「${member.real_name}」`)
-    loadMembers()
+    reloadFresh()
   },
 })
 
@@ -160,7 +167,7 @@ function viewResume(member) {
 }
 
 async function reloadAndRebindResume() {
-  await loadMembers()
+  await reloadFresh()
   // Re-point the resume dialog at the freshly fetched row so flag changes
   // (e.g. resume_pdf was deleted) are reflected without a full close/reopen.
   if (resumeMember.value) {
@@ -195,9 +202,11 @@ const { consume: consumeFocusFromQuery } = useDeepLinkFocus({
   router,
   queryKey: 'focus',
   anchorClass: (id) => `member-anchor-${id}`,
-  // Re-try after data loads — the first attempt may run before the cards
-  // are rendered; this fires again when the list length changes.
-  watchSource: () => members.value.length,
+  // Re-try after the cards actually render. The grid is gated on
+  // !loading, and the store updates members and loading in separate
+  // flushes, so watch both: the retry must fire when loading settles
+  // (cards mount), not just when the list length changes.
+  watchSource: () => [loading.value, members.value.length],
 })
 
 onMounted(() => {
@@ -597,7 +606,7 @@ onMounted(() => {
     <MemberFormDialog
       v-model="dialogOpen"
       :member="editingMember"
-      @saved="loadMembers"
+      @saved="reloadFresh"
     />
 
     <ResumeViewerDialog
