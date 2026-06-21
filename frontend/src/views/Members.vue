@@ -41,6 +41,7 @@ import PhotoCropDialog from '../components/PhotoCropDialog.vue'
 import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
+import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { matchHaystack, parseQuery } from '../utils/searchQuery'
 
 const auth = useAuthStore()
@@ -257,37 +258,23 @@ async function onPhotoDeleteConfirm(password) {
 }
 
 // ---------- Delete *member* with admin-password confirmation ----------
-const deleteDialogOpen = ref(false)
-const deleteTarget = ref(null)
-const deleteSubmitting = ref(false)
-const deleteError = ref('')
-
-function askDeleteMember(member) {
-  deleteTarget.value = member
-  deleteError.value = ''
-  deleteDialogOpen.value = true
-}
-
-async function handleDeleteConfirm(password) {
-  const target = deleteTarget.value
-  if (!target) return
-  deleteSubmitting.value = true
-  deleteError.value = ''
-  try {
-    await membersApi.remove(target.id, password)
-    ElMessage.success(`已刪除「${target.real_name}」`)
-    deleteDialogOpen.value = false
-    deleteTarget.value = null
+// Member delete (password-confirmed, shared with Jobs/Events). The
+// original had no specific 404 copy, so keep 404 on the generic fallback.
+const {
+  dialogOpen: deleteDialogOpen,
+  target: deleteTarget,
+  submitting: deleteSubmitting,
+  error: deleteError,
+  open: askDeleteMember,
+  confirm: handleDeleteConfirm,
+} = useDeleteWithPassword({
+  remove: (member, password) => membersApi.remove(member.id, password),
+  messages: { 404: '刪除失敗，請稍後再試' },
+  onSuccess: (member) => {
+    ElMessage.success(`已刪除「${member.real_name}」`)
     loadMembers()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) deleteError.value = '密碼錯誤'
-    else if (status === 403) deleteError.value = '權限不足'
-    else deleteError.value = '刪除失敗，請稍後再試'
-  } finally {
-    deleteSubmitting.value = false
-  }
-}
+  },
+})
 
 function viewResume(member) {
   resumeMember.value = member
