@@ -26,6 +26,7 @@ import {
 } from '../components/events/eventFilters'
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
+import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useDialogRouteSync } from '../composables/useDialogRouteSync'
 import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 
@@ -334,41 +335,26 @@ function onDetailEdit(ev) {
   setTimeout(() => openEdit(ev), 0)
 }
 
-// ---- delete ----
-const deleteOpen = ref(false)
-const deleteTarget = ref(null)
-const deleteSubmitting = ref(false)
-const deleteError = ref('')
-
-function askDelete(ev) {
-  deleteTarget.value = ev
-  deleteError.value = ''
-  deleteOpen.value = true
-}
-async function onDeleteConfirm(password) {
-  const target = deleteTarget.value
-  if (!target) return
-  deleteSubmitting.value = true
-  deleteError.value = ''
-  try {
-    await eventsApi.remove(target.id, password)
-    ElMessage.success(`已刪除「${target.title}」`)
-    deleteOpen.value = false
-    deleteTarget.value = null
-    if (detailOpen.value && detailEvent.value?.id === target.id) {
+// ---- delete (password-confirmed, shared with Jobs) ----
+const {
+  dialogOpen: deleteOpen,
+  target: deleteTarget,
+  submitting: deleteSubmitting,
+  error: deleteError,
+  open: askDelete,
+  confirm: onDeleteConfirm,
+} = useDeleteWithPassword({
+  remove: (ev, password) => eventsApi.remove(ev.id, password),
+  messages: { 404: '活動已不存在' },
+  onSuccess: (ev) => {
+    ElMessage.success(`已刪除「${ev.title}」`)
+    // Close the detail dialog too if it was open on this same event.
+    if (detailOpen.value && detailEvent.value?.id === ev.id) {
       detailOpen.value = false
     }
     loadItems()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) deleteError.value = '密碼錯誤'
-    else if (status === 403) deleteError.value = '權限不足'
-    else if (status === 404) deleteError.value = '活動已不存在'
-    else deleteError.value = '刪除失敗，請稍後再試'
-  } finally {
-    deleteSubmitting.value = false
-  }
-}
+  },
+})
 
 
 function onSaved() {
