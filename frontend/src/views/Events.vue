@@ -24,8 +24,11 @@ import {
   safeStringList,
   safeYear,
 } from '../components/events/eventFilters'
+import { storeToRefs } from 'pinia'
+
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
+import { useEventsStore } from '../stores/events'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useEventPeek } from '../composables/useEventPeek'
 import { useDialogRouteSync } from '../composables/useDialogRouteSync'
@@ -66,9 +69,8 @@ const { sortOrder, year, tag, q } = useUrlQuerySync({
   },
 })
 
-const items = ref([])
-const total = ref(0)
-const loading = ref(false)
+const eventsStore = useEventsStore()
+const { items, total, loading } = storeToRefs(eventsStore)
 
 // Timeline card hover: rail fill (--tl-progress, 0..1, lights the warm
 // spine down to the hovered card's node) + lazy photo-peek slideshow
@@ -177,21 +179,23 @@ function excerpt(md, n = 120) {
 }
 
 async function loadItems() {
-  loading.value = true
   try {
-    const data = await eventsApi.list({
+    await eventsStore.fetch({
       order: sortOrder.value,
       year: year.value ?? undefined,
       tag: tag.value,
       q: q.value || undefined,
     })
-    items.value = data.items
-    total.value = data.total
   } catch {
     ElMessage.error('載入活動失敗')
-  } finally {
-    loading.value = false
   }
+}
+
+// After a create/update/delete the cache would otherwise serve a stale
+// row, so drop it before reloading the current view authoritatively.
+function reloadFresh() {
+  eventsStore.invalidate()
+  loadItems()
 }
 
 // ---- tag filter suggestions ----
@@ -244,13 +248,12 @@ const {
     if (detailOpen.value && detailEvent.value?.id === ev.id) {
       detailOpen.value = false
     }
-    loadItems()
+    reloadFresh()
   },
 })
 
-
 function onSaved() {
-  loadItems()
+  reloadFresh()
 }
 
 onMounted(loadItems)
