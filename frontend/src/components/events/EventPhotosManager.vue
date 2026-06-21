@@ -3,8 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { ElButton, ElIcon, ElInput, ElMessage } from 'element-plus'
 import { Delete, Loading, Plus, Star } from '@element-plus/icons-vue'
 
-import { eventsApi } from '../api/events'
-import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
+import { eventsApi } from '../../api/events'
+import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 
 const props = defineProps({
   eventId: { type: Number, required: true },

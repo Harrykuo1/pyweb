@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import EventFormDialog from './EventFormDialog.vue'
-import { eventsApi } from '../api/events'
+import { eventsApi } from '../../api/events'
 
 vi.mock('md-editor-v3', () => ({
   MdEditor: {

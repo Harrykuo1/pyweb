@@ -3,8 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import EventPhotosManager from './EventPhotosManager.vue'
-import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
-import { eventsApi } from '../api/events'
+import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import { eventsApi } from '../../api/events'
 
 function setNativeValue(el, value) {
   el.value = value

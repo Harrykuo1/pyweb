@@ -34,10 +34,10 @@ vi.mock('element-plus', async (importOriginal) => {
 
 // Heavy dialog children pull in md-editor; stub them so the view spec
 // stays focused on the timeline rendering + filters.
-vi.mock('../components/EventFormDialog.vue', () => ({
+vi.mock('../components/events/EventFormDialog.vue', () => ({
   default: { name: 'EventFormDialog', props: ['modelValue', 'event'], template: '<div />' },
 }))
-vi.mock('../components/EventDetailDialog.vue', () => ({
+vi.mock('../components/events/EventDetailDialog.vue', () => ({
   default: {
     name: 'EventDetailDialog',
     props: ['modelValue', 'event'],

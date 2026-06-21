@@ -13,8 +13,8 @@ import {
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
-import { useAuthStore } from '../stores/auth'
-import { eventsApi } from '../api/events'
+import { useAuthStore } from '../../stores/auth'
+import { eventsApi } from '../../api/events'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },

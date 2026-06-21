@@ -15,8 +15,8 @@ import {
 } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
-import EventDetailDialog from '../components/EventDetailDialog.vue'
-import EventFormDialog from '../components/EventFormDialog.vue'
+import EventDetailDialog from '../components/events/EventDetailDialog.vue'
+import EventFormDialog from '../components/events/EventFormDialog.vue'
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
 

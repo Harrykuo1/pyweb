@@ -3,8 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import EventDetailDialog from './EventDetailDialog.vue'
-import { useAuthStore } from '../stores/auth'
-import { eventsApi } from '../api/events'
+import { useAuthStore } from '../../stores/auth'
+import { eventsApi } from '../../api/events'
 
 vi.mock('md-editor-v3', () => ({
   MdPreview: {
