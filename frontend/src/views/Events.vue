@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElInput, ElMessage, ElOption, ElSelect } from 'element-plus'
 import {
@@ -26,6 +26,7 @@ import {
 } from '../components/events/eventFilters'
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
+import { useDialogRouteSync } from '../composables/useDialogRouteSync'
 import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 
 const auth = useAuthStore()
@@ -33,13 +34,6 @@ const route = useRoute()
 const router = useRouter()
 
 const SEARCH_DEBOUNCE_MS = 300
-
-function _safeId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
 
 // Filter state lives in the URL; `detail` is preserved across rewrites for
 // the deep-link dialog. onChange refetches after each sync. Mirrors Jobs.
@@ -218,8 +212,19 @@ onUnmounted(() => {
 
 const formOpen = ref(false)
 const editingEvent = ref(null)
-const detailOpen = ref(false)
-const detailEvent = ref(null)
+
+// ?detail=<id> deep-link <-> detail dialog (open/fetch/close + drop the
+// URL key on close), shared with Jobs via useDialogRouteSync.
+const {
+  open: detailOpen,
+  item: detailEvent,
+  show: openDetail,
+} = useDialogRouteSync({
+  route,
+  router,
+  queryKey: 'detail',
+  fetchItem: (id) => eventsApi.get(id),
+})
 
 // Group the (already sorted) events by calendar year so the timeline can
 // drop a sticky year divider at each boundary. Order of years follows
@@ -325,10 +330,6 @@ function openEdit(ev) {
   editingEvent.value = { ...ev }
   formOpen.value = true
 }
-function openDetail(ev) {
-  detailEvent.value = ev
-  detailOpen.value = true
-}
 function onDetailEdit(ev) {
   setTimeout(() => openEdit(ev), 0)
 }
@@ -369,32 +370,6 @@ async function onDeleteConfirm(password) {
   }
 }
 
-// ---- ?detail=<id> deep-link ----
-async function _openDetailById(id) {
-  try {
-    detailEvent.value = await eventsApi.get(id)
-    detailOpen.value = true
-  } catch {
-    /* deleted / bad id — no-op */
-  }
-}
-watch(
-  () => route.query.detail,
-  (val) => {
-    const id = _safeId(val)
-    if (id === null) return
-    if (detailOpen.value && detailEvent.value?.id === id) return
-    _openDetailById(id)
-  },
-  { immediate: true },
-)
-watch(detailOpen, (val) => {
-  if (val) return
-  if (route.query.detail === undefined) return
-  const next = { ...route.query }
-  delete next.detail
-  router.replace({ query: next })
-})
 
 function onSaved() {
   loadItems()
