@@ -1,7 +1,6 @@
 <script setup>
 import {
   computed,
-  markRaw,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -24,7 +23,6 @@ import {
   Document,
   Edit,
   Grid,
-  Loading,
   Menu,
   Plus,
   Refresh,
@@ -42,6 +40,7 @@ import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useMemberPhoto } from '../composables/useMemberPhoto'
 import { matchHaystack, parseQuery } from '../utils/searchQuery'
 
 const auth = useAuthStore()
@@ -184,78 +183,23 @@ function openEdit(member) {
   dialogOpen.value = true
 }
 
-// ---------- Photo upload + delete (single dialogs hoisted up here so
-// the cards/rows don't each carry their own hidden el-dialogs in the
-// DOM — that was the dominant cost of rendering a 50-card grid). ----
-const photoCropOpen = ref(false)
-const photoCropFile = ref(null)
-const photoCropTarget = ref(null)
-const uploadingPhotoMemberId = ref(null)
-
-const photoDeleteDialogOpen = ref(false)
-const photoDeleteTarget = ref(null)
-const photoDeleteSubmitting = ref(false)
-const photoDeleteError = ref('')
-
-function onPhotoUploadRequest(member, file) {
-  photoCropTarget.value = member
-  photoCropFile.value = file
-  photoCropOpen.value = true
-}
-
-async function onPhotoCropped(croppedFile) {
-  const target = photoCropTarget.value
-  if (!target) return
-  uploadingPhotoMemberId.value = target.id
-  const toast = ElMessage({
-    message: '上傳照片中…',
-    icon: markRaw(Loading),
-    duration: 0,
-    customClass: 'message-uploading',
-  })
-  try {
-    await membersApi.uploadPhoto(target.id, croppedFile)
-    toast.close()
-    ElMessage.success('已上傳照片')
-    loadMembers()
-  } catch (err) {
-    toast.close()
-    if (err?.response?.status === 413) ElMessage.error('檔案過大')
-    else if (err?.response?.status === 415) ElMessage.error('格式不支援')
-    else ElMessage.error('上傳失敗')
-  } finally {
-    photoCropFile.value = null
-    photoCropTarget.value = null
-    uploadingPhotoMemberId.value = null
-  }
-}
-
-function onPhotoDeleteRequest(member) {
-  photoDeleteTarget.value = member
-  photoDeleteError.value = ''
-  photoDeleteDialogOpen.value = true
-}
-
-async function onPhotoDeleteConfirm(password) {
-  const target = photoDeleteTarget.value
-  if (!target) return
-  photoDeleteSubmitting.value = true
-  photoDeleteError.value = ''
-  try {
-    await membersApi.deletePhoto(target.id, password)
-    ElMessage.success('已移除照片')
-    photoDeleteDialogOpen.value = false
-    photoDeleteTarget.value = null
-    loadMembers()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) photoDeleteError.value = '密碼錯誤'
-    else if (status === 403) photoDeleteError.value = '權限不足'
-    else photoDeleteError.value = '移除失敗，請稍後再試'
-  } finally {
-    photoDeleteSubmitting.value = false
-  }
-}
+// Photo crop+upload and password-confirmed remove. Single dialogs are
+// hoisted here (not per-card) so a 50-card grid doesn't carry 50 hidden
+// el-dialogs. The names below map to the existing template bindings.
+const {
+  cropOpen: photoCropOpen,
+  cropFile: photoCropFile,
+  cropTarget: photoCropTarget,
+  uploadingMemberId: uploadingPhotoMemberId,
+  onUploadRequest: onPhotoUploadRequest,
+  onCropped: onPhotoCropped,
+  deleteDialogOpen: photoDeleteDialogOpen,
+  deleteTarget: photoDeleteTarget,
+  deleteSubmitting: photoDeleteSubmitting,
+  deleteError: photoDeleteError,
+  onDeleteRequest: onPhotoDeleteRequest,
+  onDeleteConfirm: onPhotoDeleteConfirm,
+} = useMemberPhoto({ onChanged: () => loadMembers() })
 
 // ---------- Delete *member* with admin-password confirmation ----------
 // Member delete (password-confirmed, shared with Jobs/Events). The
