@@ -133,14 +133,14 @@ function formatDate(iso) {
 
 <style scoped>
 .record-card {
-  --card-accent-from: #6366f1;
-  --card-accent-to: #8b5cf6;
+  --card-accent-from: var(--brand-primary);
+  --card-accent-to: var(--brand-accent);
   --card-accent-soft: rgba(99, 102, 241, 0.18);
-  --card-accent-ink: #4f46e5;
+  --card-accent-ink: var(--brand-primary-hover);
 
   position: relative;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--surface-0);
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
   padding: 20px 20px 18px 26px;

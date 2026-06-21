@@ -43,7 +43,7 @@ defineEmits(['toggle'])
 
 .sort-pill {
   border: 1px solid rgba(15, 23, 42, 0.08);
-  background: #ffffff;
+  background: var(--surface-0);
   color: var(--ink-700);
   padding: 5px 12px;
   font-size: 12px;
@@ -59,15 +59,15 @@ defineEmits(['toggle'])
 }
 
 .sort-pill:hover {
-  border-color: rgba(124, 58, 237, 0.32);
-  color: #7c3aed;
+  border-color: rgba(99, 102, 241, 0.4);
+  color: var(--brand-primary-hover);
 }
 
 .sort-pill.is-active {
-  background: linear-gradient(135deg, #7c3aed, #d946ef);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  color: var(--surface-0);
   border-color: transparent;
-  box-shadow: 0 6px 16px -4px rgba(124, 58, 237, 0.45);
+  box-shadow: 0 6px 16px -4px rgba(99, 102, 241, 0.45);
 }
 
 .sort-arrow {

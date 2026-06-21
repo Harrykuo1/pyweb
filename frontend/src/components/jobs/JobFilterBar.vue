@@ -189,7 +189,7 @@ const displayedCategorySuggestions = computed(() =>
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  background: #ffffff;
+  background: var(--surface-0);
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
@@ -232,7 +232,7 @@ const displayedCategorySuggestions = computed(() =>
 }
 
 .kind-chip.is-active {
-  background: #ffffff;
+  background: var(--surface-0);
   color: var(--ink-900);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
@@ -295,12 +295,12 @@ const displayedCategorySuggestions = computed(() =>
 
 .filter-bar :deep(.el-input__wrapper):hover,
 .filter-bar :deep(.el-select__wrapper):hover {
-  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.32) inset;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35) inset;
 }
 
 .filter-bar :deep(.el-input__wrapper.is-focus),
 .filter-bar :deep(.el-select__wrapper.is-focused) {
-  box-shadow: 0 0 0 1.5px #7c3aed inset;
+  box-shadow: 0 0 0 1.5px var(--brand-primary) inset;
 }
 
 @media (max-width: 640px) {

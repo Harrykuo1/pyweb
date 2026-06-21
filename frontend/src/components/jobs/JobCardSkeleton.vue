@@ -18,7 +18,7 @@
 .skeleton-card {
   position: relative;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--surface-0);
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: var(--radius-lg);
   padding: 20px 20px 18px 26px;

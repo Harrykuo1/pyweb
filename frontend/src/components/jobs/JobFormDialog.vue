@@ -739,11 +739,11 @@ async function handleSubmit() {
 }
 
 .md-tabs :deep(.el-tabs__item.is-active) {
-  color: #7c3aed;
+  color: var(--brand-primary-hover);
 }
 
 .md-tabs :deep(.el-tabs__active-bar) {
-  background: linear-gradient(135deg, #7c3aed, #d946ef);
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
 }
 
 /* Cap editor height so the dialog stays scroll-friendly even with long
@@ -789,10 +789,10 @@ async function handleSubmit() {
   gap: 6px;
   margin-bottom: 8px;
   padding: 8px 14px;
-  border: 1px solid rgba(124, 58, 237, 0.32);
+  border: 1px solid rgba(99, 102, 241, 0.32);
   border-radius: 999px;
-  background: rgba(124, 58, 237, 0.08);
-  color: #7c3aed;
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--brand-primary-hover);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -800,7 +800,7 @@ async function handleSubmit() {
 }
 
 .md-expand-btn:active {
-  background: rgba(124, 58, 237, 0.16);
+  background: rgba(99, 102, 241, 0.16);
 }
 
 .md-required-hint {

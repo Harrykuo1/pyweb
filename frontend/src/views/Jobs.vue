@@ -323,9 +323,9 @@ onMounted(loadItems)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6 50%, #d946ef);
-  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.32);
+  color: var(--surface-0);
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.3);
 }
 
 .title {
@@ -341,8 +341,8 @@ onMounted(loadItems)
   align-items: center;
   padding: 3px 10px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.14), rgba(217, 70, 239, 0.14));
-  color: #7c3aed;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
+  color: var(--brand-primary-hover);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -380,8 +380,8 @@ onMounted(loadItems)
   gap: var(--sp-md);
   padding: 72px 24px;
   background:
-    radial-gradient(closest-side, rgba(139, 92, 246, 0.05), transparent 70%) center / 70% 100% no-repeat,
-    #ffffff;
+    radial-gradient(closest-side, rgba(99, 102, 241, 0.05), transparent 70%) center / 70% 100% no-repeat,
+    var(--surface-0);
   border: 1px dashed rgba(15, 23, 42, 0.12);
   border-radius: var(--radius-lg);
 }
@@ -396,10 +396,10 @@ onMounted(loadItems)
   background: linear-gradient(
     135deg,
     rgba(99, 102, 241, 0.12),
-    rgba(217, 70, 239, 0.12)
+    rgba(139, 92, 246, 0.12)
   );
-  color: #7c3aed;
-  box-shadow: 0 8px 24px -10px rgba(124, 58, 237, 0.4);
+  color: var(--brand-primary-hover);
+  box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.4);
 }
 
 .empty-text {

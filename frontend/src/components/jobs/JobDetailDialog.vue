@@ -328,11 +328,11 @@ function formatJobYearMonth(j) {
 }
 
 .detail-tabs :deep(.el-tabs__item.is-active) {
-  color: #7c3aed;
+  color: var(--brand-primary-hover);
 }
 
 .detail-tabs :deep(.el-tabs__active-bar) {
-  background: linear-gradient(135deg, #7c3aed, #d946ef);
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
 }
 
 .md-frame {
