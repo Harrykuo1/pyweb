@@ -1,12 +1,5 @@
 <script setup>
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -40,8 +33,10 @@ import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useMediaQuery } from '../composables/useMediaQuery'
 import { useMemberFiltering } from '../composables/useMemberFiltering'
 import { useMemberPhoto } from '../composables/useMemberPhoto'
+import { useViewModePreference } from '../composables/useViewModePreference'
 
 const auth = useAuthStore()
 
@@ -57,37 +52,14 @@ const editingMember = ref(null)
 const resumeOpen = ref(false)
 const resumeMember = ref(null)
 
-// ---------- View mode ----------
-// Persisted to localStorage so a user's choice (cards vs. spreadsheet) sticks
-// across sessions. Default is the card grid — community-style browsing.
-const VIEW_KEY = 'pyweb.members.viewMode'
-function readInitialViewMode() {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
-  } catch {
-    return 'grid'
-  }
-}
-const viewMode = ref(readInitialViewMode())
-function setViewMode(m) {
-  viewMode.value = m
-  try {
-    localStorage.setItem(VIEW_KEY, m)
-  } catch {
-    /* swallow — quota / private mode */
-  }
-}
+// View mode (cards vs spreadsheet), persisted across sessions.
+const { viewMode, setViewMode } = useViewModePreference('pyweb.members.viewMode')
 
 // The view-mode toggle is hidden at the phone breakpoint (≤640px) because
 // el-table at that width is unusable. Force grid mode there regardless of
 // the user's stored desktop preference, so a viewer who last picked "list"
 // on desktop still sees cards on their phone. Desktop choice is preserved.
-const PHONE_MQ = '(max-width: 640px)'
-const isPhone = ref(false)
-let phoneMql = null
-function syncPhone(e) {
-  isPhone.value = e.matches
-}
+const isPhone = useMediaQuery('(max-width: 640px)')
 
 const effectiveViewMode = computed(() =>
   isPhone.value ? 'grid' : viewMode.value,
@@ -264,19 +236,9 @@ watch(() => route.query.focus, () => consumeFocusFromQuery())
 
 onMounted(() => {
   loadMembers()
-  if (typeof window !== 'undefined' && window.matchMedia) {
-    phoneMql = window.matchMedia(PHONE_MQ)
-    isPhone.value = phoneMql.matches
-    phoneMql.addEventListener?.('change', syncPhone)
-  }
   // Process any ?focus=<id> the page was opened with. Has to run after
   // mount because router.replace would no-op during setup.
   consumeFocusFromQuery()
-})
-
-onBeforeUnmount(() => {
-  phoneMql?.removeEventListener?.('change', syncPhone)
-  phoneMql = null
 })
 </script>
 
