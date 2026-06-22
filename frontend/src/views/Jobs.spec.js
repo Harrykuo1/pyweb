@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import Jobs from './Jobs.vue'
 import { jobsApi } from '../api/jobs'
 import { useAuthStore } from '../stores/auth'
+import { useJobsStore } from '../stores/jobs'
 
 const replaceMock = vi.fn()
 const routeQuery = { value: {} }
@@ -577,5 +578,34 @@ describe('Jobs.vue — admin delete flow', () => {
     expect(remove).toHaveBeenCalled()
     expect(dialog.props('errorMessage')).toBe('密碼錯誤')
     expect(listSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('Jobs.vue — cache invalidation on mutation', () => {
+  it('invalidates the jobs cache after a successful delete', async () => {
+    vi.spyOn(jobsApi, 'remove').mockResolvedValue()
+    const { wrapper } = await mountPage(sample, sample.length, 'admin')
+    const invalidate = vi.spyOn(useJobsStore(), 'invalidate')
+
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
+    await flushPromises()
+    wrapper
+      .findComponent({ name: 'DeleteWithPasswordDialog' })
+      .vm.$emit('confirm', 'admin-pw')
+    await flushPromises()
+
+    expect(invalidate).toHaveBeenCalled()
+  })
+
+  it('invalidates the jobs cache when the form reports saved', async () => {
+    const { wrapper } = await mountPage()
+    const invalidate = vi.spyOn(useJobsStore(), 'invalidate')
+
+    wrapper.findComponent({ name: 'JobFormDialog' }).vm.$emit('saved')
+    await flushPromises()
+
+    expect(invalidate).toHaveBeenCalled()
   })
 })

@@ -1,13 +1,5 @@
 <script setup>
-import {
-  computed,
-  markRaw,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -24,7 +16,6 @@ import {
   Document,
   Edit,
   Grid,
-  Loading,
   Menu,
   Plus,
   Refresh,
@@ -35,21 +26,29 @@ import {
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import MarqueeText from '../components/MarqueeText.vue'
-import MemberFormDialog from '../components/MemberFormDialog.vue'
-import MemberPhotoCell from '../components/MemberPhotoCell.vue'
+import MemberFormDialog from '../components/members/MemberFormDialog.vue'
+import MemberPhotoCell from '../components/members/MemberPhotoCell.vue'
 import PhotoCropDialog from '../components/PhotoCropDialog.vue'
-import ResumeViewerDialog from '../components/ResumeViewerDialog.vue'
+import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
+import { storeToRefs } from 'pinia'
+
 import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
-import { matchHaystack, parseQuery } from '../utils/searchQuery'
+import { useMembersStore } from '../stores/members'
+import { useDeepLinkFocus } from '../composables/useDeepLinkFocus'
+import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useMediaQuery } from '../composables/useMediaQuery'
+import { useMemberFiltering } from '../composables/useMemberFiltering'
+import { useMemberPhoto } from '../composables/useMemberPhoto'
+import { useViewModePreference } from '../composables/useViewModePreference'
 
 const auth = useAuthStore()
 
 const route = useRoute()
 const router = useRouter()
 
-const members = ref([])
-const loading = ref(false)
+const membersStore = useMembersStore()
+const { members, loading } = storeToRefs(membersStore)
 
 const dialogOpen = ref(false)
 const editingMember = ref(null)
@@ -57,37 +56,14 @@ const editingMember = ref(null)
 const resumeOpen = ref(false)
 const resumeMember = ref(null)
 
-// ---------- View mode ----------
-// Persisted to localStorage so a user's choice (cards vs. spreadsheet) sticks
-// across sessions. Default is the card grid — community-style browsing.
-const VIEW_KEY = 'pyweb.members.viewMode'
-function readInitialViewMode() {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
-  } catch {
-    return 'grid'
-  }
-}
-const viewMode = ref(readInitialViewMode())
-function setViewMode(m) {
-  viewMode.value = m
-  try {
-    localStorage.setItem(VIEW_KEY, m)
-  } catch {
-    /* swallow — quota / private mode */
-  }
-}
+// View mode (cards vs spreadsheet), persisted across sessions.
+const { viewMode, setViewMode } = useViewModePreference('pyweb.members.viewMode')
 
 // The view-mode toggle is hidden at the phone breakpoint (≤640px) because
 // el-table at that width is unusable. Force grid mode there regardless of
 // the user's stored desktop preference, so a viewer who last picked "list"
 // on desktop still sees cards on their phone. Desktop choice is preserved.
-const PHONE_MQ = '(max-width: 640px)'
-const isPhone = ref(false)
-let phoneMql = null
-function syncPhone(e) {
-  isPhone.value = e.matches
-}
+const isPhone = useMediaQuery('(max-width: 640px)')
 
 const effectiveViewMode = computed(() =>
   isPhone.value ? 'grid' : viewMode.value,
@@ -100,17 +76,18 @@ const SORT_OPTIONS = [
   { key: 'real_name', label: '本名' },
   { key: 'institution', label: '學校／公司' },
 ]
-const sortKey = ref('joined_at')
-const sortOrder = ref('asc')
-
-function toggleSort(key) {
-  if (sortKey.value === key) {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
-  } else {
-    sortKey.value = key
-    sortOrder.value = 'asc'
-  }
-}
+// Client-side filtering + sorting (grid uses sortedMembers; the el-table
+// list sorts itself off filteredMembers via the helpers below).
+const {
+  sortKey,
+  sortOrder,
+  toggleSort,
+  searchQuery,
+  filteredMembers,
+  sortedMembers,
+  memberCount,
+  filteredCount,
+} = useMemberFiltering(members)
 
 // Sort orders are restricted to two states so a click cycles asc → desc →
 // asc instead of the el-table default asc → desc → none.
@@ -121,56 +98,20 @@ const SORT_ORDERS = ['ascending', 'descending']
 const stringSort = (key) => (a, b) =>
   String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
 
-// ---------- Search ----------
-// Client-side boolean search across name / position / graduation year.
-// Supports `AND` (implicit), uppercase `OR`, `-` / `NOT` negation, and
-// "quoted phrases" — same syntax as the Jobs backend search. The parser
-// is shared with the backend in spirit (mirrored Python ↔ JS).
-const searchQuery = ref('')
-
-const filteredMembers = computed(() => {
-  const parsed = parseQuery(searchQuery.value)
-  if (parsed.length === 0) return members.value
-  return members.value.filter((m) => {
-    const haystack = [
-      m.real_name,
-      m.institution,
-      m.position,
-      String(m.graduation_year ?? ''),
-    ]
-      .filter(Boolean)
-      .join(' ')
-    return matchHaystack(parsed, haystack)
-  })
-})
-
-const sortedMembers = computed(() => {
-  const arr = [...filteredMembers.value]
-  const k = sortKey.value
-  const dir = sortOrder.value === 'asc' ? 1 : -1
-  arr.sort((a, b) => {
-    const av = a[k]
-    const bv = b[k]
-    if (typeof av === 'number' && typeof bv === 'number') {
-      return (av - bv) * dir
-    }
-    return String(av ?? '').localeCompare(String(bv ?? ''), 'zh-Hant') * dir
-  })
-  return arr
-})
-
-const memberCount = computed(() => members.value.length)
-const filteredCount = computed(() => filteredMembers.value.length)
 
 async function loadMembers() {
-  loading.value = true
   try {
-    members.value = await membersApi.list()
+    await membersStore.fetch()
   } catch (err) {
     ElMessage.error('載入成員清單失敗')
-  } finally {
-    loading.value = false
   }
+}
+
+// After a create/update/delete or photo change the cache would serve stale
+// rows, so drop it before reloading authoritatively.
+function reloadFresh() {
+  membersStore.invalidate()
+  return loadMembers()
 }
 
 function openCreate() {
@@ -183,111 +124,42 @@ function openEdit(member) {
   dialogOpen.value = true
 }
 
-// ---------- Photo upload + delete (single dialogs hoisted up here so
-// the cards/rows don't each carry their own hidden el-dialogs in the
-// DOM — that was the dominant cost of rendering a 50-card grid). ----
-const photoCropOpen = ref(false)
-const photoCropFile = ref(null)
-const photoCropTarget = ref(null)
-const uploadingPhotoMemberId = ref(null)
-
-const photoDeleteDialogOpen = ref(false)
-const photoDeleteTarget = ref(null)
-const photoDeleteSubmitting = ref(false)
-const photoDeleteError = ref('')
-
-function onPhotoUploadRequest(member, file) {
-  photoCropTarget.value = member
-  photoCropFile.value = file
-  photoCropOpen.value = true
-}
-
-async function onPhotoCropped(croppedFile) {
-  const target = photoCropTarget.value
-  if (!target) return
-  uploadingPhotoMemberId.value = target.id
-  const toast = ElMessage({
-    message: '上傳照片中…',
-    icon: markRaw(Loading),
-    duration: 0,
-    customClass: 'message-uploading',
-  })
-  try {
-    await membersApi.uploadPhoto(target.id, croppedFile)
-    toast.close()
-    ElMessage.success('已上傳照片')
-    loadMembers()
-  } catch (err) {
-    toast.close()
-    if (err?.response?.status === 413) ElMessage.error('檔案過大')
-    else if (err?.response?.status === 415) ElMessage.error('格式不支援')
-    else ElMessage.error('上傳失敗')
-  } finally {
-    photoCropFile.value = null
-    photoCropTarget.value = null
-    uploadingPhotoMemberId.value = null
-  }
-}
-
-function onPhotoDeleteRequest(member) {
-  photoDeleteTarget.value = member
-  photoDeleteError.value = ''
-  photoDeleteDialogOpen.value = true
-}
-
-async function onPhotoDeleteConfirm(password) {
-  const target = photoDeleteTarget.value
-  if (!target) return
-  photoDeleteSubmitting.value = true
-  photoDeleteError.value = ''
-  try {
-    await membersApi.deletePhoto(target.id, password)
-    ElMessage.success('已移除照片')
-    photoDeleteDialogOpen.value = false
-    photoDeleteTarget.value = null
-    loadMembers()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) photoDeleteError.value = '密碼錯誤'
-    else if (status === 403) photoDeleteError.value = '權限不足'
-    else photoDeleteError.value = '移除失敗，請稍後再試'
-  } finally {
-    photoDeleteSubmitting.value = false
-  }
-}
+// Photo crop+upload and password-confirmed remove. Single dialogs are
+// hoisted here (not per-card) so a 50-card grid doesn't carry 50 hidden
+// el-dialogs. The names below map to the existing template bindings.
+const {
+  cropOpen: photoCropOpen,
+  cropFile: photoCropFile,
+  cropTarget: photoCropTarget,
+  uploadingMemberId: uploadingPhotoMemberId,
+  onUploadRequest: onPhotoUploadRequest,
+  onCropped: onPhotoCropped,
+  deleteDialogOpen: photoDeleteDialogOpen,
+  deleteTarget: photoDeleteTarget,
+  deleteSubmitting: photoDeleteSubmitting,
+  deleteError: photoDeleteError,
+  onDeleteRequest: onPhotoDeleteRequest,
+  onDeleteConfirm: onPhotoDeleteConfirm,
+} = useMemberPhoto({ onChanged: () => reloadFresh() })
 
 // ---------- Delete *member* with admin-password confirmation ----------
-const deleteDialogOpen = ref(false)
-const deleteTarget = ref(null)
-const deleteSubmitting = ref(false)
-const deleteError = ref('')
-
-function askDeleteMember(member) {
-  deleteTarget.value = member
-  deleteError.value = ''
-  deleteDialogOpen.value = true
-}
-
-async function handleDeleteConfirm(password) {
-  const target = deleteTarget.value
-  if (!target) return
-  deleteSubmitting.value = true
-  deleteError.value = ''
-  try {
-    await membersApi.remove(target.id, password)
-    ElMessage.success(`已刪除「${target.real_name}」`)
-    deleteDialogOpen.value = false
-    deleteTarget.value = null
-    loadMembers()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) deleteError.value = '密碼錯誤'
-    else if (status === 403) deleteError.value = '權限不足'
-    else deleteError.value = '刪除失敗，請稍後再試'
-  } finally {
-    deleteSubmitting.value = false
-  }
-}
+// Member delete (password-confirmed, shared with Jobs/Events). The
+// original had no specific 404 copy, so keep 404 on the generic fallback.
+const {
+  dialogOpen: deleteDialogOpen,
+  target: deleteTarget,
+  submitting: deleteSubmitting,
+  error: deleteError,
+  open: askDeleteMember,
+  confirm: handleDeleteConfirm,
+} = useDeleteWithPassword({
+  remove: (member, password) => membersApi.remove(member.id, password),
+  messages: { 404: '刪除失敗，請稍後再試' },
+  onSuccess: (member) => {
+    ElMessage.success(`已刪除「${member.real_name}」`)
+    reloadFresh()
+  },
+})
 
 function viewResume(member) {
   resumeMember.value = member
@@ -295,7 +167,7 @@ function viewResume(member) {
 }
 
 async function reloadAndRebindResume() {
-  await loadMembers()
+  await reloadFresh()
   // Re-point the resume dialog at the freshly fetched row so flag changes
   // (e.g. resume_pdf was deleted) are reflected without a full close/reopen.
   if (resumeMember.value) {
@@ -325,66 +197,23 @@ function formatDate(iso) {
 // scroll the matching anchor into view + briefly highlight it. The URL
 // shape is owned by membersApi.focusRoute() — see api/members.js.
 
-function _safeId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
-
-const FLASH_DURATION_MS = 1500
-const pendingFocusId = ref(null)
-
-async function attemptFocus() {
-  if (pendingFocusId.value === null) return
-  // Wait one tick so any just-rendered card / row is in the DOM.
-  await nextTick()
-  const id = pendingFocusId.value
-  if (id === null) return
-  const el = document.querySelector(`.member-anchor-${id}`)
-  if (!el) return
-  if (typeof el.scrollIntoView === 'function') {
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }
-  el.classList.add('is-flash')
-  setTimeout(() => el.classList.remove('is-flash'), FLASH_DURATION_MS)
-  pendingFocusId.value = null
-}
-
-function consumeFocusFromQuery() {
-  const id = _safeId(route.query.focus)
-  if (id === null) return
-  // Strip ?focus= so refresh doesn't re-flash and so back/forward
-  // doesn't replay the highlight.
-  const next = { ...route.query }
-  delete next.focus
-  router.replace({ query: next })
-  pendingFocusId.value = id
-  attemptFocus()
-}
-
-// Re-try focus after data loads — initial mount has no rendered cards
-// yet, so the first attemptFocus inside consumeFocusFromQuery will
-// no-op. The watcher fires when sortedMembers updates and tries again.
-watch(() => members.value.length, attemptFocus)
-
-watch(() => route.query.focus, () => consumeFocusFromQuery())
+const { consume: consumeFocusFromQuery } = useDeepLinkFocus({
+  route,
+  router,
+  queryKey: 'focus',
+  anchorClass: (id) => `member-anchor-${id}`,
+  // Re-try after the cards actually render. The grid is gated on
+  // !loading, and the store updates members and loading in separate
+  // flushes, so watch both: the retry must fire when loading settles
+  // (cards mount), not just when the list length changes.
+  watchSource: () => [loading.value, members.value.length],
+})
 
 onMounted(() => {
   loadMembers()
-  if (typeof window !== 'undefined' && window.matchMedia) {
-    phoneMql = window.matchMedia(PHONE_MQ)
-    isPhone.value = phoneMql.matches
-    phoneMql.addEventListener?.('change', syncPhone)
-  }
   // Process any ?focus=<id> the page was opened with. Has to run after
   // mount because router.replace would no-op during setup.
   consumeFocusFromQuery()
-})
-
-onBeforeUnmount(() => {
-  phoneMql?.removeEventListener?.('change', syncPhone)
-  phoneMql = null
 })
 </script>
 
@@ -777,7 +606,7 @@ onBeforeUnmount(() => {
     <MemberFormDialog
       v-model="dialogOpen"
       :member="editingMember"
-      @saved="loadMembers"
+      @saved="reloadFresh"
     />
 
     <ResumeViewerDialog

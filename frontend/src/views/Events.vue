@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElInput, ElMessage, ElOption, ElSelect } from 'element-plus'
 import {
@@ -15,99 +15,68 @@ import {
 } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
-import EventDetailDialog from '../components/EventDetailDialog.vue'
-import EventFormDialog from '../components/EventFormDialog.vue'
+import EventDetailDialog from '../components/events/EventDetailDialog.vue'
+import EventFormDialog from '../components/events/EventFormDialog.vue'
+import {
+  TAG_FILTER_LIMIT,
+  YEAR_OPTIONS,
+  safeOrder,
+  safeStringList,
+  safeYear,
+} from '../components/events/eventFilters'
+import { storeToRefs } from 'pinia'
+
 import { eventsApi } from '../api/events'
 import { useAuthStore } from '../stores/auth'
+import { useEventsStore } from '../stores/events'
+import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import { useEventPeek } from '../composables/useEventPeek'
+import { useDialogRouteSync } from '../composables/useDialogRouteSync'
+import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const CURRENT_YEAR = new Date().getFullYear()
-const MIN_YEAR = 2000
-const YEAR_OPTIONS = (() => {
-  const out = []
-  for (let y = CURRENT_YEAR; y >= MIN_YEAR; y--) out.push(y)
-  return out
-})()
-const TAG_FILTER_LIMIT = 20
 const SEARCH_DEBOUNCE_MS = 300
 
-function _safeOrder(v) {
-  return v === 'asc' ? 'asc' : 'desc'
-}
-function _safeYear(v) {
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  if (!Number.isFinite(n) || n < MIN_YEAR || n > CURRENT_YEAR) return null
-  return n
-}
-function _safeStringList(v, limit) {
-  const raw = v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]
-  const out = []
-  for (const item of raw) {
-    if (typeof item !== 'string') continue
-    const trimmed = item.trim()
-    if (!trimmed || out.includes(trimmed)) continue
-    out.push(trimmed)
-    if (out.length >= limit) break
-  }
-  return out
-}
-function _safeId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
-
-const sortOrder = ref(_safeOrder(route.query.order))
-const year = ref(_safeYear(route.query.year))
-const tag = ref(_safeStringList(route.query.tag, TAG_FILTER_LIMIT))
-const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
-
-const items = ref([])
-const total = ref(0)
-const loading = ref(false)
-
-// Rail fill: a single CSS var (--tl-progress, 0..1) scales the warm fill
-// on the spine via .timeline::after. It's hover-driven — hovering a card
-// extends the fill from the top of the rail down to THAT card's node, and
-// leaving collapses it. 0 = empty rail.
-const timelineRef = ref(null)
-const tlProgress = ref(0)
-let _tlReducedMotion = false
-onMounted(() => {
-  _tlReducedMotion =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+// Filter state lives in the URL; `detail` is preserved across rewrites for
+// the deep-link dialog. onChange refetches after each sync. Mirrors Jobs.
+const { sortOrder, year, tag, q } = useUrlQuerySync({
+  route,
+  router,
+  preserveKeys: ['detail'],
+  onChange: () => loadItems(),
+  fields: {
+    sortOrder: {
+      queryKey: 'order',
+      parse: safeOrder,
+      serialize: (v) => (v !== 'desc' ? v : undefined),
+    },
+    year: {
+      parse: safeYear,
+      serialize: (v) => (v ? String(v) : undefined),
+    },
+    tag: {
+      parse: (v) => safeStringList(v, TAG_FILTER_LIMIT),
+      serialize: (v) => (v.length > 0 ? [...v] : undefined),
+    },
+    q: {
+      parse: (v) => (typeof v === 'string' ? v : ''),
+      serialize: (v) => v || undefined,
+      debounce: SEARCH_DEBOUNCE_MS,
+    },
+  },
 })
 
-// Fraction of the rail to fill so it reaches the hovered card's node. The
-// node sits at the card's vertical centre; offsets are taken relative to
-// the timeline, so they're scroll-independent.
-function fillToCard(cardEl) {
-  const tl = timelineRef.value
-  if (!tl || !cardEl) return
-  const tlRect = tl.getBoundingClientRect()
-  if (tlRect.height <= 0) return
-  const cardRect = cardEl.getBoundingClientRect()
-  const nodeY = cardRect.top + cardRect.height / 2 - tlRect.top
-  tlProgress.value = Math.max(0, Math.min(1, nodeY / tlRect.height))
-}
+const eventsStore = useEventsStore()
+const { items, total, loading } = storeToRefs(eventsStore)
 
-// Card hover: light the rail down to this card's node + start its photo
-// slideshow. Leaving collapses both.
-function onCardEnter(event, ev) {
-  fillToCard(event.currentTarget)
-  startPeek(ev)
-}
-function onCardLeave(ev) {
-  tlProgress.value = 0
-  stopPeek(ev)
-}
+// Timeline card hover: rail fill (--tl-progress, 0..1, lights the warm
+// spine down to the hovered card's node) + lazy photo-peek slideshow
+// (peekLayers cross-dissolve), both driven by onCardEnter/onCardLeave.
+const { timelineRef, tlProgress, peekLayers, onCardEnter, onCardLeave } =
+  useEventPeek()
 
 // ---- Warm Spectrum: deterministic per-event hue, clamped to the
 // amber->rose arc. Pure FNV-1a over char codes — same seed always yields
@@ -135,88 +104,22 @@ function entryStyle(ev, ei) {
   return hue === null ? { '--i': ei } : { '--i': ei, '--ev-hue': hue }
 }
 
-// ---- Lazy 2nd-photo hover peek ----
-// Per-view cache survives re-sorts/re-filters (photo bytes are immutable).
-// Hover slideshow: while a card is hovered, walk the event's photos on an
-// interval. Two stacked layers (a/b) cross-dissolve between consecutive
-// slides; the cover stays underneath. The first switch waits one full
-// interval so the cover holds before the show begins.
-const PEEK_INTERVAL_MS = 1800
-const _peekUrls = new Map() // ev.id -> [url, ...] | null (none/failed)
-const _peekTimers = new Map() // ev.id -> intervalId
-// id -> { a: url|null, b: url|null, active: 'a'|'b' }
-const peekLayers = ref({})
-
-function _setLayer(id, patch) {
-  const cur = peekLayers.value[id] || { a: null, b: null, active: 'a' }
-  peekLayers.value = { ...peekLayers.value, [id]: { ...cur, ...patch } }
-}
-
-async function _loadPeekUrls(ev) {
-  if (_peekUrls.has(ev.id)) return _peekUrls.get(ev.id)
-  _peekUrls.set(ev.id, null) // in-flight sentinel
-  try {
-    const photos = await eventsApi.listPhotos(ev.id)
-    // Cover first, then the rest, so the slideshow walks the whole album.
-    const ordered = [
-      ...photos.filter((p) => p.id === ev.cover_photo_id),
-      ...photos.filter((p) => p.id !== ev.cover_photo_id),
-    ]
-    const urls = ordered.map((p) => eventsApi.photoUrl(ev.id, p.id))
-    _peekUrls.set(ev.id, urls.length > 1 ? urls : null)
-    return _peekUrls.get(ev.id)
-  } catch {
-    _peekUrls.set(ev.id, null)
-    return null
-  }
-}
-
-async function startPeek(ev) {
-  if (_tlReducedMotion) return
-  if (!ev?.cover_photo_id || ev.photo_count < 2) return
-  if (_peekTimers.has(ev.id)) return // already running
-  const urls = await _loadPeekUrls(ev)
-  if (!urls || urls.length < 2) return
-  // Build the rotation. With 2+ non-cover photos, loop ONLY the real
-  // photos so the last cross-dissolves straight back to the first (no
-  // dwell on the cover). With a single extra photo, alternate it with
-  // the cover so there are still two frames to animate between.
-  const rest = urls.slice(1)
-  const slides = rest.length >= 2 ? rest : urls
-  // startI is chosen so the very first tick lands on the first real photo.
-  let i = slides === urls ? 0 : -1
-  // Fresh start: cover only (no peek layers yet) until the first tick.
-  peekLayers.value = { ...peekLayers.value, [ev.id]: { a: null, b: null, active: 'a' } }
-  const id = setInterval(() => {
-    i = (i + 1) % slides.length
-    const cur = peekLayers.value[ev.id] || { active: 'a' }
-    const nextActive = cur.active === 'a' ? 'b' : 'a'
-    // Paint the next slide onto the inactive layer, then flip — the two
-    // layers cross-dissolve via the opacity transition in CSS.
-    _setLayer(ev.id, { [nextActive]: slides[i], active: nextActive })
-  }, PEEK_INTERVAL_MS)
-  _peekTimers.set(ev.id, id)
-}
-
-function stopPeek(ev) {
-  const id = _peekTimers.get(ev.id)
-  if (id !== undefined) {
-    clearInterval(id)
-    _peekTimers.delete(ev.id)
-  }
-  // Keep the layers; CSS gates visibility on :hover, so the active slide
-  // simply fades back to the cover when the pointer leaves.
-}
-
-onUnmounted(() => {
-  for (const id of _peekTimers.values()) clearInterval(id)
-  _peekTimers.clear()
-})
 
 const formOpen = ref(false)
 const editingEvent = ref(null)
-const detailOpen = ref(false)
-const detailEvent = ref(null)
+
+// ?detail=<id> deep-link <-> detail dialog (open/fetch/close + drop the
+// URL key on close), shared with Jobs via useDialogRouteSync.
+const {
+  open: detailOpen,
+  item: detailEvent,
+  show: openDetail,
+} = useDialogRouteSync({
+  route,
+  router,
+  queryKey: 'detail',
+  fetchItem: (id) => eventsApi.get(id),
+})
 
 // Group the (already sorted) events by calendar year so the timeline can
 // drop a sticky year divider at each boundary. Order of years follows
@@ -276,50 +179,24 @@ function excerpt(md, n = 120) {
 }
 
 async function loadItems() {
-  loading.value = true
   try {
-    const data = await eventsApi.list({
+    await eventsStore.fetch({
       order: sortOrder.value,
       year: year.value ?? undefined,
       tag: tag.value,
       q: q.value || undefined,
     })
-    items.value = data.items
-    total.value = data.total
   } catch {
     ElMessage.error('載入活動失敗')
-  } finally {
-    loading.value = false
   }
 }
 
-function syncUrl() {
-  const query = {}
-  if (sortOrder.value !== 'desc') query.order = sortOrder.value
-  if (year.value) query.year = String(year.value)
-  if (tag.value.length > 0) query.tag = [...tag.value]
-  if (q.value) query.q = q.value
-  if (route.query.detail !== undefined) query.detail = route.query.detail
-  router.replace({ query })
-}
-
-watch([sortOrder, year, tag], () => {
-  syncUrl()
+// After a create/update/delete the cache would otherwise serve a stale
+// row, so drop it before reloading the current view authoritatively.
+function reloadFresh() {
+  eventsStore.invalidate()
   loadItems()
-}, { deep: true })
-
-let qTimer = null
-watch(q, () => {
-  if (qTimer !== null) clearTimeout(qTimer)
-  qTimer = setTimeout(() => {
-    qTimer = null
-    syncUrl()
-    loadItems()
-  }, SEARCH_DEBOUNCE_MS)
-})
-onUnmounted(() => {
-  if (qTimer !== null) clearTimeout(qTimer)
-})
+}
 
 // ---- tag filter suggestions ----
 const tagSuggestions = ref([])
@@ -350,79 +227,33 @@ function openEdit(ev) {
   editingEvent.value = { ...ev }
   formOpen.value = true
 }
-function openDetail(ev) {
-  detailEvent.value = ev
-  detailOpen.value = true
-}
 function onDetailEdit(ev) {
   setTimeout(() => openEdit(ev), 0)
 }
 
-// ---- delete ----
-const deleteOpen = ref(false)
-const deleteTarget = ref(null)
-const deleteSubmitting = ref(false)
-const deleteError = ref('')
-
-function askDelete(ev) {
-  deleteTarget.value = ev
-  deleteError.value = ''
-  deleteOpen.value = true
-}
-async function onDeleteConfirm(password) {
-  const target = deleteTarget.value
-  if (!target) return
-  deleteSubmitting.value = true
-  deleteError.value = ''
-  try {
-    await eventsApi.remove(target.id, password)
-    ElMessage.success(`已刪除「${target.title}」`)
-    deleteOpen.value = false
-    deleteTarget.value = null
-    if (detailOpen.value && detailEvent.value?.id === target.id) {
+// ---- delete (password-confirmed, shared with Jobs) ----
+const {
+  dialogOpen: deleteOpen,
+  target: deleteTarget,
+  submitting: deleteSubmitting,
+  error: deleteError,
+  open: askDelete,
+  confirm: onDeleteConfirm,
+} = useDeleteWithPassword({
+  remove: (ev, password) => eventsApi.remove(ev.id, password),
+  messages: { 404: '活動已不存在' },
+  onSuccess: (ev) => {
+    ElMessage.success(`已刪除「${ev.title}」`)
+    // Close the detail dialog too if it was open on this same event.
+    if (detailOpen.value && detailEvent.value?.id === ev.id) {
       detailOpen.value = false
     }
-    loadItems()
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 422) deleteError.value = '密碼錯誤'
-    else if (status === 403) deleteError.value = '權限不足'
-    else if (status === 404) deleteError.value = '活動已不存在'
-    else deleteError.value = '刪除失敗，請稍後再試'
-  } finally {
-    deleteSubmitting.value = false
-  }
-}
-
-// ---- ?detail=<id> deep-link ----
-async function _openDetailById(id) {
-  try {
-    detailEvent.value = await eventsApi.get(id)
-    detailOpen.value = true
-  } catch {
-    /* deleted / bad id — no-op */
-  }
-}
-watch(
-  () => route.query.detail,
-  (val) => {
-    const id = _safeId(val)
-    if (id === null) return
-    if (detailOpen.value && detailEvent.value?.id === id) return
-    _openDetailById(id)
+    reloadFresh()
   },
-  { immediate: true },
-)
-watch(detailOpen, (val) => {
-  if (val) return
-  if (route.query.detail === undefined) return
-  const next = { ...route.query }
-  delete next.detail
-  router.replace({ query: next })
 })
 
 function onSaved() {
-  loadItems()
+  reloadFresh()
 }
 
 onMounted(loadItems)
