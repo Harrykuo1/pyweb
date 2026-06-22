@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
+import { extractError } from '../utils/apiError'
 
 // Role metadata drives both list grouping and the detail header. Adding a
 // new role here is enough to slot it into the layout — the rest iterates
@@ -81,12 +82,6 @@ export function useAccounts() {
   const visibleCount = computed(() =>
     filteredGroups.value.reduce((n, g) => n + g.accounts.length, 0),
   )
-
-  function extractError(err, fallback) {
-    const detail = err?.response?.data?.detail
-    if (typeof detail === 'string') return detail
-    return fallback
-  }
 
   async function loadUsers() {
     loadingUsers.value = true

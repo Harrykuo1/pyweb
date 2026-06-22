@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { jobAttachmentsApi } from '../api/jobAttachments'
 import { joinPath } from '../utils/attachmentTree'
+import { extractError } from '../utils/apiError'
 
 // OS-spat metadata files that appear inside folder uploads but the admin
 // never actually wants archived. The backend rejects these too as a safety
@@ -200,17 +201,16 @@ export function useAttachmentUpload({
       }
     } catch (err) {
       const status = err?.response?.status
-      const detail = err?.response?.data?.detail
-      const message =
-        typeof detail === 'string'
-          ? detail
-          : status === 413
-            ? '超過大小上限'
-            : status === 415
-              ? '不支援的檔案類型'
-              : status === 409
-                ? '上傳被拒'
-                : '上傳失敗'
+      const message = extractError(
+        err,
+        status === 413
+          ? '超過大小上限'
+          : status === 415
+            ? '不支援的檔案類型'
+            : status === 409
+              ? '上傳被拒'
+              : '上傳失敗',
+      )
       ElMessage.error(`${relpath}：${message}`)
     }
   }

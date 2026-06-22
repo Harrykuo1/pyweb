@@ -2,6 +2,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { settingImageUrl, settingsApi } from '../api/settings'
+import { extractError } from '../utils/apiError'
 
 const LOGO_KEY = 'login_logo'
 const LOGO_MAX_BYTES = 2 * 1024 * 1024
@@ -108,12 +109,6 @@ export function useLogoUpload() {
   watch(cropOpen, (open) => {
     if (!open) cropSourceFile.value = null
   })
-
-  function extractError(err, fallback) {
-    const detail = err?.response?.data?.detail
-    if (typeof detail === 'string') return detail
-    return fallback
-  }
 
   async function uploadLogo() {
     if (!pendingLogoFile.value) {

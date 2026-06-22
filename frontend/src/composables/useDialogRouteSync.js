@@ -1,14 +1,6 @@
 import { ref, watch } from 'vue'
 
-// Coerce a query value into a positive integer id or null. Arrays (from a
-// duplicated ?key=A&key=B), NaN and non-positive values all drop to null
-// so a malformed URL just no-ops instead of crashing the fetch.
-function defaultValidateId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
+import { safeId } from '../utils/safeId'
 
 // Two-way binding between a `?<queryKey>=<id>` deep-link and a detail
 // dialog's open/target state: a deep-link URL fetches the record and opens
@@ -21,7 +13,7 @@ export function useDialogRouteSync({
   router,
   queryKey = 'detail',
   fetchItem,
-  validateId = defaultValidateId,
+  validateId = safeId,
 }) {
   const open = ref(false)
   const item = ref(null)

@@ -1,12 +1,6 @@
 import { nextTick, ref, watch } from 'vue'
 
-// Coerce a query value into a positive integer id or null.
-function defaultValidateId(v) {
-  if (Array.isArray(v)) v = v[0]
-  if (v === undefined || v === null || v === '') return null
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
-}
+import { safeId } from '../utils/safeId'
 
 // "Scroll to and flash" a row from a `?<queryKey>=<id>` deep-link. Calling
 // consume() reads the id, strips the key from the URL (so a refresh or
@@ -21,7 +15,7 @@ export function useDeepLinkFocus({
   anchorClass,
   watchSource,
   flashMs = 1500,
-  validateId = defaultValidateId,
+  validateId = safeId,
 }) {
   const pendingId = ref(null)
 
