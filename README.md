@@ -41,14 +41,18 @@ pyweb/
 │       └── core/             # config / deps / security / rate_limit / attachments / office_convert / runtime_config / audit_log / search_query
 ├── frontend/                 # Vue 3 + Vite 前端
 │   └── src/
-│       ├── views/            # Home / Login / Members / Jobs / Settings
+│       ├── views/            # Home / Login / Members / Jobs / Events / Settings
 │       ├── layouts/          # AuthLayout（navbar + outlet）
-│       ├── components/       # 對話框、附件管理 / 檢視、TimelineFeed、MarqueeText 等
+│       ├── components/       # 共用對話框、TimelineFeed、MarqueeText 等
+│       │   ├── jobs/         # 求職頁元件（卡片 / 篩選 / 排序 / 附件管理）
+│       │   ├── events/       # 活動頁元件（時間軸 / 詳情 / 表單 / 照片管理）
+│       │   ├── members/      # 成員頁元件（表單 / 照片格 / 履歷檢視）
 │       │   └── settings/     # 設定頁的各區塊
+│       ├── composables/      # 可重用邏輯（useDeleteWithPassword / useUrlQuerySync / useDialogRouteSync / useMediaQuery / useOutsideClick / 各頁專屬…）
 │       ├── router/
-│       ├── stores/           # Pinia auth store
+│       ├── stores/           # Pinia：auth + jobs/events/members 清單（createListStore SWR 快取）
 │       ├── api/              # axios 包裝
-│       └── utils/            # attachmentTree / searchQuery / relativeTime / useCounter
+│       └── utils/            # attachmentTree / searchQuery / relativeTime / safeId / apiError / useCounter
 ├── nginx/                    # 容器內前端 nginx 設定
 ├── data/                     # bind mount：SQLite + uploads + logs（已 gitignore）
 ├── scripts/                  # rclone 備份腳本
