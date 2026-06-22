@@ -56,6 +56,10 @@ pnpm-debug.log*
 # Superpowers plan / scratch docs (tool-generated, kept local)
 docs/superpowers/
 
+# Agent-skills artifacts (skills CLI lockfile + ui-ux-pro-max design-system output)
+skills-lock.json
+design-system/
+
 # rclone — never commit; contains OAuth refresh token + (if used) crypt password
 rclone.conf
 .rclone.conf
