@@ -1,0 +1,31 @@
+# Ruff: linter + formatter for the backend. Lint rules kept to a
+# high-signal set; formatting uses Ruff's Black-compatible defaults.
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+# E/F pycodestyle+pyflakes, I import sorting, UP pyupgrade,
+# B bugbear, C4 comprehensions. E501 off — the formatter owns wrapping.
+# UP042/UP046 rewrite str-enums and generics in ways that can shift
+# Pydantic/enum runtime behavior, so keep them off.
+select = ["E", "F", "I", "UP", "B", "C4"]
+ignore = ["E501", "UP042", "UP046"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends/Query/etc. are call-in-default by design — the whole
+# dependency-injection system relies on it — so they are not B008 bugs.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Security",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
