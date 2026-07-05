@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import get_current_user, require_admin, require_member
 from app.database import get_db
 from app.models import User, UserRole
 
@@ -42,6 +42,10 @@ def _build_app(db_session, *, seed_users: list[User] | None = None) -> FastAPI:
 
     @app.get("/test/admin-only")
     def admin_only(user: User = Depends(require_admin)):
+        return {"id": user.id}
+
+    @app.get("/test/member-only")
+    def member_only(user: User = Depends(require_member)):
         return {"id": user.id}
 
     return app
@@ -115,6 +119,46 @@ def test_require_admin_rejects_unauthenticated(db_session):
 
     r = client.get("/test/admin-only")
     assert r.status_code == 401
+
+
+def test_require_member_allows_member(db_session):
+    seed = [User(id=20, username="m", password_hash="h", role=UserRole.MEMBER)]
+    app = _build_app(db_session, seed_users=seed)
+    client = TestClient(app)
+
+    client.post("/test/_login_as/20")
+    r = client.get("/test/member-only")
+
+    assert r.status_code == 200
+    assert r.json() == {"id": 20}
+
+
+def test_require_member_allows_admin(db_session):
+    seed = [User(id=21, username="a", password_hash="h", role=UserRole.ADMIN)]
+    app = _build_app(db_session, seed_users=seed)
+    client = TestClient(app)
+
+    client.post("/test/_login_as/21")
+    assert client.get("/test/member-only").status_code == 200
+
+
+def test_require_member_rejects_viewer(db_session):
+    seed = [User(id=22, username="v", password_hash="h", role=UserRole.VIEWER)]
+    app = _build_app(db_session, seed_users=seed)
+    client = TestClient(app)
+
+    client.post("/test/_login_as/22")
+    r = client.get("/test/member-only")
+
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Member role required"
+
+
+def test_require_member_rejects_unauthenticated(db_session):
+    app = _build_app(db_session)
+    client = TestClient(app)
+
+    assert client.get("/test/member-only").status_code == 401
 
 
 def test_get_current_user_evicts_session_after_password_version_bump(db_session):

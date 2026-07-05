@@ -45,3 +45,16 @@ def require_admin(
             detail="Admin role required",
         )
     return current_user
+
+
+def require_member(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    # Posting (jobs/events) is open to real members and admins. The legacy
+    # shared VIEWER account stays read-only during the transition.
+    if current_user.role not in (UserRole.ADMIN, UserRole.MEMBER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Member role required",
+        )
+    return current_user
