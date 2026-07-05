@@ -1,9 +1,14 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core import audit_log
+from app.core import audit_log, discord_oauth
+from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
+from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str
 from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models import User, UserRole
@@ -58,6 +63,90 @@ def login(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid password",
     )
+
+
+# Browser lands here on any failed Discord login; the frontend login page
+# reads ?error=<reason> to show a message. "/" on success.
+_LOGIN_PATH = "/login"
+_HOME_PATH = "/"
+
+
+def _oauth_error(reason: str) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{_LOGIN_PATH}?error={reason}",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/discord/login")
+def discord_login(request: Request) -> Response:
+    if not settings.discord_oauth_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord login is not configured",
+        )
+    state = secrets.token_urlsafe(32)
+    request.session["discord_oauth_state"] = state
+    return RedirectResponse(
+        url=discord_oauth.build_authorize_url(state),
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/discord/callback")
+def discord_callback(
+    request: Request,
+    db: Session = Depends(get_db),
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> Response:
+    if not settings.discord_oauth_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord login is not configured",
+        )
+
+    # User denied consent on Discord's side.
+    if error is not None:
+        return _oauth_error("discord_denied")
+
+    # CSRF: the state we stored before redirecting must come back intact.
+    expected_state = request.session.pop("discord_oauth_state", None)
+    if not state or not expected_state or state != expected_state:
+        return _oauth_error("state_mismatch")
+    if not code:
+        return _oauth_error("missing_code")
+
+    token = discord_oauth.exchange_code(code)
+    if token is None:
+        return _oauth_error("token_exchange_failed")
+
+    identity = discord_oauth.fetch_identity(token)
+    if identity is None:
+        return _oauth_error("identity_failed")
+
+    # Re-verify guild membership on every login: leaving the guild revokes
+    # access immediately.
+    guild_id = get_str(db, DISCORD_GUILD_ID_KEY)
+    if not guild_id:
+        return _oauth_error("guild_not_configured")
+    if not discord_oauth.is_guild_member(token, guild_id):
+        return _oauth_error("not_member")
+
+    user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
+    if user is None:
+        # Not linked yet. The first-login bridge (match by
+        # pending_discord_username) + the pending-link queue land in a
+        # later phase; until then a verified-but-unlinked identity is
+        # turned away cleanly.
+        return _oauth_error("not_linked")
+
+    request.session["user_id"] = user.id
+    request.session["role"] = user.role.value
+    request.session["password_version"] = user.password_version
+    audit_log.record_success(audit_log.client_ip(request), role=user.role.value)
+    return RedirectResponse(url=_HOME_PATH, status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
