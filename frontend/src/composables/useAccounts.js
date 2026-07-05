@@ -158,7 +158,11 @@ export function useAccounts() {
     passwordSubmitting[role] = true
     try {
       await auth.updatePassword(role, f.current_password, f.new_password)
-      passwordForm[role] = { current_password: '', new_password: '', confirm: '' }
+      passwordForm[role] = {
+        current_password: '',
+        new_password: '',
+        confirm: '',
+      }
       ElMessage.success('密碼已更新')
     } catch (err) {
       const status = err?.response?.status

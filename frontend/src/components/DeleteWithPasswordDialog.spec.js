@@ -39,13 +39,13 @@ function passwordComponent(w) {
   return w.findComponent({ name: 'ElInput' })
 }
 
-function confirmButton(w) {
+function confirmButton() {
   return Array.from(document.querySelectorAll('button')).find(
     (b) => b.textContent.trim() === '刪除',
   )
 }
 
-function cancelButton(w) {
+function cancelButton() {
   return Array.from(document.querySelectorAll('button')).find(
     (b) => b.textContent.trim() === '取消',
   )
@@ -53,7 +53,7 @@ function cancelButton(w) {
 
 describe('DeleteWithPasswordDialog', () => {
   it('renders the title, item name, and warning text', async () => {
-    const w = open({ itemName: 'Alice', warning: '永久刪除' })
+    open({ itemName: 'Alice', warning: '永久刪除' })
     await flushPromises()
     expect(document.body.textContent).toContain('刪除成員')
     expect(document.body.textContent).toContain('Alice')
@@ -94,7 +94,7 @@ describe('DeleteWithPasswordDialog', () => {
   })
 
   it('renders an error message when errorMessage is set', async () => {
-    const w = open({ errorMessage: '密碼錯誤' })
+    open({ errorMessage: '密碼錯誤' })
     await flushPromises()
     const err = document.querySelector('[data-test="delete-error"]')
     expect(err).not.toBeNull()

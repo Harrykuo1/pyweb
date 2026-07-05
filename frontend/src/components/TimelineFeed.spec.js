@@ -240,7 +240,9 @@ describe('TimelineFeed.vue', () => {
         job_month: 5,
       },
     ])
-    await wrapper.find('[data-test="timeline-row-job_created"]').trigger('click')
+    await wrapper
+      .find('[data-test="timeline-row-job_created"]')
+      .trigger('click')
     expect(pushMock).toHaveBeenCalledWith({
       path: '/jobs',
       query: { detail: '9' },
@@ -400,12 +402,10 @@ describe('TimelineFeed.vue — lazy load (cursor pagination)', () => {
   })
 
   it('ignores non-intersecting observer events', async () => {
-    const listSpy = vi
-      .spyOn(timelineApi, 'list')
-      .mockResolvedValue({
-        items: [memberItem(1, ONE_HOUR_AGO)],
-        has_more: true,
-      })
+    const listSpy = vi.spyOn(timelineApi, 'list').mockResolvedValue({
+      items: [memberItem(1, ONE_HOUR_AGO)],
+      has_more: true,
+    })
     mount(TimelineFeed, { props: { pageSize: 1 } })
     await flushPromises()
 

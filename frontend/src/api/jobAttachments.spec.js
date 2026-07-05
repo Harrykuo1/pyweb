@@ -19,7 +19,9 @@ describe('attachmentUrl', () => {
 
 describe('attachmentPreviewUrl', () => {
   it('builds the office-preview PDF path', () => {
-    expect(attachmentPreviewUrl(7, 42)).toBe('/api/jobs/7/attachments/42/preview')
+    expect(attachmentPreviewUrl(7, 42)).toBe(
+      '/api/jobs/7/attachments/42/preview',
+    )
   })
 })
 
@@ -34,8 +36,12 @@ describe('jobAttachmentsApi.list', () => {
 
 describe('jobAttachmentsApi.upload', () => {
   it('POSTs multipart form with the file alone when no strategy is given', async () => {
-    const file = new File([new Uint8Array([1, 2])], 'a.pdf', { type: 'application/pdf' })
-    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 11 } })
+    const file = new File([new Uint8Array([1, 2])], 'a.pdf', {
+      type: 'application/pdf',
+    })
+    const post = vi
+      .spyOn(client, 'post')
+      .mockResolvedValue({ data: { id: 11 } })
 
     const result = await jobAttachmentsApi.upload(7, file)
 
@@ -50,8 +56,12 @@ describe('jobAttachmentsApi.upload', () => {
   })
 
   it('includes conflict_strategy in the form when provided', async () => {
-    const file = new File([new Uint8Array([1])], 'a.pdf', { type: 'application/pdf' })
-    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 12 } })
+    const file = new File([new Uint8Array([1])], 'a.pdf', {
+      type: 'application/pdf',
+    })
+    const post = vi
+      .spyOn(client, 'post')
+      .mockResolvedValue({ data: { id: 12 } })
 
     await jobAttachmentsApi.upload(7, file, 'overwrite')
 
@@ -78,7 +88,11 @@ describe('jobAttachmentsApi.bulkRemove', () => {
       .spyOn(client, 'post')
       .mockResolvedValue({ data: { deleted: 3 } })
 
-    const result = await jobAttachmentsApi.bulkRemove(7, [11, 12, 13], 'admin-pw')
+    const result = await jobAttachmentsApi.bulkRemove(
+      7,
+      [11, 12, 13],
+      'admin-pw',
+    )
 
     expect(post).toHaveBeenCalledWith('/jobs/7/attachments/bulk-delete', {
       ids: [11, 12, 13],

@@ -126,7 +126,7 @@ describe('PhotoCropDialog', () => {
   })
 
   it('renders custom title when provided', async () => {
-    const wrapper = mount(PhotoCropDialog, {
+    mount(PhotoCropDialog, {
       props: {
         modelValue: true,
         sourceFile: makeFile(),

@@ -36,15 +36,23 @@ afterEach(() => {
 describe('Settings.vue', () => {
   it('renders one sidebar entry per section', () => {
     const wrapper = mount(Settings, { global: { stubs } })
-    expect(wrapper.find('[data-test="settings-tab-account"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="settings-tab-appearance"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="settings-tab-system"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="settings-tab-account"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="settings-tab-appearance"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="settings-tab-system"]').exists()).toBe(
+      true,
+    )
   })
 
   it('defaults to the account section when hash is empty', async () => {
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
-    expect(wrapper.find('[data-test="settings-active-account"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="settings-active-account"]').exists()).toBe(
+      true,
+    )
     // Mount normalizes the URL hash so deep-links round-trip.
     expect(replaceMock).toHaveBeenCalledWith({ hash: '#account' })
   })
@@ -53,7 +61,9 @@ describe('Settings.vue', () => {
     routeMock.hash = '#system'
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
-    expect(wrapper.find('[data-test="settings-active-system"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="settings-active-system"]').exists()).toBe(
+      true,
+    )
     // Hash already matched the active section, no replace needed.
     expect(replaceMock).not.toHaveBeenCalled()
   })
@@ -62,7 +72,9 @@ describe('Settings.vue', () => {
     routeMock.hash = '#totally-bogus'
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
-    expect(wrapper.find('[data-test="settings-active-account"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="settings-active-account"]').exists()).toBe(
+      true,
+    )
     expect(replaceMock).toHaveBeenCalledWith({ hash: '#account' })
   })
 
@@ -72,7 +84,9 @@ describe('Settings.vue', () => {
     replaceMock.mockClear()
 
     await wrapper.find('[data-test="settings-tab-appearance"]').trigger('click')
-    expect(wrapper.find('[data-test="settings-active-appearance"]').exists()).toBe(true)
+    expect(
+      wrapper.find('[data-test="settings-active-appearance"]').exists(),
+    ).toBe(true)
     expect(replaceMock).toHaveBeenCalledWith({ hash: '#appearance' })
   })
 

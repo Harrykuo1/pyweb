@@ -41,7 +41,9 @@ const memberWithoutPhoto = {
 }
 
 function makeFile(opts = {}) {
-  const f = new File(['x'], opts.name ?? 'a.png', { type: opts.type ?? 'image/png' })
+  const f = new File(['x'], opts.name ?? 'a.png', {
+    type: opts.type ?? 'image/png',
+  })
   Object.defineProperty(f, 'size', { value: opts.size ?? 1024 })
   return f
 }
@@ -50,7 +52,9 @@ describe('MemberPhotoCell', () => {
   it('renders an el-image with preview when the member has a photo', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'v', role: 'viewer' }
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithPhoto },
+    })
 
     const img = wrapper.findComponent({ name: 'ElImage' })
     expect(img.exists()).toBe(true)
@@ -65,7 +69,9 @@ describe('MemberPhotoCell', () => {
   it('renders the icon fallback (no preview) when no photo', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'v', role: 'viewer' }
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithoutPhoto },
+    })
 
     expect(wrapper.findComponent({ name: 'ElImage' }).exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'ElAvatar' }).exists()).toBe(true)
@@ -74,7 +80,9 @@ describe('MemberPhotoCell', () => {
   it('viewer sees no admin actions', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'v', role: 'viewer' }
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithPhoto },
+    })
 
     expect(wrapper.find('[data-test="upload-photo"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="delete-photo"]').exists()).toBe(false)
@@ -97,10 +105,14 @@ describe('MemberPhotoCell', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithoutPhoto },
+    })
     const file = makeFile()
 
-    const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
+    const onChange = wrapper
+      .findComponent({ name: 'ElUpload' })
+      .props('onChange')
     await onChange({ raw: file, name: file.name, size: file.size })
 
     const events = wrapper.emitted('request-upload')
@@ -116,10 +128,14 @@ describe('MemberPhotoCell', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithoutPhoto },
+    })
     const huge = makeFile({ size: 5 * 1024 * 1024 + 1 })
 
-    const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
+    const onChange = wrapper
+      .findComponent({ name: 'ElUpload' })
+      .props('onChange')
     await onChange({ raw: huge, name: huge.name, size: huge.size })
 
     expect(wrapper.emitted('request-upload')).toBeFalsy()
@@ -129,10 +145,14 @@ describe('MemberPhotoCell', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithoutPhoto },
+    })
     const gif = makeFile({ type: 'image/gif', name: 'a.gif' })
 
-    const onChange = wrapper.findComponent({ name: 'ElUpload' }).props('onChange')
+    const onChange = wrapper
+      .findComponent({ name: 'ElUpload' })
+      .props('onChange')
     await onChange({ raw: gif, name: gif.name, size: gif.size })
 
     expect(wrapper.emitted('request-upload')).toBeFalsy()
@@ -142,7 +162,9 @@ describe('MemberPhotoCell', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
-    const wrapper = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+    const wrapper = mount(MemberPhotoCell, {
+      props: { member: memberWithPhoto },
+    })
     await wrapper.find('[data-test="delete-photo"]').trigger('click')
 
     const events = wrapper.emitted('request-delete')
@@ -171,12 +193,17 @@ describe('MemberPhotoCell', () => {
   it('appends member.photo_updated_at as cache-busting version stamp', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'v', role: 'viewer' }
-    const stamped = { ...memberWithPhoto, photo_updated_at: '2026-04-30T12:00:00Z' }
+    const stamped = {
+      ...memberWithPhoto,
+      photo_updated_at: '2026-04-30T12:00:00Z',
+    }
     const wrapper = mount(MemberPhotoCell, { props: { member: stamped } })
 
     const img = wrapper.findComponent({ name: 'ElImage' })
     expect(img.props('src')).toContain('?v=')
-    expect(img.props('src')).toContain(encodeURIComponent('2026-04-30T12:00:00Z'))
+    expect(img.props('src')).toContain(
+      encodeURIComponent('2026-04-30T12:00:00Z'),
+    )
   })
 
   it('omits version stamp when photo_updated_at is null', () => {

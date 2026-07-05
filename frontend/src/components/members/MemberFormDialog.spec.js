@@ -214,7 +214,11 @@ describe('MemberFormDialog', () => {
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'institution', 'SWE')
     const file = pdfFile()
-    await wrapper.vm.handlePdfChange({ raw: file, name: file.name, size: file.size })
+    await wrapper.vm.handlePdfChange({
+      raw: file,
+      name: file.name,
+      size: file.size,
+    })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -240,7 +244,11 @@ describe('MemberFormDialog', () => {
       },
     })
     const file = pdfFile()
-    await wrapper.vm.handlePdfChange({ raw: file, name: file.name, size: file.size })
+    await wrapper.vm.handlePdfChange({
+      raw: file,
+      name: file.name,
+      size: file.size,
+    })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -311,7 +319,11 @@ describe('MemberFormDialog', () => {
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'institution', 'SWE')
     const big = pdfFile(11 * 1024 * 1024)
-    await wrapper.vm.handlePdfChange({ raw: big, name: big.name, size: big.size })
+    await wrapper.vm.handlePdfChange({
+      raw: big,
+      name: big.name,
+      size: big.size,
+    })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -327,7 +339,11 @@ describe('MemberFormDialog', () => {
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'institution', 'SWE')
     const docx = pdfFile(1024, 'application/msword', 'r.docx')
-    await wrapper.vm.handlePdfChange({ raw: docx, name: docx.name, size: docx.size })
+    await wrapper.vm.handlePdfChange({
+      raw: docx,
+      name: docx.name,
+      size: docx.size,
+    })
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()

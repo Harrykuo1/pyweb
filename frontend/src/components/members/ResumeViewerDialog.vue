@@ -6,7 +6,6 @@ import {
   ElEmpty,
   ElIcon,
   ElMessage,
-  ElSegmented,
   ElUpload,
 } from 'element-plus'
 import {
@@ -49,7 +48,10 @@ const availableFormats = computed(() => {
 
 const photoSrc = computed(() => {
   if (!props.member?.has_photo) return ''
-  return membersApi.photoUrl(props.member.id, props.member.photo_updated_at ?? '')
+  return membersApi.photoUrl(
+    props.member.id,
+    props.member.photo_updated_at ?? '',
+  )
 })
 
 function formatJoinDate(iso) {
@@ -75,7 +77,12 @@ const pdfSrc = computed(() => {
 })
 
 watch(
-  () => [props.modelValue, props.member?.id, props.member?.has_resume_pdf, props.member?.has_resume_md],
+  () => [
+    props.modelValue,
+    props.member?.id,
+    props.member?.has_resume_pdf,
+    props.member?.has_resume_md,
+  ],
   ([open]) => {
     if (!open || !props.member) return
     if (props.member.has_resume_pdf) tab.value = 'pdf'
@@ -171,12 +178,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
     @update:model-value="emit('update:modelValue', $event)"
   >
     <header v-if="member" class="resume-hero">
-      <button
-        type="button"
-        class="hero-close"
-        aria-label="關閉"
-        @click="close"
-      >
+      <button type="button" class="hero-close" aria-label="關閉" @click="close">
         <el-icon :size="18"><Close /></el-icon>
       </button>
       <div class="hero-photo-frame">
@@ -186,7 +188,8 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
       <div class="hero-text">
         <h2 class="hero-name">{{ member.real_name }}</h2>
         <p v-if="member.institution" class="hero-position">
-          {{ member.institution }}<span v-if="member.position"> · {{ member.position }}</span>
+          {{ member.institution
+          }}<span v-if="member.position"> · {{ member.position }}</span>
         </p>
         <div class="hero-meta">
           <span class="meta-pill">
@@ -220,13 +223,18 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
           <span class="format-card__text">
             <span class="format-card__title">{{ fmt.label }}</span>
             <span class="format-card__subtitle">
-              {{ fmt.value === 'pdf' ? '原始 PDF 履歷' : '格式化 Markdown 履歷' }}
+              {{
+                fmt.value === 'pdf' ? '原始 PDF 履歷' : '格式化 Markdown 履歷'
+              }}
             </span>
           </span>
         </button>
       </div>
 
-      <div class="viewer-body" :class="{ 'is-pdf': tab === 'pdf' && availableFormats.length }">
+      <div
+        class="viewer-body"
+        :class="{ 'is-pdf': tab === 'pdf' && availableFormats.length }"
+      >
         <div v-if="availableFormats.length === 0" class="empty-state">
           <el-empty description="尚未上傳履歷" />
         </div>
@@ -263,9 +271,13 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
                 :loading="uploadingPdf"
                 :disabled="uploadingPdf"
               >
-                {{ uploadingPdf
-                  ? '上傳中…'
-                  : (member.has_resume_pdf ? '替換 PDF' : '上傳 PDF') }}
+                {{
+                  uploadingPdf
+                    ? '上傳中…'
+                    : member.has_resume_pdf
+                      ? '替換 PDF'
+                      : '上傳 PDF'
+                }}
               </el-button>
             </el-upload>
             <el-button
@@ -347,7 +359,6 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
 </style>
 
 <style scoped>
-
 .resume-viewer {
   display: flex;
   flex-direction: column;
@@ -371,7 +382,8 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   /* Layered: dot grain on top, then base gradient — gives the panel
      more material depth than a flat candy gradient. */
   background:
-    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 22px 22px,
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 22px
+      22px,
     linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #c026d3 100%);
   color: #ffffff;
   overflow: hidden;
@@ -382,8 +394,16 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.22), transparent 55%),
-    radial-gradient(circle at 82% 100%, rgba(255, 255, 255, 0.12), transparent 55%);
+    radial-gradient(
+      circle at 18% 0%,
+      rgba(255, 255, 255, 0.22),
+      transparent 55%
+    ),
+    radial-gradient(
+      circle at 82% 100%,
+      rgba(255, 255, 255, 0.12),
+      transparent 55%
+    );
   pointer-events: none;
 }
 
@@ -518,7 +538,10 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   text-align: left;
   font: inherit;
   color: inherit;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s,
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s,
     transform 0.2s;
 }
 
@@ -545,7 +568,9 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   background: #f0eaff;
   color: #6366f1;
   flex-shrink: 0;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .format-card.is-active .format-card__icon {
@@ -569,7 +594,6 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
   font-size: 12px;
   opacity: 0.72;
 }
-
 
 .viewer-body {
   border: 1px solid #e4e7ed;

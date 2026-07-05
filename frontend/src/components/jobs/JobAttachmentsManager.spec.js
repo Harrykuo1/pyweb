@@ -41,24 +41,30 @@ describe('JobAttachmentsManager.vue', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-test="attachment-row-1"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="attachment-counter"]').text()).toContain('1')
-    expect(wrapper.find('[data-test="attachment-counter"]').text()).toContain('5')
+    expect(wrapper.find('[data-test="attachment-counter"]').text()).toContain(
+      '1',
+    )
+    expect(wrapper.find('[data-test="attachment-counter"]').text()).toContain(
+      '5',
+    )
   })
 
   it('shows an upload-status banner while a batch is in flight', async () => {
     let releaseUpload
     vi.spyOn(jobAttachmentsApi, 'upload').mockImplementation(
-      () => new Promise((resolve) => {
-        releaseUpload = () => resolve({
-          id: 2,
-          job_id: 7,
-          filename: 'deck.pptx',
-          mime_type: 'application/pptx',
-          size_bytes: 100,
-          uploaded_at: '2026-05-02T00:00:00+00:00',
-          preview_available: false,
-        })
-      }),
+      () =>
+        new Promise((resolve) => {
+          releaseUpload = () =>
+            resolve({
+              id: 2,
+              job_id: 7,
+              filename: 'deck.pptx',
+              mime_type: 'application/pptx',
+              size_bytes: 100,
+              uploaded_at: '2026-05-02T00:00:00+00:00',
+              preview_available: false,
+            })
+        }),
     )
 
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
@@ -94,11 +100,19 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const file = new File([new Uint8Array([1])], 'new.pdf', { type: 'application/pdf' })
+    const file = new File([new Uint8Array([1])], 'new.pdf', {
+      type: 'application/pdf',
+    })
     wrapper.vm.handleFileSelected({ raw: file })
     await flushPromises()
 
-    expect(upload).toHaveBeenCalledWith(7, file, null, file.name, expect.any(Function))
+    expect(upload).toHaveBeenCalledWith(
+      7,
+      file,
+      null,
+      file.name,
+      expect.any(Function),
+    )
     expect(wrapper.vm.attachments.some((a) => a.id === 2)).toBe(true)
   })
 
@@ -115,7 +129,9 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const file = new File([new Uint8Array([1])], 'report.pdf', { type: 'application/pdf' })
+    const file = new File([new Uint8Array([1])], 'report.pdf', {
+      type: 'application/pdf',
+    })
     wrapper.vm.handleFileSelected({ raw: file })
     // Microtask resolves so processBatch runs, then the dialog opens.
     await flushPromises()
@@ -140,7 +156,9 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const file = new File([new Uint8Array([1])], 'report.pdf', { type: 'application/pdf' })
+    const file = new File([new Uint8Array([1])], 'report.pdf', {
+      type: 'application/pdf',
+    })
     wrapper.vm.handleFileSelected({ raw: file })
     await flushPromises()
 
@@ -158,7 +176,9 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const fileA = new File([new Uint8Array([1])], 'a.pdf', { type: 'application/pdf' })
+    const fileA = new File([new Uint8Array([1])], 'a.pdf', {
+      type: 'application/pdf',
+    })
     const fileB = new File([new Uint8Array([2])], 'report.pdf', {
       type: 'application/pdf',
     })
@@ -166,9 +186,7 @@ describe('JobAttachmentsManager.vue', () => {
     wrapper.vm.handleFileSelected({ raw: fileB })
     await flushPromises()
 
-    wrapper
-      .findComponent(AttachmentConflictDialog)
-      .vm.$emit('resolved', null)
+    wrapper.findComponent(AttachmentConflictDialog).vm.$emit('resolved', null)
     await flushPromises()
 
     expect(upload).not.toHaveBeenCalled()
@@ -183,7 +201,9 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const file = new File([new Uint8Array([1])], 'new.pdf', { type: 'application/pdf' })
+    const file = new File([new Uint8Array([1])], 'new.pdf', {
+      type: 'application/pdf',
+    })
     wrapper.vm.handleFileSelected({ raw: file })
     await flushPromises()
 
@@ -204,7 +224,9 @@ describe('JobAttachmentsManager.vue', () => {
     expect(wrapper.vm.deleteDialogOpen).toBe(true)
     expect(remove).not.toHaveBeenCalled()
 
-    wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'admin-pw')
+    wrapper
+      .findComponent(DeleteWithPasswordDialog)
+      .vm.$emit('confirm', 'admin-pw')
     await flushPromises()
 
     expect(remove).toHaveBeenCalledWith(7, 1, 'admin-pw')
@@ -244,12 +266,20 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const fileA = new File([new Uint8Array([1])], 'foo.pdf', { type: 'application/pdf' })
-    const fileB = new File([new Uint8Array([2])], 'bar.pdf', { type: 'application/pdf' })
+    const fileA = new File([new Uint8Array([1])], 'foo.pdf', {
+      type: 'application/pdf',
+    })
+    const fileB = new File([new Uint8Array([2])], 'bar.pdf', {
+      type: 'application/pdf',
+    })
     Object.defineProperty(fileA, 'webkitRelativePath', { value: 'src/foo.pdf' })
-    Object.defineProperty(fileB, 'webkitRelativePath', { value: 'src/sub/bar.pdf' })
+    Object.defineProperty(fileB, 'webkitRelativePath', {
+      value: 'src/sub/bar.pdf',
+    })
 
-    wrapper.vm.handleFolderPicked({ target: { files: [fileA, fileB], value: 'x' } })
+    wrapper.vm.handleFolderPicked({
+      target: { files: [fileA, fileB], value: 'x' },
+    })
     await flushPromises()
 
     const calls = upload.mock.calls
@@ -271,12 +301,20 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    const good = new File([new Uint8Array([1])], 'foo.pdf', { type: 'application/pdf' })
-    const ds = new File([new Uint8Array([1])], '.DS_Store', { type: 'application/octet-stream' })
-    const thumbs = new File([new Uint8Array([1])], 'Thumbs.db', { type: 'application/octet-stream' })
+    const good = new File([new Uint8Array([1])], 'foo.pdf', {
+      type: 'application/pdf',
+    })
+    const ds = new File([new Uint8Array([1])], '.DS_Store', {
+      type: 'application/octet-stream',
+    })
+    const thumbs = new File([new Uint8Array([1])], 'Thumbs.db', {
+      type: 'application/octet-stream',
+    })
     Object.defineProperty(good, 'webkitRelativePath', { value: 'src/foo.pdf' })
     Object.defineProperty(ds, 'webkitRelativePath', { value: 'src/.DS_Store' })
-    Object.defineProperty(thumbs, 'webkitRelativePath', { value: 'src/sub/Thumbs.db' })
+    Object.defineProperty(thumbs, 'webkitRelativePath', {
+      value: 'src/sub/Thumbs.db',
+    })
 
     wrapper.vm.handleFolderPicked({
       target: { files: [good, ds, thumbs], value: 'x' },
@@ -395,8 +433,12 @@ describe('JobAttachmentsManager.vue', () => {
       await wrapper.find('[data-test="manager-folder-src"]').trigger('click')
       await flushPromises()
 
-      const a = new File([new Uint8Array([1])], 'a.py', { type: 'text/x-python' })
-      const b = new File([new Uint8Array([1])], 'b.py', { type: 'text/x-python' })
+      const a = new File([new Uint8Array([1])], 'a.py', {
+        type: 'text/x-python',
+      })
+      const b = new File([new Uint8Array([1])], 'b.py', {
+        type: 'text/x-python',
+      })
       Object.defineProperty(a, 'webkitRelativePath', { value: 'utils/a.py' })
       Object.defineProperty(b, 'webkitRelativePath', { value: 'utils/b.py' })
 
@@ -421,7 +463,9 @@ describe('JobAttachmentsManager.vue', () => {
       await wrapper.find('[data-test="manager-breadcrumb-0"]').trigger('click')
       await flushPromises()
       expect(wrapper.find('[data-test="attachment-row-1"]').exists()).toBe(true)
-      expect(wrapper.find('[data-test="manager-folder-src"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="manager-folder-src"]').exists()).toBe(
+        true,
+      )
     })
   })
 
@@ -519,7 +563,9 @@ describe('JobAttachmentsManager.vue', () => {
       expect(wrapper.vm.deleteDialogOpen).toBe(true)
       expect(bulkRemove).not.toHaveBeenCalled()
 
-      wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'admin-pw')
+      wrapper
+        .findComponent(DeleteWithPasswordDialog)
+        .vm.$emit('confirm', 'admin-pw')
       await flushPromises()
 
       expect(bulkRemove).toHaveBeenCalledTimes(1)
@@ -563,11 +609,11 @@ describe('JobAttachmentsManager.vue', () => {
       const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
       await flushPromises()
 
-      await wrapper
-        .find('[data-test="delete-folder-src"]')
-        .trigger('click')
+      await wrapper.find('[data-test="delete-folder-src"]').trigger('click')
       await flushPromises()
-      wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'admin-pw')
+      wrapper
+        .findComponent(DeleteWithPasswordDialog)
+        .vm.$emit('confirm', 'admin-pw')
       await flushPromises()
 
       expect(bulkRemove).toHaveBeenCalledTimes(1)
@@ -683,13 +729,13 @@ describe('JobAttachmentsManager.vue', () => {
       // refuse "src" so the user doesn't end up in a confused state
       // where the breadcrumb says new-folder but the listing is the
       // pre-existing one.
-      const prompt = vi.spyOn(ElMessageBox, 'prompt').mockImplementation(
-        async (_msg, _title, opts) => {
+      const prompt = vi
+        .spyOn(ElMessageBox, 'prompt')
+        .mockImplementation(async (_msg, _title, opts) => {
           const verdict = opts.inputValidator('src')
           expect(verdict).toContain('已存在')
           throw 'cancel'
-        },
-      )
+        })
 
       const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
       await flushPromises()
@@ -745,9 +791,9 @@ describe('JobAttachmentsManager.vue', () => {
       await flushPromises()
 
       // Cap reached → upload zone hides → folder-create button hidden too.
-      expect(
-        wrapper.find('[data-test="folder-create-button"]').exists(),
-      ).toBe(false)
+      expect(wrapper.find('[data-test="folder-create-button"]').exists()).toBe(
+        false,
+      )
     })
   })
 
@@ -765,7 +811,9 @@ describe('JobAttachmentsManager.vue', () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()
 
-    expect(wrapper.find('[data-test="attachment-uploader"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="attachment-uploader"]').exists()).toBe(
+      false,
+    )
     expect(wrapper.text()).toContain('已達上限')
   })
 
@@ -783,18 +831,17 @@ describe('JobAttachmentsManager.vue', () => {
       }))
       jobAttachmentsApi.list.mockResolvedValue(list)
       vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
-      const upload = vi.spyOn(jobAttachmentsApi, 'upload').mockImplementation(
-        async (jobId, file) =>
-          ({
-            id: 100,
-            job_id: 7,
-            filename: file.name,
-            mime_type: 'application/pdf',
-            size_bytes: 1,
-            uploaded_at: '2026-05-02T00:00:00+00:00',
-            preview_available: false,
-          }),
-      )
+      const upload = vi
+        .spyOn(jobAttachmentsApi, 'upload')
+        .mockImplementation(async (jobId, file) => ({
+          id: 100,
+          job_id: 7,
+          filename: file.name,
+          mime_type: 'application/pdf',
+          size_bytes: 1,
+          uploaded_at: '2026-05-02T00:00:00+00:00',
+          preview_available: false,
+        }))
 
       const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
       await flushPromises()

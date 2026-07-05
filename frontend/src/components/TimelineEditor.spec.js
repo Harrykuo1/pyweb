@@ -34,7 +34,9 @@ describe('TimelineEditor', () => {
     expect(wrapper.findAll('[data-test="timeline-row"]')).toHaveLength(2)
     // el-input renders the value into the underlying <input> attribute,
     // not into text content; assert via the input element's value.
-    const eventInputs = wrapper.findAll('[data-test="timeline-row-event"] input')
+    const eventInputs = wrapper.findAll(
+      '[data-test="timeline-row-event"] input',
+    )
     expect(eventInputs[0].element.value).toBe('投遞履歷')
     expect(eventInputs[1].element.value).toBe('拿到 offer')
   })
@@ -93,7 +95,9 @@ describe('TimelineEditor', () => {
     ])
 
     expect(wrapper.findAll('[data-test="timeline-row"]')).toHaveLength(3)
-    const eventInputs = wrapper.findAll('[data-test="timeline-row-event"] input')
+    const eventInputs = wrapper.findAll(
+      '[data-test="timeline-row-event"] input',
+    )
     expect(eventInputs[0].element.value).toBe('first (Dec 2025)')
     expect(eventInputs[1].element.value).toBe('second (Jan 2026)')
     expect(eventInputs[2].element.value).toBe('third (back to Nov 2025)')

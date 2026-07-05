@@ -57,7 +57,9 @@ const resumeOpen = ref(false)
 const resumeMember = ref(null)
 
 // View mode (cards vs spreadsheet), persisted across sessions.
-const { viewMode, setViewMode } = useViewModePreference('pyweb.members.viewMode')
+const { viewMode, setViewMode } = useViewModePreference(
+  'pyweb.members.viewMode',
+)
 
 // The view-mode toggle is hidden at the phone breakpoint (≤640px) because
 // el-table at that width is unusable. Force grid mode there regardless of
@@ -98,7 +100,6 @@ const SORT_ORDERS = ['ascending', 'descending']
 const stringSort = (key) => (a, b) =>
   String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'zh-Hant')
 
-
 async function loadMembers() {
   try {
     await membersStore.fetch()
@@ -130,6 +131,7 @@ function openEdit(member) {
 const {
   cropOpen: photoCropOpen,
   cropFile: photoCropFile,
+  // eslint-disable-next-line no-unused-vars -- read by component tests via wrapper.vm
   cropTarget: photoCropTarget,
   uploadingMemberId: uploadingPhotoMemberId,
   onUploadRequest: onPhotoUploadRequest,
@@ -231,7 +233,11 @@ onMounted(() => {
           </span>
         </div>
         <p class="subtitle">
-          {{ effectiveViewMode === 'grid' ? '點上方排序按鈕切換排序方向' : '點欄位標題可切換排序方向' }}
+          {{
+            effectiveViewMode === 'grid'
+              ? '點上方排序按鈕切換排序方向'
+              : '點欄位標題可切換排序方向'
+          }}
         </p>
       </div>
 
@@ -321,11 +327,7 @@ onMounted(() => {
       <!-- Skeleton placeholders cover the initial fetch so users see card
            shapes immediately instead of an EP spinner overlay. -->
       <div v-if="loading" class="member-grid" data-test="grid-skeleton">
-        <div
-          v-for="i in 8"
-          :key="`skel-${i}`"
-          class="member-card-skeleton"
-        >
+        <div v-for="i in 8" :key="`skel-${i}`" class="member-card-skeleton">
           <div class="skel-photo shimmer"></div>
           <div class="skel-body">
             <div class="skel-line skel-line--name shimmer"></div>
@@ -360,10 +362,7 @@ onMounted(() => {
             <p class="card-institution">
               <MarqueeText :text="m.institution" />
             </p>
-            <p
-              class="card-position"
-              :class="{ 'is-empty': !m.position }"
-            >
+            <p class="card-position" :class="{ 'is-empty': !m.position }">
               <MarqueeText :text="m.position || '—'" />
             </p>
 
@@ -384,7 +383,9 @@ onMounted(() => {
                 content="此成員尚未提供履歷"
                 placement="top"
               >
-                <el-button size="small" :icon="Document" disabled>履歷</el-button>
+                <el-button size="small" :icon="Document" disabled
+                  >履歷</el-button
+                >
               </el-tooltip>
               <el-button
                 v-else
@@ -575,7 +576,12 @@ onMounted(() => {
           </el-button>
         </template>
       </el-table-column>
-      <el-table-column v-if="auth.isAdmin" label="操作" width="120" align="center">
+      <el-table-column
+        v-if="auth.isAdmin"
+        label="操作"
+        width="120"
+        align="center"
+      >
         <template #default="{ row }">
           <el-tooltip content="編輯" placement="top">
             <el-button
@@ -681,7 +687,11 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.28);
 }
 
@@ -744,7 +754,8 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color var(--dur) var(--ease),
+  transition:
+    background-color var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
@@ -821,8 +832,10 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .sort-pill:hover {
@@ -862,8 +875,10 @@ onMounted(() => {
      across cards no matter how long each member's position text is. */
   display: flex;
   flex-direction: column;
-  transition: transform var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .member-card:hover {
@@ -882,7 +897,8 @@ onMounted(() => {
 
 @keyframes member-flash {
   0% {
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.45),
+    box-shadow:
+      0 0 0 4px rgba(99, 102, 241, 0.45),
       0 12px 28px rgba(99, 102, 241, 0.18);
     border-color: rgba(99, 102, 241, 0.4);
     background: rgba(99, 102, 241, 0.08);
@@ -1204,24 +1220,33 @@ onMounted(() => {
 /* Indigo gradient strip on the left edge of a hovered row — matches the
    Home feature-card accent language. ::before lives on the first cell
    so it spans the entire row's vertical extent. */
-.members-table :deep(.el-table__body tr.el-table__row .el-table__cell:first-child) {
+.members-table
+  :deep(.el-table__body tr.el-table__row .el-table__cell:first-child) {
   position: relative;
 }
 
-.members-table :deep(.el-table__body tr.el-table__row .el-table__cell:first-child)::before {
+.members-table
+  :deep(.el-table__body tr.el-table__row .el-table__cell:first-child)::before {
   content: '';
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    180deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   opacity: 0;
   transition: opacity var(--dur) var(--ease);
   pointer-events: none;
 }
 
-.members-table :deep(.el-table__body tr.el-table__row:hover .el-table__cell:first-child)::before {
+.members-table
+  :deep(
+    .el-table__body tr.el-table__row:hover .el-table__cell:first-child
+  )::before {
   opacity: 1;
 }
 
@@ -1256,7 +1281,8 @@ onMounted(() => {
 .members-table :deep(.el-table__header th.ascending .caret-wrapper .ascending) {
   border-bottom-color: var(--brand-primary);
 }
-.members-table :deep(.el-table__header th.descending .caret-wrapper .descending) {
+.members-table
+  :deep(.el-table__header th.descending .caret-wrapper .descending) {
   border-top-color: var(--brand-primary);
 }
 

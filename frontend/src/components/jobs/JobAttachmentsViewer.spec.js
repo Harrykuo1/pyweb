@@ -73,12 +73,16 @@ describe('JobAttachmentsViewer.vue', () => {
     await flushPromises()
 
     for (const a of ATTACHMENTS) {
-      expect(wrapper.find(`[data-test="viewer-item-${a.id}"]`).exists()).toBe(true)
+      expect(wrapper.find(`[data-test="viewer-item-${a.id}"]`).exists()).toBe(
+        true,
+      )
     }
     // Previews are only rendered after a row is clicked.
     expect(wrapper.find('[data-test="viewer-pdf-1"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="viewer-image-2"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="viewer-preview-pane"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="viewer-preview-pane"]').exists()).toBe(
+      false,
+    )
   })
 
   it('office files without a server-side preview degrade to download links', async () => {
@@ -203,7 +207,9 @@ describe('JobAttachmentsViewer.vue', () => {
 
     const officeEmbed = wrapper.find('[data-test="viewer-office-3"]')
     expect(officeEmbed.exists()).toBe(true)
-    expect(officeEmbed.attributes('src')).toBe('/api/jobs/7/attachments/3/preview')
+    expect(officeEmbed.attributes('src')).toBe(
+      '/api/jobs/7/attachments/3/preview',
+    )
     expect(officeEmbed.attributes('type')).toBe('application/pdf')
   })
 
@@ -217,7 +223,9 @@ describe('JobAttachmentsViewer.vue', () => {
 
     const officeEmbed = wrapper.find('[data-test="viewer-office-4"]')
     expect(officeEmbed.exists()).toBe(true)
-    expect(officeEmbed.attributes('src')).toBe('/api/jobs/7/attachments/4/preview')
+    expect(officeEmbed.attributes('src')).toBe(
+      '/api/jobs/7/attachments/4/preview',
+    )
   })
 
   it('back button returns from the preview pane to the list', async () => {
@@ -232,7 +240,9 @@ describe('JobAttachmentsViewer.vue', () => {
     await wrapper.find('[data-test="viewer-back"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[data-test="viewer-preview-pane"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="viewer-preview-pane"]').exists()).toBe(
+      false,
+    )
     expect(wrapper.find('[data-test="viewer-item-1"]').exists()).toBe(true)
   })
 
@@ -314,14 +324,16 @@ describe('JobAttachmentsViewer.vue', () => {
       // top-level.pdf is a file at root.
       expect(wrapper.find('[data-test="viewer-item-10"]').exists()).toBe(true)
       // src/ is the only folder visible from root.
-      expect(wrapper.find('[data-test="viewer-folder-src"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-folder-src"]').exists()).toBe(
+        true,
+      )
       // Files deeper than root must NOT appear at this level.
       expect(wrapper.find('[data-test="viewer-item-11"]').exists()).toBe(false)
       expect(wrapper.find('[data-test="viewer-item-12"]').exists()).toBe(false)
       // Folder count reflects every descendant file, not just direct children.
-      expect(
-        wrapper.find('[data-test="viewer-folder-src"]').text(),
-      ).toContain('3 個檔案')
+      expect(wrapper.find('[data-test="viewer-folder-src"]').text()).toContain(
+        '3 個檔案',
+      )
     })
 
     it('clicking a folder drills down and shows its contents', async () => {
@@ -363,7 +375,9 @@ describe('JobAttachmentsViewer.vue', () => {
       await flushPromises()
 
       expect(wrapper.find('[data-test="viewer-item-10"]').exists()).toBe(true)
-      expect(wrapper.find('[data-test="viewer-folder-src"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-folder-src"]').exists()).toBe(
+        true,
+      )
     })
 
     it('file row uses the basename within the current folder', async () => {
@@ -441,7 +455,9 @@ describe('JobAttachmentsViewer.vue', () => {
       expect(src.text()).toContain('line one')
       expect(src.text()).toContain('line two')
       // Plain text never gets the source/render toggle.
-      expect(wrapper.find('[data-test="viewer-text-toggle"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="viewer-text-toggle"]').exists()).toBe(
+        false,
+      )
     })
 
     it('markdown preview defaults to rendered view + offers source toggle', async () => {
@@ -454,14 +470,22 @@ describe('JobAttachmentsViewer.vue', () => {
       await flushPromises()
 
       // Rendered mode initially: MdPreview component is mounted.
-      expect(wrapper.find('[data-test="viewer-text-rendered"]').exists()).toBe(true)
-      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="viewer-text-rendered"]').exists()).toBe(
+        true,
+      )
+      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(
+        false,
+      )
 
       // Toggle button flips the view to raw source.
       await wrapper.find('[data-test="viewer-text-toggle"]').trigger('click')
       await flushPromises()
-      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(true)
-      expect(wrapper.find('[data-test="viewer-text-source"]').text()).toContain('# Hello')
+      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(
+        true,
+      )
+      expect(wrapper.find('[data-test="viewer-text-source"]').text()).toContain(
+        '# Hello',
+      )
     })
 
     it('files larger than 2 MB degrade to a download link instead of inline preview', async () => {
@@ -471,7 +495,9 @@ describe('JobAttachmentsViewer.vue', () => {
       await flushPromises()
 
       // huge.txt → over cap → "點擊下載" anchor, no preview hijack.
-      expect(wrapper.find('[data-test="viewer-download-32"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-download-32"]').exists()).toBe(
+        true,
+      )
       expect(wrapper.find('[data-test="viewer-open-32"]').exists()).toBe(false)
     })
 
@@ -484,7 +510,9 @@ describe('JobAttachmentsViewer.vue', () => {
       await wrapper.find('[data-test="viewer-open-31"]').trigger('click')
       await flushPromises()
 
-      expect(wrapper.find('[data-test="viewer-text-error"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-text-error"]').exists()).toBe(
+        true,
+      )
     })
 
     it('text/markdown preview offers the same fullscreen button as PDFs', async () => {
@@ -499,7 +527,9 @@ describe('JobAttachmentsViewer.vue', () => {
       // Fullscreen affordance applies to text/markdown too — long markdown
       // is exactly the case where 480px feels cramped, so the same toggle
       // that PDFs and images use should be available here.
-      expect(wrapper.find('[data-test="viewer-fullscreen"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="viewer-fullscreen"]').exists()).toBe(
+        true,
+      )
     })
 
     it('back button clears the previously loaded text', async () => {
@@ -510,14 +540,18 @@ describe('JobAttachmentsViewer.vue', () => {
       await flushPromises()
       await wrapper.find('[data-test="viewer-open-31"]').trigger('click')
       await flushPromises()
-      expect(wrapper.find('[data-test="viewer-text-source"]').text()).toContain('hello')
+      expect(wrapper.find('[data-test="viewer-text-source"]').text()).toContain(
+        'hello',
+      )
 
       await wrapper.find('[data-test="viewer-back"]').trigger('click')
       await flushPromises()
 
       // We're back at the list, and re-entering must not show stale text
       // — re-open should refetch.
-      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="viewer-text-source"]').exists()).toBe(
+        false,
+      )
     })
   })
 
@@ -572,7 +606,9 @@ describe('JobAttachmentsViewer.vue', () => {
       await flushPromises()
 
       expect(requestFullscreenSpy).toHaveBeenCalledTimes(1)
-      const surface = wrapper.find('[data-test="viewer-preview-surface"]').element
+      const surface = wrapper.find(
+        '[data-test="viewer-preview-surface"]',
+      ).element
       expect(requestFullscreenSpy.mock.instances[0]).toBe(surface)
 
       // After the fullscreenchange event, the button label flips.

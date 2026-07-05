@@ -46,7 +46,9 @@ afterEach(() => {
 
 describe('useUrlQuerySync', () => {
   it('seeds state from the URL via each field parse, honoring queryKey', () => {
-    const route = reactive({ query: { sort: 'company', kind: 'fulltime', q: 'sys' } })
+    const route = reactive({
+      query: { sort: 'company', kind: 'fulltime', q: 'sys' },
+    })
     const router = { replace: vi.fn() }
     const { result } = run(() =>
       useUrlQuerySync({ route, router, fields: makeFields() }),
@@ -60,7 +62,11 @@ describe('useUrlQuerySync', () => {
   it('applies defaults when the URL is empty', () => {
     const route = reactive({ query: {} })
     const { result } = run(() =>
-      useUrlQuerySync({ route, router: { replace: vi.fn() }, fields: makeFields() }),
+      useUrlQuerySync({
+        route,
+        router: { replace: vi.fn() },
+        fields: makeFields(),
+      }),
     )
     expect(result.sortKey.value).toBe('created_at')
     expect(result.kind.value).toBe('')
@@ -77,7 +83,9 @@ describe('useUrlQuerySync', () => {
     result.kind.value = 'fulltime'
     await nextTick()
 
-    expect(router.replace).toHaveBeenLastCalledWith({ query: { kind: 'fulltime' } })
+    expect(router.replace).toHaveBeenLastCalledWith({
+      query: { kind: 'fulltime' },
+    })
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 

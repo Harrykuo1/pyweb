@@ -18,7 +18,9 @@ describe('JobFilterBar', () => {
   it('renders the kind chips and filter controls', () => {
     const wrapper = mountBar()
     expect(wrapper.find('[data-test="filter-kind-all"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="filter-kind-internship"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="filter-kind-internship"]').exists()).toBe(
+      true,
+    )
     expect(wrapper.find('[data-test="filter-year"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="filter-company"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="filter-category"]').exists()).toBe(true)
@@ -51,7 +53,9 @@ describe('JobFilterBar', () => {
   })
 
   it('wires the category remote-method to jobsApi.listCategories', async () => {
-    const spy = vi.spyOn(jobsApi, 'listCategories').mockResolvedValue(['Backend'])
+    const spy = vi
+      .spyOn(jobsApi, 'listCategories')
+      .mockResolvedValue(['Backend'])
     const select = mountBar()
       .find('[data-test="filter-category"]')
       .findComponent({ name: 'ElSelect' })

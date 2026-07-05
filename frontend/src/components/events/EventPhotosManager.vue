@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElButton, ElIcon, ElInput, ElMessage } from 'element-plus'
-import { Delete, Loading, Plus, Star } from '@element-plus/icons-vue'
+import { Delete, Plus, Star } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
@@ -165,11 +165,16 @@ onMounted(load)
     </div>
 
     <p class="manager-tip">
-      第一張照片會成為活動封面。支援 PNG / JPG / WebP / GIF，單張上限 {{ MAX_MB }} MB。
+      第一張照片會成為活動封面。支援 PNG / JPG / WebP / GIF，單張上限
+      {{ MAX_MB }} MB。
     </p>
 
     <div v-if="loading" class="photo-grid">
-      <div v-for="i in 3" :key="`skel-${i}`" class="photo-cell photo-cell--skel">
+      <div
+        v-for="i in 3"
+        :key="`skel-${i}`"
+        class="photo-cell photo-cell--skel"
+      >
         <div class="skel-img shimmer"></div>
       </div>
     </div>
@@ -182,7 +187,11 @@ onMounted(load)
         data-test="photo-cell"
       >
         <div class="photo-thumb">
-          <img :src="thumbUrl(p)" :alt="p.caption || '活動照片'" loading="lazy" />
+          <img
+            :src="thumbUrl(p)"
+            :alt="p.caption || '活動照片'"
+            loading="lazy"
+          />
           <span v-if="idx === 0" class="cover-flag">
             <el-icon :size="11"><Star /></el-icon>
             封面
@@ -293,7 +302,11 @@ onMounted(load)
   font-size: 10.5px;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, var(--accent-warm-from), var(--accent-warm-to));
+  background: linear-gradient(
+    135deg,
+    var(--accent-warm-from),
+    var(--accent-warm-to)
+  );
   box-shadow: 0 2px 6px rgba(244, 63, 94, 0.35);
 }
 
@@ -313,7 +326,9 @@ onMounted(load)
   backdrop-filter: blur(4px);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+  transition:
+    opacity var(--dur) var(--ease),
+    background var(--dur) var(--ease);
 }
 
 .photo-thumb:hover .del-btn,

@@ -184,15 +184,17 @@ onMounted(loadItems)
             <el-icon :size="20"><Briefcase /></el-icon>
           </span>
           <h1 class="title">求職紀錄</h1>
-          <span class="count-chip" aria-label="紀錄數">
-            {{ total }} 筆
-          </span>
+          <span class="count-chip" aria-label="紀錄數"> {{ total }} 筆 </span>
         </div>
         <p class="subtitle">同學的實習與正職分享，點同一排序鈕可切換升降序。</p>
       </div>
 
       <div class="actions">
-        <el-button :icon="Refresh" data-test="refresh-button" @click="loadItems">
+        <el-button
+          :icon="Refresh"
+          data-test="refresh-button"
+          @click="loadItems"
+        >
           重新整理
         </el-button>
         <el-button
@@ -250,11 +252,7 @@ onMounted(loadItems)
       </el-button>
     </div>
 
-    <JobDetailDialog
-      v-model="detailOpen"
-      :job="detailJob"
-      @edit="onDetailEdit"
-    >
+    <JobDetailDialog v-model="detailOpen" :job="detailJob" @edit="onDetailEdit">
       <template #footer-extra>
         <el-button
           v-if="auth.isAdmin && detailJob"
@@ -269,11 +267,7 @@ onMounted(loadItems)
       </template>
     </JobDetailDialog>
 
-    <JobFormDialog
-      v-model="formOpen"
-      :job="editingJob"
-      @saved="reloadFresh"
-    />
+    <JobFormDialog v-model="formOpen" :job="editingJob" @saved="reloadFresh" />
 
     <DeleteWithPasswordDialog
       v-model="deleteDialogOpen"
@@ -324,7 +318,11 @@ onMounted(loadItems)
   align-items: center;
   justify-content: center;
   color: var(--surface-0);
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 6px 18px rgba(99, 102, 241, 0.3);
 }
 
@@ -341,7 +339,11 @@ onMounted(loadItems)
   align-items: center;
   padding: 3px 10px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.12),
+    rgba(139, 92, 246, 0.12)
+  );
   color: var(--brand-primary-hover);
   font-size: 12px;
   font-weight: 600;
@@ -380,7 +382,8 @@ onMounted(loadItems)
   gap: var(--sp-md);
   padding: 72px 24px;
   background:
-    radial-gradient(closest-side, rgba(99, 102, 241, 0.05), transparent 70%) center / 70% 100% no-repeat,
+    radial-gradient(closest-side, rgba(99, 102, 241, 0.05), transparent 70%)
+      center / 70% 100% no-repeat,
     var(--surface-0);
   border: 1px dashed rgba(15, 23, 42, 0.12);
   border-radius: var(--radius-lg);

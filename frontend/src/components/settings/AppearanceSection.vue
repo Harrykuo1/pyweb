@@ -38,7 +38,8 @@ defineExpose({
       <header class="appearance-block__header">
         <h3>登入頁 Logo</h3>
         <p class="appearance-block__hint">
-          上傳後會取代登入頁原本的鎖頭圖示。PNG / JPEG / WebP 可在彈出對話框裁切成 1:1；SVG 直接套用、不裁切。上限 2 MB。
+          上傳後會取代登入頁原本的鎖頭圖示。PNG / JPEG / WebP
+          可在彈出對話框裁切成 1:1；SVG 直接套用、不裁切。上限 2 MB。
         </p>
       </header>
 
@@ -67,9 +68,7 @@ defineExpose({
               alt="pending logo"
               data-test="logo-pending-img"
             />
-            <span v-else class="logo-card__placeholder">
-              尚未選擇檔案
-            </span>
+            <span v-else class="logo-card__placeholder"> 尚未選擇檔案 </span>
           </div>
         </div>
       </div>

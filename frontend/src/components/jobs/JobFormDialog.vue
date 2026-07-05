@@ -135,7 +135,9 @@ const wiredEditors = new WeakSet()
 
 // Reactive viewport gate so the toolbar config and the dedicated
 // "expand" button can both adapt without a page reload.
-const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const viewportWidth = ref(
+  typeof window !== 'undefined' ? window.innerWidth : 1024,
+)
 const isMobileWidth = computed(() => viewportWidth.value < MOBILE_BREAKPOINT)
 
 function _onViewportResize() {
@@ -489,11 +491,7 @@ async function handleSubmit() {
       </div>
 
       <div class="form-row-inline form-company-row">
-        <el-form-item
-          label="公司"
-          prop="company"
-          class="form-company-item"
-        >
+        <el-form-item label="公司" prop="company" class="form-company-item">
           <el-autocomplete
             v-model="form.company"
             :fetch-suggestions="fetchCompanySuggestions"
@@ -546,10 +544,7 @@ async function handleSubmit() {
               :toolbars="editorToolbars"
               data-test="form-experience-md"
             />
-            <p
-              v-if="!form.experience_md.trim()"
-              class="md-required-hint"
-            >
+            <p v-if="!form.experience_md.trim()" class="md-required-hint">
               心得為必填
             </p>
           </el-tab-pane>
@@ -591,7 +586,11 @@ async function handleSubmit() {
               :key="`${currentJob.id}-${openCounter}`"
               :job-id="currentJob.id"
             />
-            <div v-else class="attachments-locked" data-test="attachments-locked">
+            <div
+              v-else
+              class="attachments-locked"
+              data-test="attachments-locked"
+            >
               <p class="attachments-locked-title">先儲存基本資料</p>
               <p class="attachments-locked-sub">
                 按下方「新增」建立紀錄後即可上傳附件。
@@ -696,8 +695,10 @@ async function handleSubmit() {
   color: var(--ink-500);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 
 .kind-option:hover {
@@ -743,7 +744,11 @@ async function handleSubmit() {
 }
 
 .md-tabs :deep(.el-tabs__active-bar) {
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
 }
 
 /* Cap editor height so the dialog stays scroll-friendly even with long

@@ -8,7 +8,6 @@ import {
   ElMessage,
   ElMessageBox,
   ElSkeleton,
-  ElUpload,
 } from 'element-plus'
 import {
   ArrowRight,
@@ -68,6 +67,7 @@ const {
   conflictDialogOpen,
   conflictRows,
   pushPending,
+  // eslint-disable-next-line no-unused-vars -- driven by component tests via wrapper.vm
   handleFileSelected,
   handleFileInputChange,
   handleFolderPicked,
@@ -148,9 +148,7 @@ const allVisibleSelected = computed(() => {
   if (visibleEntryCount.value === 0) return false
   return (
     visibleFileIds.value.every((id) => selectedFileIds.value.has(id)) &&
-    visibleFolderPaths.value.every((p) =>
-      selectedFolderPaths.value.has(p),
-    )
+    visibleFolderPaths.value.every((p) => selectedFolderPaths.value.has(p))
   )
 })
 const someVisibleSelected = computed(() => {
@@ -292,6 +290,7 @@ async function handleCreateFolder() {
           if (!v) return '名稱不可空白'
           if (v === '.' || v === '..') return '不可使用 . 或 ..'
           if (/[\\/]/.test(v)) return '名稱不可含有 / 或 \\'
+          // eslint-disable-next-line no-control-regex -- rejecting control chars is the point
           if (/[\x00-\x1f]/.test(v)) return '名稱含有不可見字元'
           const existing = currentListing.value
           if (existing.folders.some((f) => f.name === v)) {
@@ -412,7 +411,6 @@ async function handleBulkDownload() {
     ElMessage.error('下載失敗，請稍後再試')
   }
 }
-
 </script>
 
 <template>
@@ -666,7 +664,9 @@ async function handleBulkDownload() {
               @click.stop
               @change="toggleFolderSelection(folder.name, $event)"
             />
-            <el-icon class="row-icon folder-icon" :size="22"><Folder /></el-icon>
+            <el-icon class="row-icon folder-icon" :size="22"
+              ><Folder
+            /></el-icon>
             <div class="row-meta">
               <span class="row-name">{{ folder.name }}</span>
               <span class="row-sub">{{ folder.count }} 個檔案</span>
@@ -709,7 +709,9 @@ async function handleBulkDownload() {
               >
                 {{ entry.displayName }}
               </a>
-              <span class="row-sub">{{ formatSize(entry.attachment.size_bytes) }}</span>
+              <span class="row-sub">{{
+                formatSize(entry.attachment.size_bytes)
+              }}</span>
             </div>
             <el-button
               text
@@ -724,11 +726,7 @@ async function handleBulkDownload() {
         <div v-else class="files-empty" data-test="files-empty">
           <el-icon :size="36" class="empty-icon"><UploadFilled /></el-icon>
           <p class="empty-text">
-            {{
-              currentPath
-                ? '此資料夾還沒有附件'
-                : '尚未上傳任何附件'
-            }}
+            {{ currentPath ? '此資料夾還沒有附件' : '尚未上傳任何附件' }}
           </p>
           <p class="empty-sub">將檔案拖到此處，或使用上方按鈕</p>
         </div>
@@ -741,7 +739,10 @@ async function handleBulkDownload() {
 
       <p class="manager-footnote" data-test="manager-hint">
         <el-icon :size="12"><InfoFilled /></el-icon>
-        變更立即生效，不需再按「儲存」<template v-if="maxMb !== null"> · 單檔最多 {{ maxMb }} MB</template> · 不限類型，PDF / 圖片 / Office 自動預覽
+        變更立即生效，不需再按「儲存」<template v-if="maxMb !== null">
+          · 單檔最多 {{ maxMb }} MB</template
+        >
+        · 不限類型，PDF / 圖片 / Office 自動預覽
       </p>
     </template>
 
@@ -885,7 +886,9 @@ async function handleBulkDownload() {
   position: relative;
   /* The card itself is the drop target — overlay below floats inside. */
   min-height: 120px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .files-card.is-dragover {
@@ -1089,7 +1092,9 @@ async function handleBulkDownload() {
 
 .bulk-bar-enter-active,
 .bulk-bar-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
 .select-all-label {
@@ -1121,7 +1126,9 @@ async function handleBulkDownload() {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
   background: var(--surface-1, #f8fafc);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .entry-row:hover {

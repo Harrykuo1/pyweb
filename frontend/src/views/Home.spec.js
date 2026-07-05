@@ -76,7 +76,9 @@ beforeEach(() => {
     has_more: false,
   })
   vi.spyOn(statsApi, 'get').mockResolvedValue(SAMPLE_STATS)
-  vi.spyOn(membersApi, 'list').mockResolvedValue(makeMembers(SAMPLE_STATS.total_members))
+  vi.spyOn(membersApi, 'list').mockResolvedValue(
+    makeMembers(SAMPLE_STATS.total_members),
+  )
 })
 
 afterEach(() => {

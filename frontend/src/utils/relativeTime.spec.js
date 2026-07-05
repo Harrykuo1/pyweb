@@ -42,8 +42,8 @@ describe('relativeTime', () => {
   })
 
   it('locks the "剛剛" threshold at 5 seconds', () => {
-    expect(relativeTime(ago(4), NOW)).toBe('剛剛')   // < 5 → 剛剛
-    expect(relativeTime(ago(5), NOW)).toMatch(/秒/)  // >= 5 → seconds
+    expect(relativeTime(ago(4), NOW)).toBe('剛剛') // < 5 → 剛剛
+    expect(relativeTime(ago(5), NOW)).toMatch(/秒/) // >= 5 → seconds
   })
 
   it('locks the seconds→minutes boundary at 60 seconds', () => {

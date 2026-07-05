@@ -53,8 +53,10 @@ defineEmits(['toggle'])
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease);
 }
 
@@ -64,7 +66,11 @@ defineEmits(['toggle'])
 }
 
 .sort-pill.is-active {
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   color: var(--surface-0);
   border-color: transparent;
   box-shadow: 0 6px 16px -4px rgba(99, 102, 241, 0.45);

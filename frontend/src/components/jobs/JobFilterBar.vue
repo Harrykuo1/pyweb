@@ -1,7 +1,12 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElIcon, ElInput, ElOption, ElSelect } from 'element-plus'
-import { Calendar, OfficeBuilding, Operation, Search } from '@element-plus/icons-vue'
+import {
+  Calendar,
+  OfficeBuilding,
+  Operation,
+  Search,
+} from '@element-plus/icons-vue'
 
 import { jobsApi } from '../../api/jobs'
 import {
@@ -29,7 +34,9 @@ const categorySuggestions = ref([])
 
 async function fetchCompanySuggestions(queryString) {
   try {
-    companySuggestions.value = await jobsApi.listCompanies(queryString || undefined)
+    companySuggestions.value = await jobsApi.listCompanies(
+      queryString || undefined,
+    )
   } catch {
     companySuggestions.value = []
   }
@@ -223,8 +230,10 @@ const displayedCategorySuggestions = computed(() =>
   color: var(--ink-500);
   border-radius: 999px;
   cursor: pointer;
-  transition: background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 
 .kind-chip:hover {

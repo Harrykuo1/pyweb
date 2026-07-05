@@ -72,10 +72,12 @@ function _positionFor(index, total) {
 
 <template>
   <div class="timeline-display" data-test="timeline-display">
-    <p v-if="enriched.length === 0" class="timeline-empty">
-      尚無時程紀錄。
-    </p>
-    <ol v-else class="timeline-track" :class="{ 'is-singleton': enriched.length === 1 }">
+    <p v-if="enriched.length === 0" class="timeline-empty">尚無時程紀錄。</p>
+    <ol
+      v-else
+      class="timeline-track"
+      :class="{ 'is-singleton': enriched.length === 1 }"
+    >
       <li
         v-for="(entry, index) in enriched"
         :key="index"

@@ -141,9 +141,7 @@ describe('jobsApi.listCompanies', () => {
 
 describe('jobsApi.listCategories', () => {
   it('GETs /jobs/categories with no prefix by default', async () => {
-    const get = vi
-      .spyOn(client, 'get')
-      .mockResolvedValue({ data: ['Backend'] })
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: ['Backend'] })
     const result = await jobsApi.listCategories()
     expect(get).toHaveBeenCalledWith('/jobs/categories', { params: {} })
     expect(result).toEqual(['Backend'])

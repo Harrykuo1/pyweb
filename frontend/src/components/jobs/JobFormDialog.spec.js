@@ -57,7 +57,6 @@ async function mountDialog(props = {}) {
   return wrapper
 }
 
-
 function findInputByDataTest(wrapper, dataTest) {
   const el = wrapper.element.querySelector(`[data-test="${dataTest}"]`)
   if (!el) return null
@@ -77,7 +76,6 @@ function setNativeValue(el, value) {
   el.dispatchEvent(new Event('input', { bubbles: true }))
   el.dispatchEvent(new Event('change', { bubbles: true }))
 }
-
 
 describe('JobFormDialog — create mode', () => {
   it('shows 新增 title', async () => {
@@ -125,15 +123,10 @@ describe('JobFormDialog — edit mode', () => {
 
 describe('JobFormDialog — submit', () => {
   it('POSTs the form to jobsApi.create on save in create mode', async () => {
-    const create = vi
-      .spyOn(jobsApi, 'create')
-      .mockResolvedValue({ id: 1 })
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
 
-    setNativeValue(
-      findInputByDataTest(wrapper, 'form-company'),
-      'Acme',
-    )
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
     setNativeValue(
       findMdEditorByDataTest(wrapper, 'form-experience-md'),
       '## interview',
@@ -163,9 +156,7 @@ describe('JobFormDialog — submit', () => {
   })
 
   it('PUTs to jobsApi.update on save in edit mode', async () => {
-    const update = vi
-      .spyOn(jobsApi, 'update')
-      .mockResolvedValue({ id: 7 })
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
     const wrapper = await mountDialog({
       job: {
         id: 7,
@@ -188,12 +179,15 @@ describe('JobFormDialog — submit', () => {
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
-    expect(update).toHaveBeenCalledWith(7, expect.objectContaining({
-      kind: 'internship',
-      company: 'Acme',
-      experience_md: '## updated',
-      real_name: 'Alice',
-    }))
+    expect(update).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        kind: 'internship',
+        company: 'Acme',
+        experience_md: '## updated',
+        real_name: 'Alice',
+      }),
+    )
   })
 
   it('emits saved and stays open in edit mode after a successful create', async () => {
@@ -211,10 +205,7 @@ describe('JobFormDialog — submit', () => {
     })
     const wrapper = await mountDialog()
 
-    setNativeValue(
-      findInputByDataTest(wrapper, 'form-company'),
-      'Acme',
-    )
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
     setNativeValue(
       findMdEditorByDataTest(wrapper, 'form-experience-md'),
       '## x',
@@ -244,7 +235,10 @@ describe('JobFormDialog — submit', () => {
     const wrapper = await mountDialog()
 
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## first')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## first',
+    )
     await flushPromises()
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
@@ -252,14 +246,20 @@ describe('JobFormDialog — submit', () => {
 
     // Second save should be a PUT against the id POST handed back —
     // no second POST.
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## edited')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## edited',
+    )
     await flushPromises()
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
-    expect(update).toHaveBeenCalledWith(42, expect.objectContaining({
-      experience_md: '## edited',
-    }))
+    expect(update).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        experience_md: '## edited',
+      }),
+    )
   })
 
   it('unlocks the attachments tab once the job is created', async () => {
@@ -277,13 +277,18 @@ describe('JobFormDialog — submit', () => {
     expect(wrapper.find('[data-test="attachments-locked"]').exists()).toBe(true)
 
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## hi')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## hi',
+    )
     await flushPromises()
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
     // Post-create: placeholder gone, manager mounted in its place.
-    expect(wrapper.find('[data-test="attachments-locked"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="attachments-locked"]').exists()).toBe(
+      false,
+    )
   })
 
   it('does not call the API if required fields are empty', async () => {
@@ -300,10 +305,7 @@ describe('JobFormDialog — submit', () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
 
-    setNativeValue(
-      findInputByDataTest(wrapper, 'form-company'),
-      'Acme',
-    )
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
     setNativeValue(
       findMdEditorByDataTest(wrapper, 'form-experience-md'),
       '## x',
@@ -495,7 +497,9 @@ describe('JobFormDialog — company autocomplete wiring', () => {
   it('hooks the company autocomplete fetcher to jobsApi.listCompanies', async () => {
     const wrapper = await mountDialog()
     // First ElAutocomplete in the form is the company picker.
-    const autocomplete = wrapper.findAllComponents({ name: 'ElAutocomplete' })[0]
+    const autocomplete = wrapper.findAllComponents({
+      name: 'ElAutocomplete',
+    })[0]
     const fetchSuggestions = autocomplete.props('fetchSuggestions')
 
     jobsApi.listCompanies.mockResolvedValue(['Acme', 'AcmeInc'])
@@ -512,7 +516,9 @@ describe('JobFormDialog — category autocomplete wiring', () => {
   it('hooks the category autocomplete fetcher to jobsApi.listCategories', async () => {
     const wrapper = await mountDialog()
     // Second ElAutocomplete in the form is the category picker.
-    const autocomplete = wrapper.findAllComponents({ name: 'ElAutocomplete' })[1]
+    const autocomplete = wrapper.findAllComponents({
+      name: 'ElAutocomplete',
+    })[1]
     const fetchSuggestions = autocomplete.props('fetchSuggestions')
 
     jobsApi.listCategories.mockResolvedValue(['Backend', 'DevOps'])

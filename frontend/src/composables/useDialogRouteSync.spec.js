@@ -25,7 +25,11 @@ describe('useDialogRouteSync', () => {
   it('ignores a non-numeric value and never fetches', async () => {
     const route = makeRoute({ detail: 'abc' })
     const fetchItem = vi.fn()
-    const sync = useDialogRouteSync({ route, router: { replace: vi.fn() }, fetchItem })
+    const sync = useDialogRouteSync({
+      route,
+      router: { replace: vi.fn() },
+      fetchItem,
+    })
     await nextTick()
 
     expect(fetchItem).not.toHaveBeenCalled()
@@ -35,7 +39,11 @@ describe('useDialogRouteSync', () => {
   it('swallows a rejected fetch and leaves the dialog closed', async () => {
     const route = makeRoute({ detail: '999' })
     const fetchItem = vi.fn().mockRejectedValue({ response: { status: 404 } })
-    const sync = useDialogRouteSync({ route, router: { replace: vi.fn() }, fetchItem })
+    const sync = useDialogRouteSync({
+      route,
+      router: { replace: vi.fn() },
+      fetchItem,
+    })
     await flushPromises()
 
     expect(sync.open.value).toBe(false)

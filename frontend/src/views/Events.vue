@@ -1,7 +1,14 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElButton, ElIcon, ElInput, ElMessage, ElOption, ElSelect } from 'element-plus'
+import {
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElMessage,
+  ElOption,
+  ElSelect,
+} from 'element-plus'
 import {
   Calendar,
   Camera,
@@ -104,7 +111,6 @@ function entryStyle(ev, ei) {
   return hue === null ? { '--i': ei } : { '--i': ei, '--ev-hue': hue }
 }
 
-
 const formOpen = ref(false)
 const editingEvent = ref(null)
 
@@ -152,7 +158,9 @@ function monthShort(iso) {
 }
 function weekday(iso) {
   if (!iso) return ''
-  return new Date(`${iso}T00:00:00`).toLocaleDateString('zh-TW', { weekday: 'short' })
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('zh-TW', {
+    weekday: 'short',
+  })
 }
 
 // Print a month tab on the rail only when an event opens a new month
@@ -172,7 +180,7 @@ function excerpt(md, n = 120) {
     .replace(/`{1,3}[^`]*`{1,3}/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[#>*_~\-]/g, ' ')
+    .replace(/[#>*_~-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   return text.length > n ? `${text.slice(0, n)}…` : text
@@ -313,8 +321,15 @@ onMounted(loadItems)
           data-test="filter-year"
           class="filter-year"
         >
-          <template #prefix><el-icon><Calendar /></el-icon></template>
-          <el-option v-for="y in YEAR_OPTIONS" :key="y" :label="`${y} 年`" :value="y" />
+          <template #prefix
+            ><el-icon><Calendar /></el-icon
+          ></template>
+          <el-option
+            v-for="y in YEAR_OPTIONS"
+            :key="y"
+            :label="`${y} 年`"
+            :value="y"
+          />
         </el-select>
 
         <el-select
@@ -330,8 +345,15 @@ onMounted(loadItems)
           data-test="filter-tag"
           class="filter-tag"
         >
-          <template #prefix><el-icon><CollectionTag /></el-icon></template>
-          <el-option v-for="t in displayedTagSuggestions" :key="t" :label="t" :value="t" />
+          <template #prefix
+            ><el-icon><CollectionTag /></el-icon
+          ></template>
+          <el-option
+            v-for="t in displayedTagSuggestions"
+            :key="t"
+            :label="t"
+            :value="t"
+          />
         </el-select>
 
         <button
@@ -387,7 +409,9 @@ onMounted(loadItems)
           </div>
           <div class="tl-content-col">
             <div class="year-head">
-              <span class="year-label" data-test="year-label">{{ group.year }}</span>
+              <span class="year-label" data-test="year-label">{{
+                group.year
+              }}</span>
               <span class="year-rule" aria-hidden="true"></span>
               <span class="year-count">{{ group.events.length }} 場</span>
             </div>
@@ -398,7 +422,9 @@ onMounted(loadItems)
           v-for="(ev, ei) in group.events"
           :key="ev.id"
           class="tl-entry"
-          :class="{ 'tl-entry--lead': gi === 0 && ei === 0 && sortOrder === 'desc' }"
+          :class="{
+            'tl-entry--lead': gi === 0 && ei === 0 && sortOrder === 'desc',
+          }"
           data-test="timeline-entry"
           :style="entryStyle(ev, ei)"
         >
@@ -407,13 +433,19 @@ onMounted(loadItems)
               v-if="monthTab(group.events, ei)"
               class="tl-month"
               aria-hidden="true"
-            >{{ monthTab(group.events, ei) }}</span>
+              >{{ monthTab(group.events, ei) }}</span
+            >
             <span
               class="tl-node"
               :class="{ 'tl-node--photo': coverUrl(ev) }"
               aria-hidden="true"
             >
-              <img v-if="coverUrl(ev)" :src="coverUrl(ev)" alt="" loading="lazy" />
+              <img
+                v-if="coverUrl(ev)"
+                :src="coverUrl(ev)"
+                alt=""
+                loading="lazy"
+              />
             </span>
           </div>
 
@@ -433,7 +465,11 @@ onMounted(loadItems)
               <!-- Zone 1: cover (or placeholder). Always shows the photo
                    count; a 2nd photo lazily cross-fades in on hover. -->
               <div v-if="coverUrl(ev)" class="tl-thumb">
-                <img :src="coverUrl(ev)" :alt="`${ev.title} 封面`" loading="lazy" />
+                <img
+                  :src="coverUrl(ev)"
+                  :alt="`${ev.title} 封面`"
+                  loading="lazy"
+                />
                 <template v-if="peekLayers[ev.id]">
                   <img
                     v-if="peekLayers[ev.id].a"
@@ -469,7 +505,8 @@ onMounted(loadItems)
                 <span
                   v-if="gi === 0 && ei === 0 && sortOrder === 'desc'"
                   class="tl-lead-kicker"
-                >最新</span>
+                  >最新</span
+                >
                 <div v-if="ev.tags?.length" class="tl-meta-row">
                   <div class="tl-tags">
                     <span
@@ -477,14 +514,17 @@ onMounted(loadItems)
                       :key="t"
                       class="tl-tag"
                       :class="{ 'tl-tag--sig': ti === 0 }"
-                    >#{{ t }}</span>
+                      >#{{ t }}</span
+                    >
                   </div>
                 </div>
                 <h3 class="tl-title">{{ ev.title }}</h3>
                 <p v-if="excerpt(ev.description_md)" class="tl-excerpt">
                   {{ excerpt(ev.description_md) }}
                 </p>
-                <p v-else class="tl-excerpt tl-excerpt--empty">尚無活動記錄內文</p>
+                <p v-else class="tl-excerpt tl-excerpt--empty">
+                  尚無活動記錄內文
+                </p>
 
                 <span class="tl-more" aria-hidden="true">
                   閱讀活動 <span class="tl-more-arrow">→</span>
@@ -527,7 +567,11 @@ onMounted(loadItems)
       </el-button>
     </div>
 
-    <EventDetailDialog v-model="detailOpen" :event="detailEvent" @edit="onDetailEdit">
+    <EventDetailDialog
+      v-model="detailOpen"
+      :event="detailEvent"
+      @edit="onDetailEdit"
+    >
       <template #footer-extra>
         <el-button
           v-if="auth.isAdmin && detailEvent"
@@ -542,7 +586,11 @@ onMounted(loadItems)
       </template>
     </EventDetailDialog>
 
-    <EventFormDialog v-model="formOpen" :event="editingEvent" @saved="onSaved" />
+    <EventFormDialog
+      v-model="formOpen"
+      :event="editingEvent"
+      @saved="onSaved"
+    />
 
     <DeleteWithPasswordDialog
       v-model="deleteOpen"
@@ -589,8 +637,16 @@ onMounted(loadItems)
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(420px 300px at 92% -10%, rgba(244, 63, 94, 0.3), transparent 70%),
-    radial-gradient(360px 280px at 8% 120%, rgba(251, 191, 36, 0.3), transparent 70%);
+    radial-gradient(
+      420px 300px at 92% -10%,
+      rgba(244, 63, 94, 0.3),
+      transparent 70%
+    ),
+    radial-gradient(
+      360px 280px at 8% 120%,
+      rgba(251, 191, 36, 0.3),
+      transparent 70%
+    );
   mix-blend-mode: screen;
 }
 
@@ -679,8 +735,10 @@ onMounted(loadItems)
 .hero-btn.el-button {
   border: none;
   font-weight: 600;
-  transition: transform var(--dur) var(--ease),
-    background-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+  transition:
+    transform var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
@@ -754,7 +812,9 @@ onMounted(loadItems)
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition:
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 
 .sort-toggle:hover {
@@ -877,8 +937,12 @@ onMounted(loadItems)
     hsl(calc(var(--ev-hue, 28) - 6) 82% 56%)
   );
   border: 3px solid #fff;
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18), 0 1px 4px rgba(245, 158, 11, 0.3);
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.18),
+    0 1px 4px rgba(245, 158, 11, 0.3);
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
   z-index: 2;
   overflow: hidden;
 }
@@ -890,8 +954,14 @@ onMounted(loadItems)
   width: 38px;
   height: 38px;
   border: 2.5px solid #fff;
-  background: linear-gradient(135deg, hsl(var(--ev-hue, 28) 85% 92%), var(--surface-2));
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18), 0 3px 10px -2px rgba(15, 23, 42, 0.25);
+  background: linear-gradient(
+    135deg,
+    hsl(var(--ev-hue, 28) 85% 92%),
+    var(--surface-2)
+  );
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.18),
+    0 3px 10px -2px rgba(15, 23, 42, 0.25);
 }
 
 .tl-node--photo img {
@@ -1006,11 +1076,14 @@ onMounted(loadItems)
   height: 18px;
   border-radius: 50%;
   border: 3px solid transparent;
-  background-image: linear-gradient(#fff, #fff),
+  background-image:
+    linear-gradient(#fff, #fff),
     linear-gradient(135deg, var(--accent-warm-from), var(--accent-warm-to));
   background-origin: border-box;
   background-clip: padding-box, border-box;
-  box-shadow: 0 0 0 4px var(--surface-1), 0 2px 8px rgba(244, 63, 94, 0.28);
+  box-shadow:
+    0 0 0 4px var(--surface-1),
+    0 2px 8px rgba(244, 63, 94, 0.28);
 }
 
 .year-head {
@@ -1027,7 +1100,11 @@ onMounted(loadItems)
   font-weight: 800;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  background: linear-gradient(135deg, var(--accent-warm-ink), var(--accent-warm-to));
+  background: linear-gradient(
+    135deg,
+    var(--accent-warm-ink),
+    var(--accent-warm-to)
+  );
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1073,7 +1150,11 @@ onMounted(loadItems)
   overflow: hidden;
   isolation: isolate;
   display: grid;
-  grid-template-columns: var(--tl-thumb-w, 184px) minmax(220px, 1fr) clamp(132px, 15%, 168px);
+  grid-template-columns: var(--tl-thumb-w, 184px) minmax(220px, 1fr) clamp(
+      132px,
+      15%,
+      168px
+    );
   align-items: stretch;
   border-radius: var(--radius-lg);
   background: #fff;
@@ -1086,7 +1167,9 @@ onMounted(loadItems)
     0 18px 40px -28px rgba(15, 23, 42, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.85);
   cursor: pointer;
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
   min-height: 156px;
 }
 
@@ -1106,7 +1189,9 @@ onMounted(loadItems)
   );
   opacity: 0.9;
   pointer-events: none;
-  transition: opacity var(--dur) var(--ease), width var(--dur) var(--ease);
+  transition:
+    opacity var(--dur) var(--ease),
+    width var(--dur) var(--ease);
 }
 
 .tl-card:hover {
@@ -1139,13 +1224,17 @@ onMounted(loadItems)
 .tl-entry:hover .tl-node,
 .tl-entry:focus-within .tl-node {
   transform: translate(-50%, -50%) scale(1.25);
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2), 0 2px 8px rgba(245, 158, 11, 0.4);
+  box-shadow:
+    0 0 0 3px rgba(245, 158, 11, 0.2),
+    0 2px 8px rgba(245, 158, 11, 0.4);
 }
 
 .tl-entry:hover .tl-node--photo,
 .tl-entry:focus-within .tl-node--photo {
   transform: translate(-50%, -50%) scale(1.08);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3), 0 5px 14px -2px rgba(15, 23, 42, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.3),
+    0 5px 14px -2px rgba(15, 23, 42, 0.3);
 }
 
 /* ---------- Per-year lead: one clear step up ---------- */
@@ -1187,7 +1276,11 @@ onMounted(loadItems)
   overflow: hidden;
   /* Warm-Spectrum hue well — frames letterboxed / white-background images
      and ties the cover to this event's colour. */
-  background: linear-gradient(135deg, hsl(var(--ev-hue, 28) 85% 92%), var(--surface-2));
+  background: linear-gradient(
+    135deg,
+    hsl(var(--ev-hue, 28) 85% 92%),
+    var(--surface-2)
+  );
 }
 
 .tl-thumb img {
@@ -1217,13 +1310,17 @@ onMounted(loadItems)
   transform: scale(1.02);
   z-index: 1;
   pointer-events: none;
-  transition: opacity 1.6s var(--ease), transform 1.6s var(--ease);
+  transition:
+    opacity 1.6s var(--ease),
+    transform 1.6s var(--ease);
 }
 
 .tl-card:hover .tl-peek.is-active {
   opacity: 1;
   transform: scale(1.08);
-  transition: opacity 1.6s var(--ease), transform 7s linear;
+  transition:
+    opacity 1.6s var(--ease),
+    transform 7s linear;
 }
 
 /* Feathered hue seam at the cover's bottom + an inset hairline on the
@@ -1264,7 +1361,11 @@ onMounted(loadItems)
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: linear-gradient(140deg, hsl(var(--ev-hue, 28) 80% 93%), var(--surface-2));
+  background: linear-gradient(
+    140deg,
+    hsl(var(--ev-hue, 28) 80% 93%),
+    var(--surface-2)
+  );
   color: hsl(var(--ev-hue, 28) 55% 36%);
 }
 
@@ -1332,7 +1433,11 @@ onMounted(loadItems)
   font-weight: 800;
   letter-spacing: 0.14em;
   color: #fff;
-  background: linear-gradient(135deg, var(--accent-warm-from), var(--accent-warm-to));
+  background: linear-gradient(
+    135deg,
+    var(--accent-warm-from),
+    var(--accent-warm-to)
+  );
   box-shadow: 0 2px 6px -1px rgba(244, 63, 94, 0.4);
 }
 
@@ -1403,7 +1508,11 @@ onMounted(loadItems)
   text-align: right;
   border-left: 1px solid rgba(15, 23, 42, 0.06);
   /* Warm Spectrum spot #4 — a faint hue floor rising from the bottom. */
-  background: linear-gradient(180deg, transparent, hsl(var(--ev-hue, 28) 70% 50% / 0.05));
+  background: linear-gradient(
+    180deg,
+    transparent,
+    hsl(var(--ev-hue, 28) 70% 50% / 0.05)
+  );
   transition: background var(--dur) var(--ease);
 }
 
@@ -1469,7 +1578,11 @@ onMounted(loadItems)
 }
 
 .tl-card:hover .tl-meta-rail {
-  background: linear-gradient(180deg, transparent, hsl(var(--ev-hue, 28) 70% 50% / 0.09));
+  background: linear-gradient(
+    180deg,
+    transparent,
+    hsl(var(--ev-hue, 28) 70% 50% / 0.09)
+  );
 }
 
 .tl-entry:hover .tl-content-col::before,
@@ -1576,7 +1689,9 @@ onMounted(loadItems)
   letter-spacing: 0.01em;
   color: hsl(var(--ev-hue, 28) 58% 40%);
   opacity: 0.72;
-  transition: opacity var(--dur) var(--ease), gap var(--dur) var(--ease),
+  transition:
+    opacity var(--dur) var(--ease),
+    gap var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
@@ -1641,7 +1756,12 @@ onMounted(loadItems)
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
   transform: translateX(-100%);
   animation: shimmer-sweep 1.5s ease-in-out infinite;
 }
@@ -1659,7 +1779,8 @@ onMounted(loadItems)
   align-items: center;
   gap: var(--sp-md);
   padding: 72px 24px;
-  background: radial-gradient(closest-side, rgba(245, 158, 11, 0.06), transparent 70%)
+  background:
+    radial-gradient(closest-side, rgba(245, 158, 11, 0.06), transparent 70%)
       center / 70% 100% no-repeat,
     #fff;
   border: 1px dashed rgba(15, 23, 42, 0.12);
@@ -1673,7 +1794,11 @@ onMounted(loadItems)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(244, 63, 94, 0.14));
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.14),
+    rgba(244, 63, 94, 0.14)
+  );
   color: var(--accent-warm-ink);
   box-shadow: 0 8px 24px -10px rgba(244, 63, 94, 0.4);
 }

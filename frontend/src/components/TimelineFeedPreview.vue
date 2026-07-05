@@ -2,11 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElIcon, ElImage } from 'element-plus'
-import {
-  ArrowRight,
-  Briefcase,
-  Promotion,
-} from '@element-plus/icons-vue'
+import { ArrowRight, Briefcase, Promotion } from '@element-plus/icons-vue'
 
 import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
@@ -171,7 +167,7 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
               {{
                 item.type === 'member_joined'
                   ? item.real_name
-                  : (item.real_name || '匿名成員')
+                  : item.real_name || '匿名成員'
               }}
             </strong>
             <template v-if="item.type === 'member_joined'">
@@ -220,7 +216,8 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22),
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.22),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   color: #ffffff;
   height: 100%;
@@ -275,7 +272,8 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
   letter-spacing: 0.02em;
   cursor: pointer;
   outline: none;
-  transition: background var(--dur) var(--ease),
+  transition:
+    background var(--dur) var(--ease),
     color var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }
@@ -305,7 +303,8 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
   cursor: pointer;
   outline: none;
   min-width: 0;
-  transition: background var(--dur) var(--ease),
+  transition:
+    background var(--dur) var(--ease),
     transform var(--dur) var(--ease);
   animation: row-fade 0.32s var(--ease) backwards;
 }
@@ -331,15 +330,31 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
 }
 
 @keyframes row-fade {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.hero-feed-row:nth-child(1) { animation-delay: 0ms; }
-.hero-feed-row:nth-child(2) { animation-delay: 50ms; }
-.hero-feed-row:nth-child(3) { animation-delay: 100ms; }
-.hero-feed-row:nth-child(4) { animation-delay: 150ms; }
-.hero-feed-row:nth-child(n + 5) { animation-delay: 200ms; }
+.hero-feed-row:nth-child(1) {
+  animation-delay: 0ms;
+}
+.hero-feed-row:nth-child(2) {
+  animation-delay: 50ms;
+}
+.hero-feed-row:nth-child(3) {
+  animation-delay: 100ms;
+}
+.hero-feed-row:nth-child(4) {
+  animation-delay: 150ms;
+}
+.hero-feed-row:nth-child(n + 5) {
+  animation-delay: 200ms;
+}
 
 /* ---------- Avatar / type indicator ---------- */
 .hero-feed-avatar {
@@ -498,8 +513,13 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
 }
 
 @keyframes sk-shimmer {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ---------- Empty state ---------- */

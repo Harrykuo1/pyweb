@@ -22,7 +22,9 @@ describe('JobRecordCard', () => {
   it('renders company, kind label, real name, year/month and category', () => {
     const wrapper = mountCard()
     expect(wrapper.text()).toContain('Acme')
-    expect(wrapper.find('[data-test="kind-internship"]').text()).toContain('實習')
+    expect(wrapper.find('[data-test="kind-internship"]').text()).toContain(
+      '實習',
+    )
     expect(wrapper.find('[data-test="real-name"]').text()).toContain('Alice')
     expect(wrapper.text()).toContain('2024/05 求職')
     expect(wrapper.find('[data-test="card-category"]').text()).toBe('Backend')
@@ -58,7 +60,9 @@ describe('JobRecordCard', () => {
       'record-card--internship',
     )
     expect(
-      mountCard({ ...baseJob, kind: 'fulltime' }).find('.record-card').classes(),
+      mountCard({ ...baseJob, kind: 'fulltime' })
+        .find('.record-card')
+        .classes(),
     ).toContain('record-card--fulltime')
   })
 })

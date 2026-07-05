@@ -88,7 +88,9 @@ describe('Navbar.vue', () => {
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
 
-    expect(wrapper.find('[data-test="user-menu-trigger"]').text()).toContain('bob')
+    expect(wrapper.find('[data-test="user-menu-trigger"]').text()).toContain(
+      'bob',
+    )
     expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
   })
 
@@ -127,14 +129,18 @@ describe('Navbar.vue', () => {
     // Open the menu first so we can verify it closes after navigation.
     await wrapper.find('[data-test="user-menu-trigger"]').trigger('click')
     expect(
-      wrapper.find('[data-test="user-menu-trigger"]').attributes('aria-expanded'),
+      wrapper
+        .find('[data-test="user-menu-trigger"]')
+        .attributes('aria-expanded'),
     ).toBe('true')
 
     await wrapper.find('[data-test="nav-settings"]').trigger('click')
 
     expect(pushMock).toHaveBeenCalledWith('/settings')
     expect(
-      wrapper.find('[data-test="user-menu-trigger"]').attributes('aria-expanded'),
+      wrapper
+        .find('[data-test="user-menu-trigger"]')
+        .attributes('aria-expanded'),
     ).toBe('false')
   })
 
@@ -202,9 +208,9 @@ describe('Navbar.vue', () => {
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(true)
-    expect(
-      wrapper.find('[data-test="user-menu-trigger"]').classes(),
-    ).toContain('is-previewing')
+    expect(wrapper.find('[data-test="user-menu-trigger"]').classes()).toContain(
+      'is-previewing',
+    )
   })
 
   it('viewer never sees the preview badge', () => {

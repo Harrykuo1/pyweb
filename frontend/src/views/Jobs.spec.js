@@ -23,12 +23,15 @@ vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    ElMessage: Object.assign(vi.fn(() => ({ close: vi.fn() })), {
-      success: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
-      warning: vi.fn(),
-    }),
+    ElMessage: Object.assign(
+      vi.fn(() => ({ close: vi.fn() })),
+      {
+        success: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        warning: vi.fn(),
+      },
+    ),
   }
 })
 
@@ -68,12 +71,14 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-async function mountPage(items = sample, total = items.length, role = 'viewer') {
+async function mountPage(
+  items = sample,
+  total = items.length,
+  role = 'viewer',
+) {
   const auth = useAuthStore()
   auth.user = { id: 1, username: 'a', role }
-  const listSpy = vi
-    .spyOn(jobsApi, 'list')
-    .mockResolvedValue({ items, total })
+  const listSpy = vi.spyOn(jobsApi, 'list').mockResolvedValue({ items, total })
   const wrapper = mount(Jobs)
   await flushPromises()
   return { wrapper, listSpy }
@@ -99,7 +104,9 @@ describe('Jobs.vue — initial load', () => {
     expect(cards).toHaveLength(2)
     expect(wrapper.text()).toContain('Acme')
     expect(wrapper.text()).toContain('Globex')
-    expect(wrapper.find('[data-test="kind-internship"]').text()).toContain('實習')
+    expect(wrapper.find('[data-test="kind-internship"]').text()).toContain(
+      '實習',
+    )
     expect(wrapper.find('[data-test="kind-fulltime"]').text()).toContain('正職')
   })
 
@@ -383,7 +390,8 @@ describe('Jobs.vue — URL sync on filter/sort changes', () => {
 describe('Jobs.vue — company multi-select', () => {
   it('wires the remote-method to jobsApi.listCompanies and merges results into options', async () => {
     const { wrapper } = await mountPage()
-    const select = wrapper.find('[data-test="filter-company"]')
+    const select = wrapper
+      .find('[data-test="filter-company"]')
       .findComponent({ name: 'ElSelect' })
     expect(select.exists()).toBe(true)
     expect(select.props('multiple')).toBe(true)
@@ -401,7 +409,8 @@ describe('Jobs.vue — company multi-select', () => {
     expect(listSpy).toHaveBeenCalledWith('ac')
 
     // Options should now include both fetched suggestions.
-    const optionLabels = select.findAllComponents({ name: 'ElOption' })
+    const optionLabels = select
+      .findAllComponents({ name: 'ElOption' })
       .map((o) => o.props('label'))
     expect(optionLabels).toEqual(expect.arrayContaining(['Acme', 'AcmeInc']))
   })
@@ -410,19 +419,17 @@ describe('Jobs.vue — company multi-select', () => {
 describe('Jobs.vue — ?detail=<id> deep-link', () => {
   it('fetches the targeted job and opens the detail dialog on mount', async () => {
     routeQuery.value = { detail: '7' }
-    const getSpy = vi
-      .spyOn(jobsApi, 'get')
-      .mockResolvedValue({
-        id: 7,
-        job_year: 2025,
-        job_month: 5,
-        company: 'Linked',
-        kind: 'internship',
-        real_name: 'Eve',
-        timeline_md: null,
-        experience_md: 'deep-linked',
-        created_at: '2025-05-01T00:00:00+00:00',
-      })
+    const getSpy = vi.spyOn(jobsApi, 'get').mockResolvedValue({
+      id: 7,
+      job_year: 2025,
+      job_month: 5,
+      company: 'Linked',
+      kind: 'internship',
+      real_name: 'Eve',
+      timeline_md: null,
+      experience_md: 'deep-linked',
+      created_at: '2025-05-01T00:00:00+00:00',
+    })
     const { wrapper } = await mountPage()
     await flushPromises()
 
@@ -527,16 +534,18 @@ describe('Jobs.vue — admin delete flow', () => {
     const { wrapper } = await mountPage(sample, sample.length, 'viewer')
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-test="detail-delete-button"]').exists())
-      .toBe(false)
+    expect(wrapper.find('[data-test="detail-delete-button"]').exists()).toBe(
+      false,
+    )
   })
 
   it('shows delete button for admin inside the detail dialog', async () => {
     const { wrapper } = await mountPage(sample, sample.length, 'admin')
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-test="detail-delete-button"]').exists())
-      .toBe(true)
+    expect(wrapper.find('[data-test="detail-delete-button"]').exists()).toBe(
+      true,
+    )
   })
 
   it('calls jobsApi.remove with the entered password and refetches on success', async () => {

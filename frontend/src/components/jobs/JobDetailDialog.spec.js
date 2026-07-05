@@ -48,12 +48,15 @@ async function mountDialog(props = {}, role = 'admin') {
 describe('JobDetailDialog — header', () => {
   it('shows the kind badge, company, real name and meta', async () => {
     const wrapper = await mountDialog()
-    expect(wrapper.find('[data-test="detail-kind-internship"]').text())
-      .toContain('實習')
-    expect(wrapper.find('[data-test="detail-company"]').text())
-      .toContain('Acme')
-    expect(wrapper.find('[data-test="detail-real-name"]').text())
-      .toContain('Alice')
+    expect(
+      wrapper.find('[data-test="detail-kind-internship"]').text(),
+    ).toContain('實習')
+    expect(wrapper.find('[data-test="detail-company"]').text()).toContain(
+      'Acme',
+    )
+    expect(wrapper.find('[data-test="detail-real-name"]').text()).toContain(
+      'Alice',
+    )
     expect(wrapper.text()).toContain('2025/04 求職')
   })
 
@@ -71,8 +74,9 @@ describe('JobDetailDialog — header', () => {
     })
     const header = wrapper.find('.detail-header')
     expect(header.classes()).toContain('detail-header--fulltime')
-    expect(wrapper.find('[data-test="detail-kind-fulltime"]').text())
-      .toContain('正職')
+    expect(wrapper.find('[data-test="detail-kind-fulltime"]').text()).toContain(
+      '正職',
+    )
   })
 })
 
@@ -117,7 +121,9 @@ describe('JobDetailDialog — markdown tabs', () => {
       },
     })
     expect(wrapper.find('[data-test="timeline-display"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="detail-timeline-legacy"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="detail-timeline-legacy"]').exists()).toBe(
+      false,
+    )
     expect(wrapper.text()).toContain('投遞')
     expect(wrapper.text()).toContain('拿到 offer')
   })
@@ -174,7 +180,8 @@ describe('JobDetailDialog — admin edit button', () => {
 
   it('hides the edit button for viewers', async () => {
     const wrapper = await mountDialog({}, 'viewer')
-    expect(wrapper.find('[data-test="detail-edit-button"]').exists())
-      .toBe(false)
+    expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(
+      false,
+    )
   })
 })

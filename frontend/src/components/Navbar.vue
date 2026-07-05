@@ -1,13 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  ElButton,
-  ElIcon,
-  ElMessage,
-  ElSwitch,
-  ElTag,
-} from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElSwitch, ElTag } from 'element-plus'
 import {
   ArrowDown,
   Close,
@@ -257,7 +251,11 @@ useOutsideClick({
   font-size: 12px;
   font-weight: 700;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
   letter-spacing: -0.02em;
 }
@@ -288,7 +286,8 @@ useOutsideClick({
   font-weight: 500;
   padding: 6px 14px;
   border-radius: var(--radius-md);
-  transition: color var(--dur) var(--ease),
+  transition:
+    color var(--dur) var(--ease),
     background-color var(--dur) var(--ease);
 }
 
@@ -349,7 +348,8 @@ useOutsideClick({
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: var(--radius-md);
   color: var(--ink-900);
-  transition: background-color var(--dur) var(--ease),
+  transition:
+    background-color var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease);
 }
@@ -384,7 +384,11 @@ useOutsideClick({
   font-size: 11px;
   font-weight: 700;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
   flex: 0 0 auto;
 }
@@ -477,7 +481,11 @@ useOutsideClick({
   font-size: 16px;
   font-weight: 700;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
   flex: 0 0 auto;
 }
@@ -528,7 +536,8 @@ useOutsideClick({
      overflows the menu's inner content area, pushing the trailing
      switch past the menu's right border. */
   box-sizing: border-box;
-  transition: background-color var(--dur) var(--ease),
+  transition:
+    background-color var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
@@ -568,7 +577,8 @@ useOutsideClick({
 /* ---------- Dropdown enter/leave transition ---------- */
 .user-menu-enter-active,
 .user-menu-leave-active {
-  transition: opacity var(--dur) var(--ease),
+  transition:
+    opacity var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }
 
@@ -618,7 +628,9 @@ useOutsideClick({
     max-height: 0;
     opacity: 0;
     overflow: hidden;
-    transition: max-height 0.25s ease, opacity 0.2s ease,
+    transition:
+      max-height 0.25s ease,
+      opacity 0.2s ease,
       padding-top 0.25s ease;
   }
 

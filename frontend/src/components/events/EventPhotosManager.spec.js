@@ -15,20 +15,39 @@ vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    ElMessage: Object.assign(vi.fn(() => ({ close: vi.fn() })), {
-      success: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
-      warning: vi.fn(),
-    }),
+    ElMessage: Object.assign(
+      vi.fn(() => ({ close: vi.fn() })),
+      {
+        success: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        warning: vi.fn(),
+      },
+    ),
   }
 })
 
 import { ElMessage } from 'element-plus'
 
 const PHOTOS = [
-  { id: 10, event_id: 1, filename: '10.jpg', mime_type: 'image/jpeg', size_bytes: 1, caption: '合照', uploaded_at: 'x' },
-  { id: 11, event_id: 1, filename: '11.jpg', mime_type: 'image/jpeg', size_bytes: 1, caption: null, uploaded_at: 'x' },
+  {
+    id: 10,
+    event_id: 1,
+    filename: '10.jpg',
+    mime_type: 'image/jpeg',
+    size_bytes: 1,
+    caption: '合照',
+    uploaded_at: 'x',
+  },
+  {
+    id: 11,
+    event_id: 1,
+    filename: '11.jpg',
+    mime_type: 'image/jpeg',
+    size_bytes: 1,
+    caption: null,
+    uploaded_at: 'x',
+  },
 ]
 
 beforeEach(() => {
@@ -68,7 +87,9 @@ describe('EventPhotosManager', () => {
 
   it('opens the delete-confirm dialog when a delete button is clicked', async () => {
     const wrapper = await mountManager()
-    await wrapper.findAll('[data-test="delete-photo-button"]')[0].trigger('click')
+    await wrapper
+      .findAll('[data-test="delete-photo-button"]')[0]
+      .trigger('click')
     await flushPromises()
     expect(
       wrapper.findComponent(DeleteWithPasswordDialog).props('modelValue'),
@@ -84,7 +105,8 @@ describe('EventPhotosManager', () => {
     const input = wrapper.element.querySelectorAll(
       '[data-test="caption-input"]',
     )[0]
-    const native = input.tagName === 'INPUT' ? input : input.querySelector('input')
+    const native =
+      input.tagName === 'INPUT' ? input : input.querySelector('input')
     native.dispatchEvent(new Event('focus', { bubbles: true }))
     setNativeValue(native, '新說明')
     native.dispatchEvent(new Event('blur', { bubbles: true }))
@@ -96,9 +118,14 @@ describe('EventPhotosManager', () => {
     const wrapper = await mountManager()
     const upload = vi.spyOn(eventsApi, 'uploadPhoto').mockResolvedValue({})
 
-    const file = new File([new Uint8Array([1, 2, 3])], 'new.png', { type: 'image/png' })
+    const file = new File([new Uint8Array([1, 2, 3])], 'new.png', {
+      type: 'image/png',
+    })
     const input = wrapper.find('[data-test="photo-file-input"]')
-    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      configurable: true,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -111,10 +138,18 @@ describe('EventPhotosManager', () => {
     const wrapper = await mountManager()
     const upload = vi.spyOn(eventsApi, 'uploadPhoto').mockResolvedValue({})
 
-    const file = new File([new Uint8Array([1])], 'huge.png', { type: 'image/png' })
-    Object.defineProperty(file, 'size', { value: 8 * 1024 * 1024 + 1, configurable: true })
+    const file = new File([new Uint8Array([1])], 'huge.png', {
+      type: 'image/png',
+    })
+    Object.defineProperty(file, 'size', {
+      value: 8 * 1024 * 1024 + 1,
+      configurable: true,
+    })
     const input = wrapper.find('[data-test="photo-file-input"]')
-    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      configurable: true,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -124,11 +159,18 @@ describe('EventPhotosManager', () => {
 
   it('maps a 415 upload error to a format message', async () => {
     const wrapper = await mountManager()
-    vi.spyOn(eventsApi, 'uploadPhoto').mockRejectedValue({ response: { status: 415 } })
+    vi.spyOn(eventsApi, 'uploadPhoto').mockRejectedValue({
+      response: { status: 415 },
+    })
 
-    const file = new File([new Uint8Array([1])], 'weird.png', { type: 'image/png' })
+    const file = new File([new Uint8Array([1])], 'weird.png', {
+      type: 'image/png',
+    })
     const input = wrapper.find('[data-test="photo-file-input"]')
-    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      configurable: true,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -139,9 +181,13 @@ describe('EventPhotosManager', () => {
     const wrapper = await mountManager()
     const remove = vi.spyOn(eventsApi, 'removePhoto').mockResolvedValue()
 
-    await wrapper.findAll('[data-test="delete-photo-button"]')[0].trigger('click')
+    await wrapper
+      .findAll('[data-test="delete-photo-button"]')[0]
+      .trigger('click')
     await flushPromises()
-    wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'admin-pw')
+    wrapper
+      .findComponent(DeleteWithPasswordDialog)
+      .vm.$emit('confirm', 'admin-pw')
     await flushPromises()
 
     // PHOTOS[0].id === 10, eventId prop === 1
@@ -151,9 +197,13 @@ describe('EventPhotosManager', () => {
 
   it('surfaces a 422 delete as a password error and keeps the dialog open', async () => {
     const wrapper = await mountManager()
-    vi.spyOn(eventsApi, 'removePhoto').mockRejectedValue({ response: { status: 422 } })
+    vi.spyOn(eventsApi, 'removePhoto').mockRejectedValue({
+      response: { status: 422 },
+    })
 
-    await wrapper.findAll('[data-test="delete-photo-button"]')[0].trigger('click')
+    await wrapper
+      .findAll('[data-test="delete-photo-button"]')[0]
+      .trigger('click')
     await flushPromises()
     wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'wrong')
     await flushPromises()
@@ -167,9 +217,19 @@ describe('EventPhotosManager', () => {
     const update = vi.spyOn(eventsApi, 'updatePhotoCaption')
     // Fresh photo object so prior tests can't leak a mutated caption.
     const wrapper = await mountManager([
-      { id: 10, event_id: 1, filename: '10.jpg', mime_type: 'image/jpeg', size_bytes: 1, caption: '合照', uploaded_at: 'x' },
+      {
+        id: 10,
+        event_id: 1,
+        filename: '10.jpg',
+        mime_type: 'image/jpeg',
+        size_bytes: 1,
+        caption: '合照',
+        uploaded_at: 'x',
+      },
     ])
-    const host = wrapper.element.querySelectorAll('[data-test="caption-input"]')[0]
+    const host = wrapper.element.querySelectorAll(
+      '[data-test="caption-input"]',
+    )[0]
     const native = host.tagName === 'INPUT' ? host : host.querySelector('input')
     native.dispatchEvent(new Event('focus', { bubbles: true }))
     native.dispatchEvent(new Event('blur', { bubbles: true }))

@@ -60,7 +60,9 @@ describe('readFilesFromEntry', () => {
 
 describe('useAttachmentDragDrop', () => {
   it('highlights only on file drags', () => {
-    const { isDragOver, onDragEnter } = useAttachmentDragDrop({ onFiles: vi.fn() })
+    const { isDragOver, onDragEnter } = useAttachmentDragDrop({
+      onFiles: vi.fn(),
+    })
     onDragEnter({ dataTransfer: { types: ['text/plain'] } })
     expect(isDragOver.value).toBe(false)
     onDragEnter({ dataTransfer: { types: ['Files'] } })
@@ -95,10 +97,9 @@ describe('useAttachmentDragDrop', () => {
 
     expect(isDragOver.value).toBe(false)
     expect(onFiles).toHaveBeenCalledTimes(2)
-    expect(onFiles.mock.calls.map((c) => c[0].webkitRelativePath).sort()).toEqual([
-      'src/a.pdf',
-      'src/b.pdf',
-    ])
+    expect(
+      onFiles.mock.calls.map((c) => c[0].webkitRelativePath).sort(),
+    ).toEqual(['src/a.pdf', 'src/b.pdf'])
   })
 
   it('falls back to a flat dataTransfer.files list when the items API is absent', async () => {
