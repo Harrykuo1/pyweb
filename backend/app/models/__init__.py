@@ -3,6 +3,7 @@ from app.models.event import Event, EventPhoto, EventTag
 from app.models.job import Job, JobKind
 from app.models.job_attachment import JobAttachment
 from app.models.member import Member
+from app.models.pending_discord_link import PendingDiscordLink
 from app.models.post_status import PostStatus
 from app.models.registration_invite import RegistrationInvite
 from app.models.site_setting import SiteSetting
@@ -17,6 +18,7 @@ __all__ = [
     "JobAttachment",
     "JobKind",
     "Member",
+    "PendingDiscordLink",
     "PostStatus",
     "RegistrationInvite",
     "SiteSetting",
