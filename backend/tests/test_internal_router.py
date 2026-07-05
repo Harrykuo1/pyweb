@@ -1,4 +1,5 @@
 """Tests for the /internal source endpoint that OnlyOffice fetches from."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -109,5 +110,3 @@ def test_serve_source_rejects_backslash_filename(client, uploads_dir):
     _seed_file(uploads_dir, 7, "deck.pptx", b"abc")
     r = client.get("/internal/source/7/..%5C..%5Csecret.txt")
     assert r.status_code == 404
-
-

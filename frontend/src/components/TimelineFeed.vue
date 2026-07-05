@@ -33,8 +33,8 @@ const props = defineProps({
 
 const router = useRouter()
 const items = ref([])
-const loading = ref(false)        // initial fetch only
-const loadingMore = ref(false)    // every fetch after the first
+const loading = ref(false) // initial fetch only
+const loadingMore = ref(false) // every fetch after the first
 const hasMore = ref(false)
 const errored = ref(false)
 
@@ -234,8 +234,14 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
                 <div class="row-skeleton">
                   <el-skeleton-item variant="circle" class="sk-avatar" />
                   <div class="row-skeleton-text">
-                    <el-skeleton-item variant="text" class="sk-line sk-line-1" />
-                    <el-skeleton-item variant="text" class="sk-line sk-line-2" />
+                    <el-skeleton-item
+                      variant="text"
+                      class="sk-line sk-line-1"
+                    />
+                    <el-skeleton-item
+                      variant="text"
+                      class="sk-line sk-line-2"
+                    />
                   </div>
                   <el-skeleton-item variant="text" class="sk-time" />
                 </div>
@@ -244,11 +250,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
           </div>
         </div>
 
-        <div
-          v-else-if="errored"
-          class="feed-empty"
-          data-test="timeline-error"
-        >
+        <div v-else-if="errored" class="feed-empty" data-test="timeline-error">
           <el-empty description="動態載入失敗，稍後再試" :image-size="80" />
         </div>
 
@@ -263,12 +265,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
           />
         </div>
 
-        <ul
-          v-else
-          ref="listRef"
-          class="feed-list"
-          data-test="timeline-list"
-        >
+        <ul v-else ref="listRef" class="feed-list" data-test="timeline-list">
           <li
             v-for="item in items"
             :key="`${item.type}:${item.type === 'member_joined' ? item.member_id : item.job_id}`"
@@ -317,13 +314,16 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
                   <span class="row-verb">加入了社群</span>
                 </template>
                 <template v-else>
-                  <strong class="row-name" :class="{ 'is-anonymous': !item.real_name }">
+                  <strong
+                    class="row-name"
+                    :class="{ 'is-anonymous': !item.real_name }"
+                  >
                     {{ item.real_name || '匿名成員' }}
                   </strong>
                   <span class="row-verb">新增了一筆求職紀錄</span>
-                  <span
-                    :class="['row-kind', `row-kind--${item.kind}`]"
-                  >{{ KIND_LABEL[item.kind] }}</span>
+                  <span :class="['row-kind', `row-kind--${item.kind}`]">{{
+                    KIND_LABEL[item.kind]
+                  }}</span>
                 </template>
               </div>
               <div class="row-line-2">
@@ -447,7 +447,8 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
   font-weight: 500;
   cursor: pointer;
   outline: none;
-  transition: background var(--dur) var(--ease),
+  transition:
+    background var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
@@ -539,8 +540,12 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 }
 
 @keyframes feed-sentinel-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .feed-row {
@@ -552,7 +557,8 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
   cursor: pointer;
   outline: none;
   position: relative;
-  transition: background var(--dur) var(--ease),
+  transition:
+    background var(--dur) var(--ease),
     transform var(--dur) var(--ease);
   /* gentle entrance — only meaningful on the first paint, but cheap. */
   animation: row-fade 0.32s var(--ease) backwards;

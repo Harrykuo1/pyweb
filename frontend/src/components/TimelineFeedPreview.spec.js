@@ -50,9 +50,7 @@ describe('TimelineFeedPreview.vue', () => {
   })
 
   it('caps requested limit by passing it to the API', async () => {
-    const spy = vi
-      .spyOn(timelineApi, 'list')
-      .mockResolvedValue({ items: [] })
+    const spy = vi.spyOn(timelineApi, 'list').mockResolvedValue({ items: [] })
     mount(TimelineFeedPreview, { props: { limit: 4 } })
     await flushPromises()
     expect(spy).toHaveBeenCalledWith({ limit: 4 })
@@ -150,7 +148,9 @@ describe('TimelineFeedPreview.vue', () => {
         job_month: 5,
       },
     ])
-    await wrapper.find('[data-test="hero-feed-row-job_created"]').trigger('click')
+    await wrapper
+      .find('[data-test="hero-feed-row-job_created"]')
+      .trigger('click')
     expect(pushMock).toHaveBeenCalledWith({
       path: '/jobs',
       query: { detail: '9' },

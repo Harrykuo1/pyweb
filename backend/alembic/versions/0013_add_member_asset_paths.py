@@ -29,17 +29,19 @@ Revision ID: 0013
 Revises: 0012
 Create Date: 2026-05-23
 """
+
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0013"
-down_revision: Union[str, None] = "0012"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0012"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -66,11 +68,13 @@ def upgrade() -> None:
     uploads_root = Path(settings.uploads_dir)
 
     conn = op.get_bind()
-    members = conn.execute(sa.text(
-        "SELECT id, photo, photo_content_type, resume_pdf "
-        "FROM members "
-        "WHERE photo IS NOT NULL OR resume_pdf IS NOT NULL"
-    )).fetchall()
+    members = conn.execute(
+        sa.text(
+            "SELECT id, photo, photo_content_type, resume_pdf "
+            "FROM members "
+            "WHERE photo IS NOT NULL OR resume_pdf IS NOT NULL"
+        )
+    ).fetchall()
 
     photo_n = pdf_n = skipped = 0
     for mid, photo_bytes, mime, pdf_bytes in members:
@@ -79,7 +83,8 @@ def upgrade() -> None:
             if ext is None:
                 logger.warning(
                     "skipping photo backfill for member %s: unknown MIME %r",
-                    mid, mime,
+                    mid,
+                    mime,
                 )
                 skipped += 1
             else:
@@ -113,7 +118,10 @@ def upgrade() -> None:
     if photo_n or pdf_n or skipped:
         logger.info(
             "0013 backfill: %d photos + %d PDFs written to %s (%d skipped)",
-            photo_n, pdf_n, uploads_root, skipped,
+            photo_n,
+            pdf_n,
+            uploads_root,
+            skipped,
         )
 
 

@@ -56,10 +56,9 @@ export const eventsApi = {
     return data
   },
   async updatePhotoCaption(eventId, photoId, caption) {
-    const { data } = await client.put(
-      `/events/${eventId}/photos/${photoId}`,
-      { caption },
-    )
+    const { data } = await client.put(`/events/${eventId}/photos/${photoId}`, {
+      caption,
+    })
     return data
   },
   async removePhoto(eventId, photoId, password) {

@@ -40,15 +40,13 @@ export function buildListing(attachments, currentPath) {
       files.push({ attachment: a, displayName: remaining })
     } else {
       const folderName = remaining.slice(0, slash)
-      const existing =
-        folders.get(folderName) || { name: folderName, count: 0 }
+      const existing = folders.get(folderName) || { name: folderName, count: 0 }
       existing.count += 1
       folders.set(folderName, existing)
     }
   }
 
-  const compare = (a, b) =>
-    a.localeCompare(b, undefined, { numeric: true })
+  const compare = (a, b) => a.localeCompare(b, undefined, { numeric: true })
 
   return {
     folders: [...folders.values()].sort((a, b) => compare(a.name, b.name)),

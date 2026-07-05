@@ -38,11 +38,7 @@ defineExpose({ form, formVersion })
       data-test="settings-form"
       @submit.prevent="handleSave"
     >
-      <article
-        v-for="f in fields"
-        :key="f.key"
-        class="limits-card"
-      >
+      <article v-for="f in fields" :key="f.key" class="limits-card">
         <header class="limits-card__header">
           <h4>{{ copyFor(f.key).label }}</h4>
           <p v-if="copyFor(f.key).description">
@@ -119,7 +115,8 @@ defineExpose({ form, formVersion })
   border-radius: var(--radius-lg);
   padding: 20px 22px;
   box-shadow: var(--shadow-sm);
-  transition: border-color var(--dur) var(--ease),
+  transition:
+    border-color var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease);
 }
 

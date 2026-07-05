@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,7 +16,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    username: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     # Bumped whenever the password changes. Stamped into the session at
     # login time and re-checked on every authenticated request, so any
@@ -39,5 +41,5 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )

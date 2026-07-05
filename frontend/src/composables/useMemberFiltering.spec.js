@@ -4,9 +4,27 @@ import { ref } from 'vue'
 import { useMemberFiltering } from './useMemberFiltering'
 
 const sample = [
-  { real_name: 'Alice', institution: 'NTU', position: 'SWE', graduation_year: 2022, joined_at: '2022-01-01' },
-  { real_name: 'Bob', institution: 'NCKU', position: 'PM', graduation_year: 2020, joined_at: '2020-05-01' },
-  { real_name: 'Carol', institution: 'NTU', position: 'Designer', graduation_year: 2024, joined_at: '2024-03-01' },
+  {
+    real_name: 'Alice',
+    institution: 'NTU',
+    position: 'SWE',
+    graduation_year: 2022,
+    joined_at: '2022-01-01',
+  },
+  {
+    real_name: 'Bob',
+    institution: 'NCKU',
+    position: 'PM',
+    graduation_year: 2020,
+    joined_at: '2020-05-01',
+  },
+  {
+    real_name: 'Carol',
+    institution: 'NTU',
+    position: 'Designer',
+    graduation_year: 2024,
+    joined_at: '2024-03-01',
+  },
 ]
 
 describe('useMemberFiltering', () => {

@@ -52,19 +52,45 @@ const activeTab = ref('detail')
 const TAG_LIMIT = 12
 
 const DESKTOP_TOOLBARS = [
-  'bold', 'underline', 'italic', 'strikeThrough', '-',
-  'title', 'quote', '-',
-  'unorderedList', 'orderedList', 'task', '-',
-  'codeRow', 'link', 'image', 'table', '-',
-  'revoke', 'next', '-',
-  'pageFullscreen', 'preview', 'previewOnly',
+  'bold',
+  'underline',
+  'italic',
+  'strikeThrough',
+  '-',
+  'title',
+  'quote',
+  '-',
+  'unorderedList',
+  'orderedList',
+  'task',
+  '-',
+  'codeRow',
+  'link',
+  'image',
+  'table',
+  '-',
+  'revoke',
+  'next',
+  '-',
+  'pageFullscreen',
+  'preview',
+  'previewOnly',
 ]
 const MOBILE_TOOLBARS = [
-  'bold', 'title', '-', 'unorderedList', 'orderedList', '-', 'link', 'pageFullscreen',
+  'bold',
+  'title',
+  '-',
+  'unorderedList',
+  'orderedList',
+  '-',
+  'link',
+  'pageFullscreen',
 ]
 const MOBILE_BREAKPOINT = 768
 
-const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const viewportWidth = ref(
+  typeof window !== 'undefined' ? window.innerWidth : 1024,
+)
 const isMobileWidth = computed(() => viewportWidth.value < MOBILE_BREAKPOINT)
 function _onViewportResize() {
   viewportWidth.value = window.innerWidth
@@ -111,7 +137,9 @@ const form = reactive({
 
 const rules = {
   title: [{ required: true, message: '請輸入活動名稱', trigger: 'blur' }],
-  event_date: [{ required: true, message: '請選擇活動日期', trigger: 'change' }],
+  event_date: [
+    { required: true, message: '請選擇活動日期', trigger: 'change' },
+  ],
 }
 
 const tagSuggestions = ref([])
@@ -303,7 +331,12 @@ async function handleSubmit() {
                 data-test="form-tags"
                 class="form-tags"
               >
-                <el-option v-for="t in tagSuggestions" :key="t" :label="t" :value="t" />
+                <el-option
+                  v-for="t in tagSuggestions"
+                  :key="t"
+                  :label="t"
+                  :value="t"
+                />
               </el-select>
             </el-form-item>
           </div>
@@ -351,7 +384,9 @@ async function handleSubmit() {
           />
           <div v-else class="photos-locked" data-test="photos-locked">
             <p class="photos-locked-title">先儲存基本資料</p>
-            <p class="photos-locked-sub">按下方「新增」建立活動後即可上傳照片。</p>
+            <p class="photos-locked-sub">
+              按下方「新增」建立活動後即可上傳照片。
+            </p>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -395,7 +430,11 @@ async function handleSubmit() {
 }
 
 .event-tabs :deep(.el-tabs__active-bar) {
-  background: linear-gradient(135deg, var(--accent-warm-from), var(--accent-warm-to));
+  background: linear-gradient(
+    135deg,
+    var(--accent-warm-from),
+    var(--accent-warm-to)
+  );
 }
 
 .form-row-inline {

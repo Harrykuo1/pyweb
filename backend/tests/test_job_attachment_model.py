@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -28,7 +28,7 @@ def test_attachment_row_roundtrips(db_session):
             filename="report.pdf",
             mime_type="application/pdf",
             size_bytes=1234,
-            uploaded_at=datetime.now(timezone.utc),
+            uploaded_at=datetime.now(UTC),
         )
     )
     db_session.commit()
@@ -54,14 +54,14 @@ def test_two_jobs_may_share_an_original_filename(db_session):
                 filename="cv.pdf",
                 mime_type="application/pdf",
                 size_bytes=1,
-                uploaded_at=datetime.now(timezone.utc),
+                uploaded_at=datetime.now(UTC),
             ),
             JobAttachment(
                 job_id=job_b.id,
                 filename="cv.pdf",
                 mime_type="application/pdf",
                 size_bytes=2,
-                uploaded_at=datetime.now(timezone.utc),
+                uploaded_at=datetime.now(UTC),
             ),
         ]
     )
@@ -85,7 +85,7 @@ def test_attachment_filename_required(db_session):
             job_id=job.id,
             mime_type="application/pdf",
             size_bytes=1,
-            uploaded_at=datetime.now(timezone.utc),
+            uploaded_at=datetime.now(UTC),
         )
     )
     with pytest.raises(IntegrityError):
@@ -122,15 +122,21 @@ def test_deleting_job_cascades_to_attachments():
     s = Session()
     try:
         job = Job(
-            job_year=2026, job_month=5, company="Acme",
-            kind=JobKind.INTERNSHIP, experience_md="x",
+            job_year=2026,
+            job_month=5,
+            company="Acme",
+            kind=JobKind.INTERNSHIP,
+            experience_md="x",
         )
         s.add(job)
         s.commit()
         s.add(
             JobAttachment(
-                job_id=job.id, filename="cv.pdf", mime_type="application/pdf",
-                size_bytes=1, uploaded_at=datetime.now(timezone.utc),
+                job_id=job.id,
+                filename="cv.pdf",
+                mime_type="application/pdf",
+                size_bytes=1,
+                uploaded_at=datetime.now(UTC),
             )
         )
         s.commit()

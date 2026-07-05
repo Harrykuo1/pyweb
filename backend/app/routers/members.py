@@ -1,8 +1,16 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -58,7 +66,9 @@ def _try_remove_member_dir(uploads_root: Path, member_id: int) -> None:
 def _get_member_or_404(db: Session, member_id: int) -> Member:
     member = db.query(Member).filter_by(id=member_id).one_or_none()
     if member is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
     return member
 
 
@@ -109,7 +119,7 @@ def create_member(
         institution=payload.institution,
         position=payload.position,
         resume_md=payload.resume_md,
-        joined_at=payload.joined_at or datetime.now(timezone.utc),
+        joined_at=payload.joined_at or datetime.now(UTC),
     )
     db.add(member)
     db.commit()
@@ -146,6 +156,7 @@ def delete_member(
 
 
 # ---------- photo ----------
+
 
 @router.get("/{member_id}/photo")
 async def get_member_photo(
@@ -220,7 +231,7 @@ async def upload_member_photo(
 
     member.photo_path = new_relpath
     member.photo_content_type = file.content_type
-    member.photo_updated_at = datetime.now(timezone.utc)
+    member.photo_updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(member)
     return member
@@ -249,6 +260,7 @@ def delete_member_photo(
 
 # ---------- resume pdf ----------
 
+
 @router.get("/{member_id}/resume.pdf")
 async def get_member_resume_pdf(
     member_id: int,
@@ -258,7 +270,9 @@ async def get_member_resume_pdf(
 ) -> Response:
     member = _get_member_or_404(db, member_id)
     if not member.resume_pdf_path:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No resume pdf")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No resume pdf"
+        )
     file_path = uploads_root / member.resume_pdf_path
     if not file_path.exists():
         raise HTTPException(
@@ -304,7 +318,7 @@ async def upload_member_resume_pdf(
     target.write_bytes(data)
 
     member.resume_pdf_path = relpath
-    member.resume_pdf_updated_at = datetime.now(timezone.utc)
+    member.resume_pdf_updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(member)
     return member

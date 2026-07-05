@@ -10,7 +10,6 @@ from app.main import app
 from app.models import AppConfig, Job, JobAttachment, JobKind, User, UserRole
 from app.routers.job_attachments import get_uploads_root
 
-
 # A minimal but real PDF byte string so MIME inspection downstream
 # stays plausible. The shape doesn't have to validate as PDF — the
 # router only checks the Content-Type header and extension.
@@ -38,10 +37,20 @@ def job(db_session) -> Job:
 
 @pytest.fixture
 def client(db_session, uploads_dir):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():
@@ -57,14 +66,27 @@ def client(db_session, uploads_dir):
 
 
 def _login_admin(client):
-    assert client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    )
 
 
 def _login_viewer(client):
-    assert client.post("/api/auth/login", json={"password": "viewer-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "viewer-pw"}).status_code
+        == 200
+    )
 
 
-def _upload(client, job_id, *, filename="report.pdf", body=TINY_PDF, mime="application/pdf", strategy=None):
+def _upload(
+    client,
+    job_id,
+    *,
+    filename="report.pdf",
+    body=TINY_PDF,
+    mime="application/pdf",
+    strategy=None,
+):
     files = {"file": (filename, BytesIO(body), mime)}
     data = {}
     if strategy is not None:
@@ -240,9 +262,7 @@ def test_upload_rejects_junk_filename(client, job):
     assert "暫存" in r.json()["detail"]
 
 
-def test_rename_in_folder_suffixes_last_segment(
-    client, job, db_session, uploads_dir
-):
+def test_rename_in_folder_suffixes_last_segment(client, job, db_session, uploads_dir):
     _login_admin(client)
     base = {"file": ("foo.pdf", BytesIO(TINY_PDF), "application/pdf")}
     client.post(
@@ -258,9 +278,7 @@ def test_rename_in_folder_suffixes_last_segment(
     assert r.status_code == 201
     assert r.json()["filename"] == "src/foo (1).pdf"
 
-    assert (
-        uploads_dir / "jobs" / str(job.id) / "src" / "foo (1).pdf"
-    ).exists()
+    assert (uploads_dir / "jobs" / str(job.id) / "src" / "foo (1).pdf").exists()
 
 
 def test_upload_respects_max_attachments_per_job(client, job, db_session):
@@ -289,7 +307,9 @@ def test_upload_conflict_without_strategy_returns_409(client, job, uploads_dir):
     assert detail["conflicting_filename"] == "report.pdf"
 
 
-def test_upload_conflict_with_rename_appends_suffix(client, job, db_session, uploads_dir):
+def test_upload_conflict_with_rename_appends_suffix(
+    client, job, db_session, uploads_dir
+):
     _login_admin(client)
     _upload(client, job.id, filename="report.pdf")
     r = _upload(client, job.id, filename="report.pdf", strategy="rename")
@@ -315,7 +335,9 @@ def test_upload_rename_keeps_climbing_on_repeated_conflicts(client, job, uploads
     assert r.json()["filename"] == "report (2).pdf"
 
 
-def test_upload_conflict_with_overwrite_replaces_in_place(client, job, db_session, uploads_dir):
+def test_upload_conflict_with_overwrite_replaces_in_place(
+    client, job, db_session, uploads_dir
+):
     _login_admin(client)
     first = _upload(client, job.id, filename="report.pdf")
     original_id = first.json()["id"]
@@ -323,7 +345,9 @@ def test_upload_conflict_with_overwrite_replaces_in_place(client, job, db_sessio
     assert original_path.read_bytes() == TINY_PDF
 
     new_body = b"%PDF-1.7\n%new\n"
-    r = _upload(client, job.id, filename="report.pdf", body=new_body, strategy="overwrite")
+    r = _upload(
+        client, job.id, filename="report.pdf", body=new_body, strategy="overwrite"
+    )
     assert r.status_code == 201
     # Same row ID, new size.
     assert r.json()["id"] == original_id

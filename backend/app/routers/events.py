@@ -7,7 +7,8 @@ from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
-from app.core.search_query import build_ilike_filter, parse as parse_search_query
+from app.core.search_query import build_ilike_filter
+from app.core.search_query import parse as parse_search_query
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Event, EventPhoto, EventTag, User
@@ -58,9 +59,7 @@ def _tags_map(db: Session, event_ids: list[int]) -> dict[int, list[str]]:
     return out
 
 
-def _photo_aggregates(
-    db: Session, event_ids: list[int]
-) -> dict[int, tuple[int, int]]:
+def _photo_aggregates(db: Session, event_ids: list[int]) -> dict[int, tuple[int, int]]:
     """Return {event_id: (photo_count, cover_photo_id)} in one query.
     Cover is the earliest photo by id; events with no photos are absent
     from the map so the caller defaults via dict.get."""
@@ -198,9 +197,7 @@ def get_event(
     return _serialize_many(db, [obj])[0]
 
 
-@router.post(
-    "", response_model=EventResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 def create_event(
     payload: EventCreate,
     db: Session = Depends(get_db),

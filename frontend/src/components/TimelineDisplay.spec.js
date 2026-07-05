@@ -11,7 +11,9 @@ describe('TimelineDisplay', () => {
   it('shows the empty hint when events is empty', () => {
     const wrapper = mountDisplay([])
     expect(wrapper.text()).toContain('尚無時程紀錄')
-    expect(wrapper.findAll('[data-test="timeline-display-item"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-test="timeline-display-item"]')).toHaveLength(
+      0,
+    )
   })
 
   it('renders one item per event in the given order', () => {

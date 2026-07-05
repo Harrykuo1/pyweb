@@ -29,7 +29,8 @@ configMdEditor({
   markdownItConfig(md) {
     const defaultLinkOpen =
       md.renderer.rules.link_open ||
-      ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+      ((tokens, idx, options, _env, self) =>
+        self.renderToken(tokens, idx, options))
     md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
       tokens[idx].attrSet('target', '_blank')
       tokens[idx].attrSet('rel', 'noopener noreferrer')
@@ -50,7 +51,8 @@ app.use(ElementPlus)
 const auth = useAuthStore()
 client.interceptors.response.use(
   (response) => response,
-  (error) => handleAuthResponseError(error, { auth, router, message: ElMessage }),
+  (error) =>
+    handleAuthResponseError(error, { auth, router, message: ElMessage }),
 )
 
 app.mount('#app')

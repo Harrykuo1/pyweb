@@ -1,7 +1,20 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { ElButton, ElDialog, ElEmpty, ElIcon, ElTabPane, ElTabs } from 'element-plus'
-import { Calendar, Edit, OfficeBuilding, School, User } from '@element-plus/icons-vue'
+import {
+  ElButton,
+  ElDialog,
+  ElEmpty,
+  ElIcon,
+  ElTabPane,
+  ElTabs,
+} from 'element-plus'
+import {
+  Calendar,
+  Edit,
+  OfficeBuilding,
+  School,
+  User,
+} from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
@@ -36,7 +49,9 @@ const openCounter = ref(0)
 // rows that haven't been re-saved through the structured editor since
 // the migration.
 const hasTimelineEvents = computed(
-  () => Array.isArray(props.job?.timeline_events) && props.job.timeline_events.length > 0,
+  () =>
+    Array.isArray(props.job?.timeline_events) &&
+    props.job.timeline_events.length > 0,
 )
 const hasLegacyTimelineMd = computed(
   () => !!props.job?.timeline_md && props.job.timeline_md.trim().length > 0,
@@ -49,9 +64,7 @@ const hasTimeline = computed(
 // to look at. attachment_count is populated by the jobs API; default
 // to 0 if the field is absent (defensive in case an older cached job
 // object slips through without it).
-const hasAttachments = computed(
-  () => (props.job?.attachment_count ?? 0) > 0,
-)
+const hasAttachments = computed(() => (props.job?.attachment_count ?? 0) > 0)
 
 watch(
   () => props.modelValue,
@@ -98,7 +111,11 @@ function formatJobYearMonth(j) {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <template #header>
-      <div v-if="job" class="detail-header" :class="`detail-header--${job.kind}`">
+      <div
+        v-if="job"
+        class="detail-header"
+        :class="`detail-header--${job.kind}`"
+      >
         <div class="header-row-1">
           <span class="kind-badge" :data-test="`detail-kind-${job.kind}`">
             <span class="kind-dot" aria-hidden="true"></span>
@@ -332,7 +349,11 @@ function formatJobYearMonth(j) {
 }
 
 .detail-tabs :deep(.el-tabs__active-bar) {
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
 }
 
 .md-frame {

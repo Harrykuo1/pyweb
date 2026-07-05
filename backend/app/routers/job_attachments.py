@@ -1,6 +1,6 @@
 import io
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import quote
@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.core import office_convert
 from app.core.attachments import (
     PREVIEW_INLINE_EXTENSIONS,
     ext_of,
@@ -28,7 +29,6 @@ from app.core.attachments import (
 )
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
-from app.core import office_convert
 from app.core.runtime_config import get_int
 from app.core.security import verify_password
 from app.database import get_db
@@ -71,9 +71,7 @@ def _preview_path(uploads_root: Path, job_id: int, filename: str) -> Path:
     return job_uploads_dir(uploads_root, job_id) / f"{filename}.preview.pdf"
 
 
-def _serialize(
-    attachment: JobAttachment, uploads_root: Path
-) -> JobAttachmentResponse:
+def _serialize(attachment: JobAttachment, uploads_root: Path) -> JobAttachmentResponse:
     return JobAttachmentResponse(
         id=attachment.id,
         job_id=attachment.job_id,
@@ -85,6 +83,7 @@ def _serialize(
             uploads_root, attachment.job_id, attachment.filename
         ).exists(),
     )
+
 
 router = APIRouter(prefix="/api/jobs", tags=["job_attachments"])
 
@@ -138,7 +137,7 @@ async def upload_attachment(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(e),
-        )
+        ) from e
 
     if is_junk(clean_name):
         # Frontend already filters these out, but defence-in-depth.
@@ -188,9 +187,7 @@ async def upload_attachment(
     creates_new_row = not (has_conflict and conflict_strategy == "overwrite")
     if creates_new_row:
         max_count = get_int(db, "max_attachments_per_job")
-        current_count = (
-            db.query(JobAttachment).filter_by(job_id=job_id).count()
-        )
+        current_count = db.query(JobAttachment).filter_by(job_id=job_id).count()
         if current_count >= max_count:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -231,7 +228,7 @@ async def upload_attachment(
             preview_target,
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if has_conflict and conflict_strategy == "overwrite" and existing_row is not None:
         existing_row.mime_type = file.content_type or existing_row.mime_type
         existing_row.size_bytes = len(data)
@@ -268,16 +265,14 @@ def _content_disposition(filename: str, disposition: str = "inline") -> str:
     except UnicodeEncodeError:
         ascii_safe = "".join(c if ord(c) < 128 else "_" for c in filename)
         return f"{disposition}; filename=\"{ascii_safe}\"; filename*=UTF-8''{encoded}"
-    return f"{disposition}; filename=\"{filename}\""
+    return f'{disposition}; filename="{filename}"'
 
 
 def _get_attachment_or_404(
     db: Session, job_id: int, attachment_id: int
 ) -> JobAttachment:
     row = (
-        db.query(JobAttachment)
-        .filter_by(id=attachment_id, job_id=job_id)
-        .one_or_none()
+        db.query(JobAttachment).filter_by(id=attachment_id, job_id=job_id).one_or_none()
     )
     if row is None:
         raise HTTPException(
@@ -367,9 +362,7 @@ def preview_attachment(
         preview_path,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": _content_disposition(
-                f"{attachment.filename}.pdf"
-            ),
+            "Content-Disposition": _content_disposition(f"{attachment.filename}.pdf"),
             "X-Content-Type-Options": "nosniff",
         },
     )

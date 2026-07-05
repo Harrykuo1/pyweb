@@ -96,10 +96,7 @@ defineExpose({ accounts, usernameForm, passwordForm })
               <span class="account-row__role">{{ group.meta.subtitle }}</span>
             </span>
           </button>
-          <div
-            v-if="!group.accounts.length"
-            class="account-group__empty"
-          >
+          <div v-if="!group.accounts.length" class="account-group__empty">
             尚無此角色的帳號
           </div>
         </div>
@@ -384,7 +381,8 @@ defineExpose({ accounts, usernameForm, passwordForm })
   border-radius: var(--radius-md);
   font: inherit;
   color: var(--ink-700);
-  transition: border-color var(--dur) var(--ease),
+  transition:
+    border-color var(--dur) var(--ease),
     background-color var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease),
     transform var(--dur) var(--ease);
@@ -426,7 +424,11 @@ defineExpose({ accounts, usernameForm, passwordForm })
   font-weight: 700;
   color: #ffffff;
   flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 4px 10px rgba(99, 102, 241, 0.28);
 }
 
@@ -531,7 +533,11 @@ defineExpose({ accounts, usernameForm, passwordForm })
   font-weight: 700;
   color: #ffffff;
   flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 8px 20px rgba(99, 102, 241, 0.32);
   position: relative;
   z-index: 1;

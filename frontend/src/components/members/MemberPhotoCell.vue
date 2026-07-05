@@ -1,5 +1,12 @@
 <script setup>
-import { ElAvatar, ElButton, ElIcon, ElImage, ElMessage, ElUpload } from 'element-plus'
+import {
+  ElAvatar,
+  ElButton,
+  ElIcon,
+  ElImage,
+  ElMessage,
+  ElUpload,
+} from 'element-plus'
 import { Camera, Delete, Loading, UserFilled } from '@element-plus/icons-vue'
 
 import { membersApi } from '../../api/members'
@@ -25,7 +32,10 @@ const auth = useAuthStore()
 
 function photoSrc() {
   if (!props.member.has_photo) return null
-  return membersApi.photoUrl(props.member.id, props.member.photo_updated_at ?? '')
+  return membersApi.photoUrl(
+    props.member.id,
+    props.member.photo_updated_at ?? '',
+  )
 }
 
 function handlePicked(uploadFile) {
@@ -222,7 +232,8 @@ function handleDeleteClick() {
   gap: 4px;
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity var(--dur) var(--ease),
+  transition:
+    opacity var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }
 

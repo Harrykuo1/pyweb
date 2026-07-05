@@ -193,7 +193,9 @@ export function useAttachmentUpload({
         },
       )
       // If overwrite, replace the existing row by id; otherwise append.
-      const existingIdx = attachments.value.findIndex((a) => a.id === created.id)
+      const existingIdx = attachments.value.findIndex(
+        (a) => a.id === created.id,
+      )
       if (existingIdx >= 0) {
         attachments.value.splice(existingIdx, 1, created)
       } else {

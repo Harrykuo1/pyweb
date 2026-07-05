@@ -27,6 +27,7 @@ unsupported-format error, missing fileUrl, ...) returns False so the
 upload handler degrades to ``preview_available=False`` instead of
 turning a flaky conversion into a 500.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -39,9 +40,7 @@ import jwt as pyjwt
 
 from app.core.config import settings
 
-OFFICE_EXTENSIONS: frozenset[str] = frozenset(
-    {".doc", ".docx", ".ppt", ".pptx"}
-)
+OFFICE_EXTENSIONS: frozenset[str] = frozenset({".doc", ".docx", ".ppt", ".pptx"})
 
 # How often we poll OnlyOffice for conversion progress.
 POLL_INTERVAL_SECONDS: float = 1.0

@@ -50,9 +50,17 @@ describe('MarqueeText.vue', () => {
   })
 
   it('measures overflow and derives the scroll duration', async () => {
-    const wrapper = mount(MarqueeText, { props: { text: 'long', speed: 28, gap: 32 } })
-    Object.defineProperty(wrapper.vm.containerRef, 'clientWidth', { configurable: true, value: 100 })
-    Object.defineProperty(wrapper.vm.probeRef, 'scrollWidth', { configurable: true, value: 300 })
+    const wrapper = mount(MarqueeText, {
+      props: { text: 'long', speed: 28, gap: 32 },
+    })
+    Object.defineProperty(wrapper.vm.containerRef, 'clientWidth', {
+      configurable: true,
+      value: 100,
+    })
+    Object.defineProperty(wrapper.vm.probeRef, 'scrollWidth', {
+      configurable: true,
+      value: 300,
+    })
     await wrapper.vm.measure()
     await wrapper.vm.$nextTick()
 
@@ -63,8 +71,14 @@ describe('MarqueeText.vue', () => {
 
   it('reports no overflow when the text fits', async () => {
     const wrapper = mount(MarqueeText, { props: { text: 'x' } })
-    Object.defineProperty(wrapper.vm.containerRef, 'clientWidth', { configurable: true, value: 300 })
-    Object.defineProperty(wrapper.vm.probeRef, 'scrollWidth', { configurable: true, value: 100 })
+    Object.defineProperty(wrapper.vm.containerRef, 'clientWidth', {
+      configurable: true,
+      value: 300,
+    })
+    Object.defineProperty(wrapper.vm.probeRef, 'scrollWidth', {
+      configurable: true,
+      value: 100,
+    })
     await wrapper.vm.measure()
     await wrapper.vm.$nextTick()
 

@@ -7,7 +7,8 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
-from app.core.search_query import build_ilike_filter, parse as parse_search_query
+from app.core.search_query import build_ilike_filter
+from app.core.search_query import parse as parse_search_query
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, JobAttachment, JobKind, User
@@ -66,7 +67,7 @@ def _attachment_counts(db: Session, job_ids: list[int]) -> dict[int, int]:
         .group_by(JobAttachment.job_id)
         .all()
     )
-    return {job_id: count for job_id, count in rows}
+    return dict(rows)
 
 
 def _to_response(job: Job, attachment_count: int = 0) -> JobResponse:
@@ -167,11 +168,7 @@ def list_companies(
     query = db.query(Job.company).distinct()
     if prefix:
         query = query.filter(Job.company.ilike(f"{prefix}%"))
-    rows = (
-        query.order_by(Job.company)
-        .limit(COMPANIES_AUTOCOMPLETE_LIMIT)
-        .all()
-    )
+    rows = query.order_by(Job.company).limit(COMPANIES_AUTOCOMPLETE_LIMIT).all()
     return [row[0] for row in rows]
 
 
@@ -185,11 +182,7 @@ def list_categories(
     query = db.query(Job.category).distinct().filter(Job.category.is_not(None))
     if prefix:
         query = query.filter(Job.category.ilike(f"{prefix}%"))
-    rows = (
-        query.order_by(Job.category)
-        .limit(CATEGORIES_AUTOCOMPLETE_LIMIT)
-        .all()
-    )
+    rows = query.order_by(Job.category).limit(CATEGORIES_AUTOCOMPLETE_LIMIT).all()
     return [row[0] for row in rows]
 
 

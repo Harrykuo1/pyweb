@@ -96,7 +96,6 @@ function clampSelectionToImage(event) {
   }
 }
 
-
 async function setupCropper() {
   if (!props.sourceFile) return
   if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
@@ -115,7 +114,11 @@ async function setupCropper() {
   // the initial-fit math produces nonsense.
   const image = cropperInstance.getCropperImage()
   if (image && typeof image.$ready === 'function') {
-    try { await image.$ready() } catch { /* image failed to load */ }
+    try {
+      await image.$ready()
+    } catch {
+      /* image failed to load */
+    }
   }
 
   // For portrait / landscape photos contained in our 4:3 canvas, the
@@ -178,11 +181,9 @@ async function handleConfirm() {
       return
     }
     const ext = EXT_BY_TYPE[props.outputType] ?? 'png'
-    const file = new File(
-      [blob],
-      `${props.outputFilename}.${ext}`,
-      { type: props.outputType },
-    )
+    const file = new File([blob], `${props.outputFilename}.${ext}`, {
+      type: props.outputType,
+    })
     emit('cropped', file)
     close()
   } finally {
@@ -206,7 +207,10 @@ defineExpose({ handleConfirm })
     <div class="cropper-wrap">
       <img ref="imgRef" alt="待裁切照片" />
     </div>
-    <p class="hint">拖曳選框調整位置、四角拖把控制大小（強制 1:1）；選框碰到照片邊界會自動停下。</p>
+    <p class="hint">
+      拖曳選框調整位置、四角拖把控制大小（強制
+      1:1）；選框碰到照片邊界會自動停下。
+    </p>
 
     <template #footer>
       <el-button @click="close">取消</el-button>
@@ -253,7 +257,7 @@ defineExpose({ handleConfirm })
 /* The default ~7px square handles are hard to grab, especially on
    touch. Beef up the resize corner / edge handles so they're visible
    and easy to drag without pushing them off the image. */
-.cropper-wrap :deep(cropper-handle[action$="-resize"]) {
+.cropper-wrap :deep(cropper-handle[action$='-resize']) {
   width: 16px;
   height: 16px;
   border-radius: 3px;

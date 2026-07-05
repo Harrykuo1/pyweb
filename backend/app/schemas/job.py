@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -26,7 +26,7 @@ class TimelineEvent(BaseModel):
 
 
 def _max_job_year() -> int:
-    return datetime.now(timezone.utc).year + 1
+    return datetime.now(UTC).year + 1
 
 
 def _validate_job_year(value: int) -> int:

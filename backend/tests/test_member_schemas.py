@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -69,7 +69,7 @@ def test_member_update_rejects_empty_string_when_provided():
 
 
 def test_member_response_from_orm_object():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     m = Member(
         id=1,
         graduation_year=2023,
@@ -91,7 +91,7 @@ def test_member_response_omits_binary_fields():
     # has_photo / has_resume_pdf read the companion non-deferred
     # columns; mirror the upload invariant by setting the paths and
     # companion fields together (binary content itself lives on disk).
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     m = Member(
         id=2,
         graduation_year=2022,
@@ -115,9 +115,7 @@ def test_member_response_omits_binary_fields():
 
 
 def test_member_create_position_defaults_to_none():
-    payload = MemberCreate(
-        graduation_year=2024, real_name="A", institution="NYCU"
-    )
+    payload = MemberCreate(graduation_year=2024, real_name="A", institution="NYCU")
     assert payload.position is None
 
 
@@ -148,7 +146,7 @@ def test_member_response_exposes_position_when_set():
         real_name="C",
         institution="NYCU",
         position="CS dept",
-        joined_at=datetime.now(timezone.utc),
+        joined_at=datetime.now(UTC),
     )
     resp = MemberResponse.model_validate(m)
     assert resp.position == "CS dept"

@@ -87,7 +87,9 @@ describe('ResumeViewerDialog', () => {
     expect(wrapper.find('[data-test="md-preview-stub"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="format-card-pdf"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="format-card-md"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="md-preview-stub"]').text()).toContain('# Bob resume')
+    expect(wrapper.find('[data-test="md-preview-stub"]').text()).toContain(
+      '# Bob resume',
+    )
   })
 
   it('defaults to PDF when both formats are present and shows the format chooser', async () => {
@@ -136,7 +138,11 @@ describe('ResumeViewerDialog', () => {
     const file = new File(['%PDF'], 'r.pdf', { type: 'application/pdf' })
     Object.defineProperty(file, 'size', { value: 1024 })
 
-    await wrapper.vm.handleUploadPdf({ raw: file, name: file.name, size: file.size })
+    await wrapper.vm.handleUploadPdf({
+      raw: file,
+      name: file.name,
+      size: file.size,
+    })
     await flushPromises()
 
     expect(upload).toHaveBeenCalledWith(2, file)
@@ -152,7 +158,11 @@ describe('ResumeViewerDialog', () => {
     const big = new File(['x'], 'big.pdf', { type: 'application/pdf' })
     Object.defineProperty(big, 'size', { value: 10 * 1024 * 1024 + 1 })
 
-    await wrapper.vm.handleUploadPdf({ raw: big, name: big.name, size: big.size })
+    await wrapper.vm.handleUploadPdf({
+      raw: big,
+      name: big.name,
+      size: big.size,
+    })
     expect(upload).not.toHaveBeenCalled()
   })
 
@@ -165,7 +175,11 @@ describe('ResumeViewerDialog', () => {
     const docx = new File(['x'], 'r.docx', { type: 'application/msword' })
     Object.defineProperty(docx, 'size', { value: 100 })
 
-    await wrapper.vm.handleUploadPdf({ raw: docx, name: docx.name, size: docx.size })
+    await wrapper.vm.handleUploadPdf({
+      raw: docx,
+      name: docx.name,
+      size: docx.size,
+    })
     expect(upload).not.toHaveBeenCalled()
   })
 

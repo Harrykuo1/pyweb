@@ -48,7 +48,9 @@ def test_seed_accounts_skips_existing_user_without_overwriting(db_session):
 
     seed_accounts(db_session)
 
-    admin = db_session.query(User).filter_by(username=settings.seed_admin_username).one()
+    admin = (
+        db_session.query(User).filter_by(username=settings.seed_admin_username).one()
+    )
     assert admin.password_hash == "pre-existing-hash"
 
 

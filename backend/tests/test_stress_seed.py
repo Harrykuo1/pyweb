@@ -34,9 +34,13 @@ def uploads_dir(tmp_path) -> Path:
 def test_seed_inserts_requested_counts(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     summary = stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=3, batch=3,
-        needle_every=0, seed_value=42,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=3,
+        batch=3,
+        needle_every=0,
+        seed_value=42,
     )
 
     assert summary["members_total"] == 3
@@ -50,14 +54,24 @@ def test_seed_inserts_requested_counts(tmp_path, uploads_dir):
 def test_seed_reset_clears_tables_before_inserting(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=3, batch=3, needle_every=0, seed_value=1,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=3,
+        batch=3,
+        needle_every=0,
+        seed_value=1,
     )
     # Re-run with reset=True; expect the second invocation's count, not 6.
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=1, jobs=1, batch=1,
-        needle_every=0, reset=True, seed_value=2,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=1,
+        jobs=1,
+        batch=1,
+        needle_every=0,
+        reset=True,
+        seed_value=2,
     )
 
     with _connect(db_url) as conn:
@@ -69,17 +83,25 @@ def test_seed_injects_needles_at_expected_cadence(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     # needle_every=2 with N=3 → idx 0 and 2 get needles → 2 each.
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=3, batch=3,
-        needle_every=2, seed_value=42,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=3,
+        batch=3,
+        needle_every=2,
+        seed_value=42,
     )
 
     with _connect(db_url) as conn:
         member_needles = conn.execute(
-            text("SELECT COUNT(*) FROM members WHERE resume_md LIKE '%STRESS_NEEDLE_M%'")
+            text(
+                "SELECT COUNT(*) FROM members WHERE resume_md LIKE '%STRESS_NEEDLE_M%'"
+            )
         ).scalar()
         job_needles = conn.execute(
-            text("SELECT COUNT(*) FROM jobs WHERE experience_md LIKE '%STRESS_NEEDLE_J%'")
+            text(
+                "SELECT COUNT(*) FROM jobs WHERE experience_md LIKE '%STRESS_NEEDLE_J%'"
+            )
         ).scalar()
         assert member_needles == 2
         assert job_needles == 2
@@ -88,18 +110,20 @@ def test_seed_injects_needles_at_expected_cadence(tmp_path, uploads_dir):
 def test_seed_writes_real_jpeg_photos(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=0, batch=3,
-        needle_every=0, seed_value=42,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=0,
+        batch=3,
+        needle_every=0,
+        seed_value=42,
     )
 
     with _connect(db_url) as conn:
         paths = [
-            r[0] for r in conn.execute(
-                text(
-                    "SELECT photo_path FROM members "
-                    "WHERE photo_path IS NOT NULL"
-                )
+            r[0]
+            for r in conn.execute(
+                text("SELECT photo_path FROM members WHERE photo_path IS NOT NULL")
             ).all()
         ]
     assert len(paths) == 3
@@ -114,14 +138,19 @@ def test_seed_writes_real_jpeg_photos(tmp_path, uploads_dir):
 def test_seed_writes_real_pdf_resumes(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=0, batch=3,
-        needle_every=0, seed_value=42,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=0,
+        batch=3,
+        needle_every=0,
+        seed_value=42,
     )
 
     with _connect(db_url) as conn:
         paths = [
-            r[0] for r in conn.execute(
+            r[0]
+            for r in conn.execute(
                 text(
                     "SELECT resume_pdf_path FROM members "
                     "WHERE resume_pdf_path IS NOT NULL"
@@ -139,37 +168,48 @@ def test_seed_writes_real_pdf_resumes(tmp_path, uploads_dir):
 def test_seed_populates_required_member_fields(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=0, batch=3,
-        needle_every=0, seed_value=42,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=0,
+        batch=3,
+        needle_every=0,
+        seed_value=42,
     )
 
     with _connect(db_url) as conn:
         # Required (non-null) columns must always be set, plus the path
         # columns which are now mandatory for every seeded member.
-        nulls = conn.execute(text(
-            "SELECT COUNT(*) FROM members "
-            "WHERE real_name IS NULL OR real_name = '' "
-            "   OR institution IS NULL OR institution = '' "
-            "   OR graduation_year IS NULL "
-            "   OR joined_at IS NULL "
-            "   OR resume_md IS NULL OR resume_md = '' "
-            "   OR photo_path IS NULL "
-            "   OR resume_pdf_path IS NULL"
-        )).scalar()
+        nulls = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM members "
+                "WHERE real_name IS NULL OR real_name = '' "
+                "   OR institution IS NULL OR institution = '' "
+                "   OR graduation_year IS NULL "
+                "   OR joined_at IS NULL "
+                "   OR resume_md IS NULL OR resume_md = '' "
+                "   OR photo_path IS NULL "
+                "   OR resume_pdf_path IS NULL"
+            )
+        ).scalar()
         assert nulls == 0
 
 
 def test_seed_writes_structured_timeline_events(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=0, jobs=3, batch=3,
-        needle_every=0, seed_value=42,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=0,
+        jobs=3,
+        batch=3,
+        needle_every=0,
+        seed_value=42,
     )
 
     # Read back through the ORM so the JSON column is decoded for us.
     import os
+
     os.environ.setdefault("SESSION_SECRET", "stress-seed-not-real")
     from sqlalchemy.orm import sessionmaker
 
@@ -186,6 +226,7 @@ def test_seed_writes_structured_timeline_events(tmp_path, uploads_dir):
         # Each event must have ISO date + event keys (matches the
         # TimelineEvent Pydantic schema).
         import re
+
         iso_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
         for j in with_events:
             for ev in j.timeline_events:
@@ -200,17 +241,25 @@ def test_seed_writes_structured_timeline_events(tmp_path, uploads_dir):
 def test_seed_disables_needles_when_rate_is_zero(tmp_path, uploads_dir):
     db_url = f"sqlite:///{tmp_path / 'stress.db'}"
     stress_seed.seed(
-        db_url=db_url, uploads_dir=uploads_dir,
-        members=3, jobs=3, batch=3,
-        needle_every=0, seed_value=1,
+        db_url=db_url,
+        uploads_dir=uploads_dir,
+        members=3,
+        jobs=3,
+        batch=3,
+        needle_every=0,
+        seed_value=1,
     )
 
     with _connect(db_url) as conn:
         m = conn.execute(
-            text("SELECT COUNT(*) FROM members WHERE resume_md LIKE '%STRESS_NEEDLE_M%'")
+            text(
+                "SELECT COUNT(*) FROM members WHERE resume_md LIKE '%STRESS_NEEDLE_M%'"
+            )
         ).scalar()
         j = conn.execute(
-            text("SELECT COUNT(*) FROM jobs WHERE experience_md LIKE '%STRESS_NEEDLE_J%'")
+            text(
+                "SELECT COUNT(*) FROM jobs WHERE experience_md LIKE '%STRESS_NEEDLE_J%'"
+            )
         ).scalar()
         assert m == 0
         assert j == 0

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,10 +12,20 @@ from app.models import Member, User, UserRole
 @pytest.fixture
 def client_factory(db_session):
     """Returns (client, login_as) where login_as logs in as one of admin/viewer."""
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():
@@ -25,8 +35,12 @@ def client_factory(db_session):
     client = TestClient(app)
 
     def login_as(role):
-        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[role]
-        r = client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]})
+        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[
+            role
+        ]
+        r = client.post(
+            "/api/auth/login", json={"username": creds[0], "password": creds[1]}
+        )
         assert r.status_code == 200, r.text
 
     try:
@@ -37,7 +51,7 @@ def client_factory(db_session):
 
 
 def _seed_members(db_session, count=3):
-    base = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, tzinfo=UTC)
     for i in range(count):
         db_session.add(
             Member(
@@ -51,6 +65,7 @@ def _seed_members(db_session, count=3):
 
 
 # ---------- list ----------
+
 
 def test_list_members_requires_auth(client_factory):
     client, _ = client_factory
@@ -96,7 +111,7 @@ def test_list_excludes_photo_field(client_factory, db_session):
             institution="y",
             photo_path="members/1/photo.png",
             photo_content_type="image/png",
-            joined_at=datetime.now(timezone.utc),
+            joined_at=datetime.now(UTC),
         )
     )
     db_session.commit()
@@ -110,6 +125,7 @@ def test_list_excludes_photo_field(client_factory, db_session):
 
 
 # ---------- detail ----------
+
 
 def test_get_member_returns_404_when_missing(client_factory):
     client, login_as = client_factory
@@ -128,6 +144,7 @@ def test_get_member_returns_member(client_factory, db_session):
 
 
 # ---------- create ----------
+
 
 def test_create_member_admin_succeeds(client_factory):
     client, login_as = client_factory
@@ -226,6 +243,7 @@ def test_create_member_without_position_returns_null(client_factory):
 
 # ---------- update ----------
 
+
 def test_update_member_admin_partial(client_factory, db_session):
     client, login_as = client_factory
     _seed_members(db_session, count=1)
@@ -257,13 +275,16 @@ def test_update_member_404(client_factory):
 
 # ---------- delete ----------
 
+
 def test_delete_member_admin(client_factory, db_session):
     client, login_as = client_factory
     _seed_members(db_session, count=1)
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
 
@@ -279,7 +300,9 @@ def test_delete_member_wrong_password_returns_422(client_factory, db_session):
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1", json={"password": "not-the-admin-pw"},
+        "DELETE",
+        "/api/members/1",
+        json={"password": "not-the-admin-pw"},
     )
     assert r.status_code == 422
 
@@ -302,7 +325,9 @@ def test_delete_member_viewer_403(client_factory, db_session):
     _seed_members(db_session, count=1)
     login_as("viewer")
     r = client.request(
-        "DELETE", "/api/members/1", json={"password": "viewer-pw"},
+        "DELETE",
+        "/api/members/1",
+        json={"password": "viewer-pw"},
     )
     assert r.status_code == 403
 
@@ -311,6 +336,8 @@ def test_delete_member_404(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.request(
-        "DELETE", "/api/members/9999", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/9999",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 404

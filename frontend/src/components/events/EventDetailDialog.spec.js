@@ -28,8 +28,24 @@ const sample = {
 }
 
 const PHOTOS = [
-  { id: 10, event_id: 1, filename: '10.jpg', mime_type: 'image/jpeg', size_bytes: 1, caption: '合照', uploaded_at: 'x' },
-  { id: 11, event_id: 1, filename: '11.jpg', mime_type: 'image/jpeg', size_bytes: 1, caption: null, uploaded_at: 'x' },
+  {
+    id: 10,
+    event_id: 1,
+    filename: '10.jpg',
+    mime_type: 'image/jpeg',
+    size_bytes: 1,
+    caption: '合照',
+    uploaded_at: 'x',
+  },
+  {
+    id: 11,
+    event_id: 1,
+    filename: '11.jpg',
+    mime_type: 'image/jpeg',
+    size_bytes: 1,
+    caption: null,
+    uploaded_at: 'x',
+  },
 ]
 
 beforeEach(() => {
@@ -70,9 +86,13 @@ describe('EventDetailDialog — mounts closed (regression)', () => {
 describe('EventDetailDialog — header', () => {
   it('shows title, tags and location', async () => {
     const wrapper = await mountDialog()
-    expect(wrapper.find('[data-test="detail-title"]').text()).toContain('春酒聚餐')
+    expect(wrapper.find('[data-test="detail-title"]').text()).toContain(
+      '春酒聚餐',
+    )
     expect(wrapper.find('[data-test="detail-tags"]').text()).toContain('#春酒')
-    expect(wrapper.find('[data-test="detail-location"]').text()).toContain('台北')
+    expect(wrapper.find('[data-test="detail-location"]').text()).toContain(
+      '台北',
+    )
   })
 })
 
@@ -109,6 +129,8 @@ describe('EventDetailDialog — edit', () => {
 
   it('hides the edit button for viewers', async () => {
     const wrapper = await mountDialog({}, 'viewer')
-    expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(
+      false,
+    )
   })
 })

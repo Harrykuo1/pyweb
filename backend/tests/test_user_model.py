@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models import User, UserRole
 
@@ -37,6 +37,6 @@ def test_role_rejects_invalid_value(db_session):
     # Bypass the Python enum and try to write a raw invalid string.
     user = User(username="bad", password_hash="h", role="superuser")
     db_session.add(user)
-    with pytest.raises(Exception):
+    with pytest.raises(SQLAlchemyError):
         db_session.commit()
     db_session.rollback()

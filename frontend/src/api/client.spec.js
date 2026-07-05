@@ -24,13 +24,18 @@ describe('handleAuthResponseError', () => {
   })
 
   it('on 401 from a non-login endpoint clears auth, toasts, and redirects to /login with the current path', async () => {
-    const ctx = makeContext({ routeName: 'members', fullPath: '/members?q=alice' })
+    const ctx = makeContext({
+      routeName: 'members',
+      fullPath: '/members?q=alice',
+    })
     const err = { response: { status: 401 }, config: { url: '/members/1' } }
 
     await expect(handleAuthResponseError(err, ctx)).rejects.toBe(err)
 
     expect(ctx.auth.clearLocal).toHaveBeenCalledOnce()
-    expect(ctx.message.warning).toHaveBeenCalledWith('您的登入已失效，請重新登入')
+    expect(ctx.message.warning).toHaveBeenCalledWith(
+      '您的登入已失效，請重新登入',
+    )
     expect(ctx.router.push).toHaveBeenCalledWith({
       path: '/login',
       query: { redirect: '/members?q=alice' },

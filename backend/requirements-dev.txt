@@ -1,5 +1,10 @@
 -r requirements.txt
 
+# Linter + formatter. Also enforced in CI and the pre-commit hook.
+ruff>=0.15,<0.16
+# Git pre-commit hook runner (config: .pre-commit-config.yaml at repo root).
+pre-commit>=4.0,<5.0
+
 pytest>=8.3,<9.0
 # Parallel test runner — splits collected tests across worker processes
 # so the full suite finishes in roughly wall-time / cores. Used by both

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings

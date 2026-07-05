@@ -50,12 +50,8 @@ function makeFile(name, type, size = 16) {
 describe('AppearanceSection.vue', () => {
   it('shows placeholder slots when no logo is set', async () => {
     await mountSection()
-    expect(
-      document.querySelector('[data-test="logo-current-img"]'),
-    ).toBeNull()
-    expect(
-      document.querySelector('[data-test="logo-delete"]'),
-    ).toBeNull()
+    expect(document.querySelector('[data-test="logo-current-img"]')).toBeNull()
+    expect(document.querySelector('[data-test="logo-delete"]')).toBeNull()
   })
 
   it('rejects an unsupported file type', async () => {
@@ -66,10 +62,10 @@ describe('AppearanceSection.vue', () => {
     input.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
 
-    expect(ElMessage.error).toHaveBeenCalledWith('僅支援 PNG / JPEG / WebP / SVG')
-    expect(
-      document.querySelector('[data-test="logo-pending-img"]'),
-    ).toBeNull()
+    expect(ElMessage.error).toHaveBeenCalledWith(
+      '僅支援 PNG / JPEG / WebP / SVG',
+    )
+    expect(document.querySelector('[data-test="logo-pending-img"]')).toBeNull()
   })
 
   it('rejects an oversized file', async () => {
@@ -110,9 +106,11 @@ describe('AppearanceSection.vue', () => {
   it('uploads the pending file and surfaces success', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    const upload = vi
-      .spyOn(settingsApi, 'uploadImage')
-      .mockResolvedValue({ key: 'login_logo', size: 16, content_type: 'image/svg+xml' })
+    const upload = vi.spyOn(settingsApi, 'uploadImage').mockResolvedValue({
+      key: 'login_logo',
+      size: 16,
+      content_type: 'image/svg+xml',
+    })
 
     await mountSection()
     const file = pickSvg()
@@ -123,12 +121,8 @@ describe('AppearanceSection.vue', () => {
 
     expect(upload).toHaveBeenCalledWith('login_logo', file)
     expect(ElMessage.success).toHaveBeenCalledWith('登入頁 Logo 已更新')
-    expect(
-      document.querySelector('[data-test="logo-pending-img"]'),
-    ).toBeNull()
-    expect(
-      document.querySelector('[data-test="logo-delete"]'),
-    ).not.toBeNull()
+    expect(document.querySelector('[data-test="logo-pending-img"]')).toBeNull()
+    expect(document.querySelector('[data-test="logo-delete"]')).not.toBeNull()
   })
 
   it('upload error 415 shows unsupported format message', async () => {
@@ -166,9 +160,7 @@ describe('AppearanceSection.vue', () => {
 
     expect(del).toHaveBeenCalledWith('login_logo')
     expect(ElMessage.success).toHaveBeenCalledWith('已恢復為預設圖示')
-    expect(
-      document.querySelector('[data-test="logo-current-img"]'),
-    ).toBeNull()
+    expect(document.querySelector('[data-test="logo-current-img"]')).toBeNull()
   })
 
   it('picking a PNG opens the crop dialog without a pending preview yet', async () => {
@@ -184,9 +176,7 @@ describe('AppearanceSection.vue', () => {
     expect(wrapper.vm.cropOpen).toBe(true)
     expect(wrapper.vm.cropSourceFile?.name).toBe('logo.png')
     expect(wrapper.vm.cropOutputType).toBe('image/png')
-    expect(
-      document.querySelector('[data-test="logo-pending-img"]'),
-    ).toBeNull()
+    expect(document.querySelector('[data-test="logo-pending-img"]')).toBeNull()
   })
 
   it('picking a JPEG sets crop output type to image/jpeg', async () => {

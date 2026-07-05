@@ -56,7 +56,9 @@ function realNameOrAnonymous(item) {
 function formatJobYearMonth(item) {
   if (!item?.job_year) return '-'
   const m = item.job_month
-  return m ? `${item.job_year}/${String(m).padStart(2, '0')}` : `${item.job_year}`
+  return m
+    ? `${item.job_year}/${String(m).padStart(2, '0')}`
+    : `${item.job_year}`
 }
 
 function formatDate(iso) {
@@ -101,7 +103,8 @@ function formatDate(iso) {
           v-if="marqueeing"
           class="category-chip-text category-chip-text--ghost"
           aria-hidden="true"
-        >{{ job.category }}</span>
+          >{{ job.category }}</span
+        >
       </span>
     </div>
 
@@ -149,8 +152,10 @@ function formatDate(iso) {
   gap: 8px;
   isolation: isolate;
   cursor: pointer;
-  transition: transform var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .record-card--internship {
@@ -204,7 +209,11 @@ function formatDate(iso) {
   top: 0;
   bottom: 0;
   width: 4px;
-  background: linear-gradient(180deg, var(--card-accent-from), var(--card-accent-to));
+  background: linear-gradient(
+    180deg,
+    var(--card-accent-from),
+    var(--card-accent-to)
+  );
   border-radius: 0 4px 4px 0;
   transition: width var(--dur) var(--ease);
 }
@@ -220,7 +229,11 @@ function formatDate(iso) {
   width: 140px;
   height: 140px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, var(--card-accent-soft), transparent 70%);
+  background: radial-gradient(
+    closest-side,
+    var(--card-accent-soft),
+    transparent 70%
+  );
   pointer-events: none;
   opacity: 0.7;
   transition: opacity var(--dur) var(--ease);
@@ -324,7 +337,11 @@ function formatDate(iso) {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--card-accent-from), var(--card-accent-to));
+  background: linear-gradient(
+    135deg,
+    var(--card-accent-from),
+    var(--card-accent-to)
+  );
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 

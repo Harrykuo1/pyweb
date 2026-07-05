@@ -15,10 +15,20 @@ TINY_PNG = bytes.fromhex(
 
 @pytest.fixture
 def client(db_session):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():
@@ -33,11 +43,16 @@ def client(db_session):
 
 
 def _login_admin(client):
-    assert client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    )
 
 
 def _login_viewer(client):
-    assert client.post("/api/auth/login", json={"password": "viewer-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "viewer-pw"}).status_code
+        == 200
+    )
 
 
 # ---------- GET ----------

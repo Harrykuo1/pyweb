@@ -46,15 +46,51 @@ const MARKDOWN_EXTS = new Set(['.md', '.markdown'])
 // reaching for a download. md sits in MARKDOWN_EXTS because it has a
 // rendered alternative; everything else is source-only.
 const TEXT_EXTS = new Set([
-  '.txt', '.log', '.json', '.csv', '.xml',
-  '.yml', '.yaml', '.ini', '.toml', '.env',
-  '.html', '.htm', '.css', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
-  '.vue', '.svelte',
-  '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift',
-  '.c', '.h', '.cc', '.cpp', '.hpp',
-  '.sh', '.bash', '.zsh', '.fish',
-  '.sql', '.php', '.lua', '.r', '.scala',
-  '.dockerfile', '.gitignore', '.editorconfig',
+  '.txt',
+  '.log',
+  '.json',
+  '.csv',
+  '.xml',
+  '.yml',
+  '.yaml',
+  '.ini',
+  '.toml',
+  '.env',
+  '.html',
+  '.htm',
+  '.css',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.ts',
+  '.tsx',
+  '.jsx',
+  '.vue',
+  '.svelte',
+  '.py',
+  '.rb',
+  '.go',
+  '.rs',
+  '.java',
+  '.kt',
+  '.swift',
+  '.c',
+  '.h',
+  '.cc',
+  '.cpp',
+  '.hpp',
+  '.sh',
+  '.bash',
+  '.zsh',
+  '.fish',
+  '.sql',
+  '.php',
+  '.lua',
+  '.r',
+  '.scala',
+  '.dockerfile',
+  '.gitignore',
+  '.editorconfig',
 ])
 // 2 MB hard cap on inline text preview. A 50 MB log file rendered as
 // one giant <pre> nukes the page; force a download instead.
@@ -124,10 +160,10 @@ function canPreview(a) {
   // preview_available. Text/markdown: fetched and rendered inline, but
   // only under the 2 MB guardrail.
   return (
-    isPdf(a)
-    || isImage(a)
-    || (isOffice(a) && a.preview_available)
-    || canPreviewText(a)
+    isPdf(a) ||
+    isImage(a) ||
+    (isOffice(a) && a.preview_available) ||
+    canPreviewText(a)
   )
 }
 
@@ -414,11 +450,9 @@ onBeforeUnmount(() => {
             theme="light"
             data-test="viewer-text-rendered"
           />
-          <pre
-            v-else
-            class="text-source"
-            data-test="viewer-text-source"
-          >{{ textContent }}</pre>
+          <pre v-else class="text-source" data-test="viewer-text-source">{{
+            textContent
+          }}</pre>
         </div>
       </div>
     </div>
@@ -589,7 +623,8 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
   background: var(--surface-1, #f8fafc);
-  transition: background-color var(--dur, 200ms) var(--ease, ease),
+  transition:
+    background-color var(--dur, 200ms) var(--ease, ease),
     border-color var(--dur, 200ms) var(--ease, ease);
 }
 

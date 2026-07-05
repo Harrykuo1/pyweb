@@ -11,7 +11,8 @@ vi.mock('md-editor-v3', () => ({
     props: ['modelValue'],
     emits: ['update:modelValue'],
     methods: { on() {}, togglePreview() {}, togglePageFullscreen() {} },
-    template: '<textarea class="md-editor-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+    template:
+      '<textarea class="md-editor-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
 }))
 vi.mock('md-editor-v3/lib/style.css', () => ({}))
@@ -56,9 +57,12 @@ function mountForm(props = {}) {
 
 describe('EventFormDialog — create', () => {
   it('posts a new event and switches to the photos tab', async () => {
-    const create = vi
-      .spyOn(eventsApi, 'create')
-      .mockResolvedValue({ id: 9, title: '春酒', event_date: '2026-03-01', tags: [] })
+    const create = vi.spyOn(eventsApi, 'create').mockResolvedValue({
+      id: 9,
+      title: '春酒',
+      event_date: '2026-03-01',
+      tags: [],
+    })
     const wrapper = mountForm()
     await flushPromises()
 
@@ -121,7 +125,10 @@ describe('EventFormDialog — edit', () => {
     await wrapper.find('[data-test="save-event-button"]').trigger('click')
     await flushPromises()
 
-    expect(update).toHaveBeenCalledWith(5, expect.objectContaining({ title: '新標題' }))
+    expect(update).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ title: '新標題' }),
+    )
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })
 

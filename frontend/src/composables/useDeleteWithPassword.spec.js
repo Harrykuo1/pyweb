@@ -49,7 +49,6 @@ describe('useDeleteWithPassword', () => {
       [404, '項目已不存在'],
     ]) {
       const flow = useDeleteWithPassword({ remove: () => reject(status) })
-      const onSuccess = vi.fn()
       flow.open({ id: 1 })
       await flow.confirm('pw')
       expect(flow.error.value).toBe(expected)

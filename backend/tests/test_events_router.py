@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,10 +11,20 @@ from app.models import Event, EventPhoto, EventTag, User, UserRole
 
 @pytest.fixture
 def client_factory(db_session):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():
@@ -24,8 +34,12 @@ def client_factory(db_session):
     client = TestClient(app)
 
     def login_as(role):
-        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[role]
-        r = client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]})
+        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[
+            role
+        ]
+        r = client.post(
+            "/api/auth/login", json={"username": creds[0], "password": creds[1]}
+        )
         assert r.status_code == 200, r.text
 
     try:
@@ -35,12 +49,14 @@ def client_factory(db_session):
         app.dependency_overrides.clear()
 
 
-def _seed_event(db_session, *, title, event_date, tags=(), location=None, created_day=1):
+def _seed_event(
+    db_session, *, title, event_date, tags=(), location=None, created_day=1
+):
     ev = Event(
         title=title,
         event_date=event_date,
         location=location,
-        created_at=datetime(2025, 1, created_day, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, created_day, tzinfo=UTC),
     )
     for name in tags:
         ev.tags.append(EventTag(name=name))
@@ -50,6 +66,7 @@ def _seed_event(db_session, *, title, event_date, tags=(), location=None, create
 
 
 # ---------- auth ----------
+
 
 def test_list_requires_auth(client_factory):
     client, _ = client_factory
@@ -64,6 +81,7 @@ def test_create_requires_admin(client_factory):
 
 
 # ---------- create / read ----------
+
 
 def test_create_event_with_tags(client_factory):
     client, login_as = client_factory
@@ -90,13 +108,23 @@ def test_create_event_with_tags(client_factory):
 def test_get_event_includes_photo_aggregates(client_factory, db_session):
     client, login_as = client_factory
     ev = _seed_event(db_session, title="比賽", event_date=date(2026, 2, 1))
-    db_session.add_all([
-        EventPhoto(event_id=ev.id, filename="x.jpg", mime_type="image/jpeg", size_bytes=1),
-        EventPhoto(event_id=ev.id, filename="y.jpg", mime_type="image/jpeg", size_bytes=1),
-    ])
+    db_session.add_all(
+        [
+            EventPhoto(
+                event_id=ev.id, filename="x.jpg", mime_type="image/jpeg", size_bytes=1
+            ),
+            EventPhoto(
+                event_id=ev.id, filename="y.jpg", mime_type="image/jpeg", size_bytes=1
+            ),
+        ]
+    )
     db_session.commit()
     cover_id = (
-        db_session.query(EventPhoto).filter_by(event_id=ev.id).order_by(EventPhoto.id).first().id
+        db_session.query(EventPhoto)
+        .filter_by(event_id=ev.id)
+        .order_by(EventPhoto.id)
+        .first()
+        .id
     )
     login_as("viewer")
 
@@ -112,6 +140,7 @@ def test_get_missing_event_404(client_factory):
 
 
 # ---------- sort / filter / search ----------
+
 
 def test_list_default_sort_event_date_desc(client_factory, db_session):
     client, login_as = client_factory
@@ -148,7 +177,9 @@ def test_list_filter_by_tag_or_matches(client_factory, db_session):
     client, login_as = client_factory
     _seed_event(db_session, title="A", event_date=date(2026, 1, 1), tags=["聚餐"])
     _seed_event(db_session, title="B", event_date=date(2026, 2, 1), tags=["比賽"])
-    _seed_event(db_session, title="C", event_date=date(2026, 3, 1), tags=["出遊", "聚餐"])
+    _seed_event(
+        db_session, title="C", event_date=date(2026, 3, 1), tags=["出遊", "聚餐"]
+    )
     login_as("viewer")
 
     titles = {e["title"] for e in client.get("/api/events?tag=聚餐").json()["items"]}
@@ -158,7 +189,9 @@ def test_list_filter_by_tag_or_matches(client_factory, db_session):
 def test_list_tag_filter_no_duplicate_rows(client_factory, db_session):
     # An event matching multiple selected tags must appear once, not per tag.
     client, login_as = client_factory
-    _seed_event(db_session, title="C", event_date=date(2026, 3, 1), tags=["出遊", "聚餐"])
+    _seed_event(
+        db_session, title="C", event_date=date(2026, 3, 1), tags=["出遊", "聚餐"]
+    )
     login_as("viewer")
 
     body = client.get("/api/events?tag=出遊&tag=聚餐").json()
@@ -168,7 +201,9 @@ def test_list_tag_filter_no_duplicate_rows(client_factory, db_session):
 def test_list_search_matches_title_and_location(client_factory, db_session):
     client, login_as = client_factory
     _seed_event(db_session, title="桌遊之夜", event_date=date(2026, 1, 1))
-    _seed_event(db_session, title="爬山", event_date=date(2026, 2, 1), location="陽明山")
+    _seed_event(
+        db_session, title="爬山", event_date=date(2026, 2, 1), location="陽明山"
+    )
     login_as("viewer")
 
     titles = {e["title"] for e in client.get("/api/events?q=桌遊").json()["items"]}
@@ -179,7 +214,9 @@ def test_list_search_matches_title_and_location(client_factory, db_session):
 
 def test_tags_endpoint_returns_distinct_sorted(client_factory, db_session):
     client, login_as = client_factory
-    _seed_event(db_session, title="A", event_date=date(2026, 1, 1), tags=["聚餐", "出遊"])
+    _seed_event(
+        db_session, title="A", event_date=date(2026, 1, 1), tags=["聚餐", "出遊"]
+    )
     _seed_event(db_session, title="B", event_date=date(2026, 2, 1), tags=["聚餐"])
     login_as("viewer")
 
@@ -189,18 +226,25 @@ def test_tags_endpoint_returns_distinct_sorted(client_factory, db_session):
 
 # ---------- update ----------
 
+
 def test_update_replaces_tags(client_factory, db_session):
     client, login_as = client_factory
-    ev = _seed_event(db_session, title="A", event_date=date(2026, 1, 1), tags=["舊標籤"])
+    ev = _seed_event(
+        db_session, title="A", event_date=date(2026, 1, 1), tags=["舊標籤"]
+    )
     login_as("admin")
 
-    body = client.put(f"/api/events/{ev.id}", json={"tags": ["新標籤", "另一個"]}).json()
+    body = client.put(
+        f"/api/events/{ev.id}", json={"tags": ["新標籤", "另一個"]}
+    ).json()
     assert body["tags"] == ["另一個", "新標籤"]  # response sorted by name
 
 
 def test_update_partial_keeps_other_fields(client_factory, db_session):
     client, login_as = client_factory
-    ev = _seed_event(db_session, title="原標題", event_date=date(2026, 1, 1), tags=["t"])
+    ev = _seed_event(
+        db_session, title="原標題", event_date=date(2026, 1, 1), tags=["t"]
+    )
     login_as("admin")
 
     body = client.put(f"/api/events/{ev.id}", json={"title": "新標題"}).json()
@@ -210,19 +254,32 @@ def test_update_partial_keeps_other_fields(client_factory, db_session):
 
 # ---------- delete ----------
 
+
 def test_delete_requires_correct_password(client_factory, db_session):
     client, login_as = client_factory
     ev = _seed_event(db_session, title="A", event_date=date(2026, 1, 1))
     login_as("admin")
 
-    assert client.request("DELETE", f"/api/events/{ev.id}", json={"password": "wrong"}).status_code == 422
-    assert client.request("DELETE", f"/api/events/{ev.id}", json={"password": "admin-pw"}).status_code == 204
+    assert (
+        client.request(
+            "DELETE", f"/api/events/{ev.id}", json={"password": "wrong"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.request(
+            "DELETE", f"/api/events/{ev.id}", json={"password": "admin-pw"}
+        ).status_code
+        == 204
+    )
     assert db_session.query(Event).count() == 0
 
 
 def test_delete_cascades_tags(client_factory, db_session):
     client, login_as = client_factory
-    ev = _seed_event(db_session, title="A", event_date=date(2026, 1, 1), tags=["x", "y"])
+    ev = _seed_event(
+        db_session, title="A", event_date=date(2026, 1, 1), tags=["x", "y"]
+    )
     login_as("admin")
 
     client.request("DELETE", f"/api/events/{ev.id}", json={"password": "admin-pw"})

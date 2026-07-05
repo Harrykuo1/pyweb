@@ -50,9 +50,13 @@ const pdfDeleteSubmitting = ref(false)
 const pdfDeleteError = ref('')
 
 const rules = {
-  graduation_year: [{ required: true, message: '請輸入畢業年份', trigger: 'blur' }],
+  graduation_year: [
+    { required: true, message: '請輸入畢業年份', trigger: 'blur' },
+  ],
   real_name: [{ required: true, message: '請輸入本名', trigger: 'blur' }],
-  institution: [{ required: true, message: '請輸入學校／公司', trigger: 'blur' }],
+  institution: [
+    { required: true, message: '請輸入學校／公司', trigger: 'blur' },
+  ],
 }
 
 const hasExistingPdf = computed(
@@ -163,7 +167,8 @@ function buildPayload() {
     resume_md: form.resume_md.trim() || null,
   }
   if (form.joined_at) {
-    const d = form.joined_at instanceof Date ? form.joined_at : new Date(form.joined_at)
+    const d =
+      form.joined_at instanceof Date ? form.joined_at : new Date(form.joined_at)
     payload.joined_at = d.toISOString()
   }
   return payload
@@ -244,14 +249,13 @@ defineExpose({ handlePdfChange, clearPdfChange })
     :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <el-form
-      ref="formRef"
-      :model="form"
-      :rules="rules"
-      label-position="top"
-    >
+    <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-form-item label="畢業年份" prop="graduation_year">
-        <el-input-number v-model="form.graduation_year" :min="1900" :max="2100" />
+        <el-input-number
+          v-model="form.graduation_year"
+          :min="1900"
+          :max="2100"
+        />
       </el-form-item>
       <el-form-item label="本名" prop="real_name">
         <el-input v-model="form.real_name" maxlength="64" show-word-limit />
@@ -290,7 +294,10 @@ defineExpose({ handlePdfChange, clearPdfChange })
       </el-form-item>
       <el-form-item label="履歷 PDF">
         <div class="pdf-control">
-          <div class="pdf-status" :class="{ 'is-pending': pdfHasPendingChange }">
+          <div
+            class="pdf-status"
+            :class="{ 'is-pending': pdfHasPendingChange }"
+          >
             <el-icon><Document /></el-icon>
             <span>{{ pdfStatusText }}</span>
           </div>

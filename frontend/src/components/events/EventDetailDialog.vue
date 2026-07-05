@@ -33,7 +33,9 @@ const loadingPhotos = ref(false)
 const lightboxIndex = ref(-1)
 
 const hasDescription = computed(
-  () => !!props.event?.description_md && props.event.description_md.trim().length > 0,
+  () =>
+    !!props.event?.description_md &&
+    props.event.description_md.trim().length > 0,
 )
 
 async function loadPhotos() {
@@ -135,7 +137,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
     <template #header>
       <div v-if="event" class="detail-header">
         <div v-if="event.tags?.length" class="tag-row" data-test="detail-tags">
-          <span v-for="t in event.tags" :key="t" class="tag-chip">#{{ t }}</span>
+          <span v-for="t in event.tags" :key="t" class="tag-chip"
+            >#{{ t }}</span
+          >
         </div>
         <h2 class="detail-title" data-test="detail-title">{{ event.title }}</h2>
         <div class="detail-meta">
@@ -143,7 +147,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
             <el-icon :size="14"><Calendar /></el-icon>
             {{ formatDate(event.event_date) }}
           </span>
-          <span v-if="event.location" class="meta-item" data-test="detail-location">
+          <span
+            v-if="event.location"
+            class="meta-item"
+            data-test="detail-location"
+          >
             <el-icon :size="14"><Location /></el-icon>
             {{ event.location }}
           </span>
@@ -158,9 +166,17 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
     <div v-if="event" class="detail-body">
       <!-- Photo gallery -->
       <div v-if="loadingPhotos" class="gallery">
-        <div v-for="i in 3" :key="`skel-${i}`" class="gallery-cell shimmer"></div>
+        <div
+          v-for="i in 3"
+          :key="`skel-${i}`"
+          class="gallery-cell shimmer"
+        ></div>
       </div>
-      <div v-else-if="photos.length > 0" class="gallery" data-test="detail-gallery">
+      <div
+        v-else-if="photos.length > 0"
+        class="gallery"
+        data-test="detail-gallery"
+      >
         <button
           v-for="(p, idx) in photos"
           :key="p.id"
@@ -170,13 +186,21 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           data-test="gallery-thumb"
           @click="openLightbox(idx)"
         >
-          <img :src="photoUrl(p)" :alt="p.caption || '活動照片'" loading="lazy" />
+          <img
+            :src="photoUrl(p)"
+            :alt="p.caption || '活動照片'"
+            loading="lazy"
+          />
           <span v-if="p.caption" class="cell-caption">{{ p.caption }}</span>
         </button>
       </div>
 
       <!-- Description -->
-      <div v-if="hasDescription" class="md-frame" data-test="detail-description">
+      <div
+        v-if="hasDescription"
+        class="md-frame"
+        data-test="detail-description"
+      >
         <MdPreview
           :model-value="event.description_md"
           theme="light"
@@ -221,7 +245,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         data-test="lightbox"
         @click.self="closeLightbox"
       >
-        <button type="button" class="lb-btn lb-close" aria-label="關閉" @click="closeLightbox">
+        <button
+          type="button"
+          class="lb-btn lb-close"
+          aria-label="關閉"
+          @click="closeLightbox"
+        >
           <el-icon :size="22"><Close /></el-icon>
         </button>
         <button
@@ -242,7 +271,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <figcaption v-if="lightboxPhoto?.caption" class="lb-caption">
             {{ lightboxPhoto.caption }}
           </figcaption>
-          <span class="lb-counter">{{ lightboxIndex + 1 }} / {{ photos.length }}</span>
+          <span class="lb-counter"
+            >{{ lightboxIndex + 1 }} / {{ photos.length }}</span
+          >
         </figure>
         <button
           v-if="photos.length > 1"
@@ -418,7 +449,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
   transform: translateX(-100%);
   animation: shimmer-sweep 1.5s ease-in-out infinite;
 }
@@ -489,7 +525,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
   cursor: pointer;
-  transition: background var(--dur) var(--ease), transform var(--dur) var(--ease);
+  transition:
+    background var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .lb-btn:hover {

@@ -55,9 +55,18 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 
-watch(() => props.text, () => measure())
-watch(() => props.speed, () => measure())
-watch(() => props.gap, () => measure())
+watch(
+  () => props.text,
+  () => measure(),
+)
+watch(
+  () => props.speed,
+  () => measure(),
+)
+watch(
+  () => props.gap,
+  () => measure(),
+)
 
 const trackStyle = computed(() => {
   if (!overflowing.value) return {}

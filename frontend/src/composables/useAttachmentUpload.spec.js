@@ -14,7 +14,11 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: vi.fn(), prompt: vi.fn() },
 }))
 
-function setup({ attachments = [], currentPath = '', maxAttachments = null } = {}) {
+function setup({
+  attachments = [],
+  currentPath = '',
+  maxAttachments = null,
+} = {}) {
   const attachmentsRef = ref(attachments)
   const upload = useAttachmentUpload({
     jobId: ref(7),
@@ -27,7 +31,8 @@ function setup({ attachments = [], currentPath = '', maxAttachments = null } = {
 
 function fileWith(name, relpath) {
   const f = new File([new Uint8Array([1])], name, { type: 'application/pdf' })
-  if (relpath) Object.defineProperty(f, 'webkitRelativePath', { value: relpath })
+  if (relpath)
+    Object.defineProperty(f, 'webkitRelativePath', { value: relpath })
   return f
 }
 
@@ -37,7 +42,9 @@ afterEach(() => {
 
 describe('useAttachmentUpload', () => {
   it('drops OS junk files without queuing them', async () => {
-    const spy = vi.spyOn(jobAttachmentsApi, 'upload').mockResolvedValue({ id: 1 })
+    const spy = vi
+      .spyOn(jobAttachmentsApi, 'upload')
+      .mockResolvedValue({ id: 1 })
     const { upload } = setup()
     upload.pushPending(fileWith('.DS_Store', 'src/.DS_Store'))
     await flushPromises()

@@ -75,9 +75,7 @@ describe('breadcrumbSegments', () => {
   })
 
   it('honors a custom root label', () => {
-    expect(breadcrumbSegments('', '檔案')).toEqual([
-      { name: '檔案', path: '' },
-    ])
+    expect(breadcrumbSegments('', '檔案')).toEqual([{ name: '檔案', path: '' }])
   })
 })
 
@@ -91,9 +89,7 @@ describe('joinPath', () => {
   })
 
   it('joins with "/" when both parts are present', () => {
-    expect(joinPath('src/components', 'Foo.vue')).toBe(
-      'src/components/Foo.vue',
-    )
+    expect(joinPath('src/components', 'Foo.vue')).toBe('src/components/Foo.vue')
   })
 })
 

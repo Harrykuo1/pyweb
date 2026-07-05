@@ -62,7 +62,9 @@ describe('membersApi.remove', () => {
   it('DELETEs /members/:id with the admin password in the request body', async () => {
     const del = vi.spyOn(client, 'delete').mockResolvedValue({ data: null })
     await membersApi.remove(7, 'pw-1')
-    expect(del).toHaveBeenCalledWith('/members/7', { data: { password: 'pw-1' } })
+    expect(del).toHaveBeenCalledWith('/members/7', {
+      data: { password: 'pw-1' },
+    })
   })
 })
 
@@ -101,7 +103,9 @@ describe('membersApi.deletePhoto', () => {
   it('DELETEs /members/:id/photo with the admin password in the request body', async () => {
     const del = vi.spyOn(client, 'delete').mockResolvedValue({})
     await membersApi.deletePhoto(7, 'pw-2')
-    expect(del).toHaveBeenCalledWith('/members/7/photo', { data: { password: 'pw-2' } })
+    expect(del).toHaveBeenCalledWith('/members/7/photo', {
+      data: { password: 'pw-2' },
+    })
   })
 })
 
@@ -111,7 +115,9 @@ describe('membersApi.resumePdfUrl', () => {
   })
 
   it('supports cache-buster', () => {
-    expect(membersApi.resumePdfUrl(7, 't')).toBe('/api/members/7/resume.pdf?v=t')
+    expect(membersApi.resumePdfUrl(7, 't')).toBe(
+      '/api/members/7/resume.pdf?v=t',
+    )
   })
 })
 
@@ -136,7 +142,9 @@ describe('membersApi.deleteResumePdf', () => {
   it('DELETEs /members/:id/resume.pdf with the admin password in the request body', async () => {
     const del = vi.spyOn(client, 'delete').mockResolvedValue({})
     await membersApi.deleteResumePdf(9, 'pw-3')
-    expect(del).toHaveBeenCalledWith('/members/9/resume.pdf', { data: { password: 'pw-3' } })
+    expect(del).toHaveBeenCalledWith('/members/9/resume.pdf', {
+      data: { password: 'pw-3' },
+    })
   })
 })
 

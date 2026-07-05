@@ -78,7 +78,9 @@ describe('eventsApi.listTags', () => {
   it('passes prefix when provided', async () => {
     const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
     await eventsApi.listTags('聚')
-    expect(get).toHaveBeenCalledWith('/events/tags', { params: { prefix: '聚' } })
+    expect(get).toHaveBeenCalledWith('/events/tags', {
+      params: { prefix: '聚' },
+    })
   })
 })
 

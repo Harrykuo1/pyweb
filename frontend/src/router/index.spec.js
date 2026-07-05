@@ -13,8 +13,16 @@ afterEach(() => {
 })
 
 const homeRoute = { path: '/', fullPath: '/', meta: { requiresAuth: true } }
-const loginRoute = { path: '/login', fullPath: '/login', meta: { requiresAuth: false } }
-const membersRoute = { path: '/members', fullPath: '/members', meta: { requiresAuth: true } }
+const loginRoute = {
+  path: '/login',
+  fullPath: '/login',
+  meta: { requiresAuth: false },
+}
+const membersRoute = {
+  path: '/members',
+  fullPath: '/members',
+  meta: { requiresAuth: true },
+}
 const settingsRoute = {
   path: '/settings',
   fullPath: '/settings',

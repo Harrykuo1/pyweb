@@ -27,7 +27,9 @@ describe('JobSortRow', () => {
     expect(active.classes()).toContain('is-active')
     expect(active.text()).toContain('↑')
     // The inactive pill shows no arrow.
-    expect(wrapper.find('[data-test="sort-created_at"]').text()).not.toContain('↓')
+    expect(wrapper.find('[data-test="sort-created_at"]').text()).not.toContain(
+      '↓',
+    )
   })
 
   it('shows a down arrow when the active order is desc', () => {

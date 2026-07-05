@@ -19,7 +19,6 @@ const router = useRouter()
 // Hero stats + recent-member avatar pile live in the composable.
 const {
   stats,
-  statsLoaded,
   recentMembers,
   membersCount,
   jobsCount,
@@ -82,7 +81,9 @@ function focusMember(id) {
                 <span class="spotlight-number-unit">位</span>
               </span>
               <span class="spotlight-label">社群成員正在這裡</span>
-              <span class="spotlight-sub" data-test="hero-sub">{{ heroSubtitle }}</span>
+              <span class="spotlight-sub" data-test="hero-sub">{{
+                heroSubtitle
+              }}</span>
             </button>
 
             <div
@@ -123,11 +124,7 @@ function focusMember(id) {
               >
                 +{{ overflowCount }}
               </button>
-              <button
-                type="button"
-                class="pile-hint"
-                @click="goMembers"
-              >
+              <button type="button" class="pile-hint" @click="goMembers">
                 認識他們
                 <el-icon :size="12"><ArrowRight /></el-icon>
               </button>
@@ -214,7 +211,9 @@ function focusMember(id) {
           <el-icon :size="22"><Calendar /></el-icon>
         </div>
         <h3 class="feature-title">活動紀錄</h3>
-        <p class="feature-desc">用照片與文字記錄社群的聚餐、出遊、比賽與講座。</p>
+        <p class="feature-desc">
+          用照片與文字記錄社群的聚餐、出遊、比賽與講座。
+        </p>
         <span class="feature-cta feature-cta--warm">
           查看時間軸 <span aria-hidden="true">→</span>
         </span>
@@ -246,7 +245,8 @@ function focusMember(id) {
   padding: 28px;
   color: #ffffff;
   background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
-  box-shadow: 0 24px 48px -16px rgba(49, 46, 129, 0.6),
+  box-shadow:
+    0 24px 48px -16px rgba(49, 46, 129, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
@@ -308,10 +308,10 @@ function focusMember(id) {
   position: absolute;
   inset: 0;
   background-image: radial-gradient(
-      circle at 1px 1px,
-      rgba(255, 255, 255, 0.04) 1px,
-      transparent 0
-    );
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.04) 1px,
+    transparent 0
+  );
   background-size: 3px 3px;
   mix-blend-mode: overlay;
   opacity: 0.5;
@@ -351,7 +351,8 @@ function focusMember(id) {
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22),
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.22),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   color: #ffffff;
 }
@@ -374,9 +375,18 @@ function focusMember(id) {
 }
 
 @keyframes spotlight-pulse {
-  0% { transform: scale(0.7); opacity: 0; }
-  60% { transform: scale(1.1); opacity: 0.6; }
-  100% { transform: scale(1); opacity: 0.45; }
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
 }
 
 /* ---------- Spotlight primary (wrapper, not interactive) ---------- */
@@ -494,7 +504,8 @@ function focusMember(id) {
   outline: none;
   font: inherit;
   color: inherit;
-  transition: transform var(--dur) var(--ease),
+  transition:
+    transform var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease);
   animation: pile-in 0.45s var(--ease) backwards;
   animation-delay: calc(var(--pile-index, 0) * 60ms + 200ms);
@@ -529,8 +540,14 @@ function focusMember(id) {
 }
 
 @keyframes pile-in {
-  from { opacity: 0; transform: translateX(-6px) scale(0.7); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateX(-6px) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
 }
 
 /* Fan the pile out a touch when the user hovers any avatar so the
@@ -558,7 +575,8 @@ function focusMember(id) {
   cursor: pointer;
   outline: none;
   font-family: inherit;
-  transition: background var(--dur) var(--ease),
+  transition:
+    background var(--dur) var(--ease),
     border-color var(--dur) var(--ease);
 }
 
@@ -583,7 +601,8 @@ function focusMember(id) {
   cursor: pointer;
   outline: none;
   font-family: inherit;
-  transition: color var(--dur) var(--ease),
+  transition:
+    color var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }
 
@@ -617,7 +636,8 @@ function focusMember(id) {
   text-align: left;
   font: inherit;
   color: inherit;
-  transition: background var(--dur) var(--ease),
+  transition:
+    background var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }
@@ -726,8 +746,10 @@ function focusMember(id) {
   display: flex;
   flex-direction: column;
   gap: var(--sp-sm);
-  transition: transform var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .feature-card:hover:not(.is-disabled) {

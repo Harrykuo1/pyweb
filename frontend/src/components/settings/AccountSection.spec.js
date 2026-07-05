@@ -63,7 +63,9 @@ describe('AccountSection.vue', () => {
     expect(authApi.listUsers).toHaveBeenCalled()
     expect(document.querySelector('[data-test="account-row-1"]')).not.toBeNull()
     expect(document.querySelector('[data-test="account-row-2"]')).not.toBeNull()
-    expect(inputBySelector('[data-test="username-input-admin"]').value).toBe('admin')
+    expect(inputBySelector('[data-test="username-input-admin"]').value).toBe(
+      'admin',
+    )
   })
 
   it('selects admin by default with is-active styling', async () => {
@@ -279,7 +281,7 @@ describe('AccountSection.vue', () => {
     const updateSpy = vi.spyOn(auth, 'updateUsername')
 
     await mountSection()
-    setInput('[data-test="username-input-admin"]', '   ')  // whitespace only
+    setInput('[data-test="username-input-admin"]', '   ') // whitespace only
     document.querySelector('[data-test="username-submit-admin"]').click()
     await flushPromises()
 

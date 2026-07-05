@@ -168,8 +168,12 @@ describe('Members.vue', () => {
     const wrapper = mount(Members)
     await flushPromises()
 
-    expect(wrapper.find('[data-test="view-grid"]').classes()).toContain('is-active')
-    expect(wrapper.find('[data-test="view-list"]').classes()).not.toContain('is-active')
+    expect(wrapper.find('[data-test="view-grid"]').classes()).toContain(
+      'is-active',
+    )
+    expect(wrapper.find('[data-test="view-list"]').classes()).not.toContain(
+      'is-active',
+    )
     expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
   })
 
@@ -183,7 +187,13 @@ describe('Members.vue', () => {
         .map((c) => [c.props('prop'), c.props('sortOrders')]),
     )
     expect(Object.keys(sortable).sort()).toEqual(
-      ['graduation_year', 'institution', 'joined_at', 'position', 'real_name'].sort(),
+      [
+        'graduation_year',
+        'institution',
+        'joined_at',
+        'position',
+        'real_name',
+      ].sort(),
     )
     for (const orders of Object.values(sortable)) {
       expect(orders).toEqual(['ascending', 'descending'])
@@ -252,7 +262,10 @@ describe('Members.vue', () => {
     await search.setValue(query)
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ElTable' })
-    return table.props('data').map((m) => m.real_name).sort()
+    return table
+      .props('data')
+      .map((m) => m.real_name)
+      .sort()
   }
 
   it('search: implicit AND requires every term', async () => {
@@ -289,7 +302,12 @@ describe('Members.vue', () => {
     const wrapper = mount(Members)
     await flushPromises()
 
-    for (const key of ['joined_at', 'graduation_year', 'real_name', 'institution']) {
+    for (const key of [
+      'joined_at',
+      'graduation_year',
+      'real_name',
+      'institution',
+    ]) {
       expect(wrapper.find(`[data-test="sort-${key}"]`).exists()).toBe(true)
     }
 
@@ -504,9 +522,9 @@ describe('Members.vue', () => {
   it('handleDeleteConfirm sends the typed password to the API and re-fetches', async () => {
     const wrapper = await mountAsAdmin()
     const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
-    const list = vi.spyOn(membersApi, 'list').mockResolvedValue(
-      sampleMembers.filter((m) => m.id !== 1),
-    )
+    const list = vi
+      .spyOn(membersApi, 'list')
+      .mockResolvedValue(sampleMembers.filter((m) => m.id !== 1))
 
     // Open via the row's delete-button so deleteTarget is bound to Alice.
     await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
@@ -621,7 +639,7 @@ describe('Members.vue', () => {
     expect(wrapper.vm.photoDeleteError).toBe('密碼錯誤')
   })
 
-  it('a MemberPhotoCell\'s request-upload event drives the parent\'s crop state', async () => {
+  it("a MemberPhotoCell's request-upload event drives the parent's crop state", async () => {
     const wrapper = await mountAsAdmin()
     const cell = wrapper.findComponent({ name: 'MemberPhotoCell' })
     expect(cell.exists()).toBe(true)

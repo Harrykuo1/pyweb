@@ -6,6 +6,7 @@ matching alone isn't authoritative — we also enforce an extension
 allowlist as a cheap defense-in-depth measure against drive-by
 uploads of executables that lie about being PDFs.
 """
+
 from pathlib import Path
 
 # Extensions whose bytes the browser can safely render in place: the
@@ -31,9 +32,7 @@ PREVIEW_INLINE_EXTENSIONS: frozenset[str] = frozenset(
 # OS-spat metadata files that show up in folder uploads but the
 # operator never actually wants archived. Frontend should also skip
 # these client-side; the backend list is the safety net.
-JUNK_BASENAMES: frozenset[str] = frozenset(
-    {".DS_Store", "Thumbs.db", "desktop.ini"}
-)
+JUNK_BASENAMES: frozenset[str] = frozenset({".DS_Store", "Thumbs.db", "desktop.ini"})
 
 
 def sanitize_relpath(name: str) -> str:
@@ -103,7 +102,9 @@ def next_available_relpath(directory: Path, relpath: str) -> str:
     while True:
         renamed_last = f"{stem} ({n}){suffix}"
         renamed = (
-            renamed_last if str(parent) == "." else f"{parent.as_posix()}/{renamed_last}"
+            renamed_last
+            if str(parent) == "."
+            else f"{parent.as_posix()}/{renamed_last}"
         )
         if not (directory / renamed).exists():
             return renamed

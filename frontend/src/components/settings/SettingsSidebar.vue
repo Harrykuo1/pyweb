@@ -74,7 +74,8 @@ function select(key) {
   color: var(--ink-700);
   font: inherit;
   width: 100%;
-  transition: background-color var(--dur) var(--ease),
+  transition:
+    background-color var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
@@ -109,7 +110,11 @@ function select(key) {
 }
 
 .settings-sidebar__item.is-active .settings-sidebar__icon {
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   color: #ffffff;
   box-shadow: 0 4px 10px rgba(99, 102, 241, 0.25);
 }

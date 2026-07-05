@@ -23,19 +23,26 @@ vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    ElMessage: Object.assign(vi.fn(() => ({ close: vi.fn() })), {
-      success: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
-      warning: vi.fn(),
-    }),
+    ElMessage: Object.assign(
+      vi.fn(() => ({ close: vi.fn() })),
+      {
+        success: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        warning: vi.fn(),
+      },
+    ),
   }
 })
 
 // Heavy dialog children pull in md-editor; stub them so the view spec
 // stays focused on the timeline rendering + filters.
 vi.mock('../components/events/EventFormDialog.vue', () => ({
-  default: { name: 'EventFormDialog', props: ['modelValue', 'event'], template: '<div />' },
+  default: {
+    name: 'EventFormDialog',
+    props: ['modelValue', 'event'],
+    template: '<div />',
+  },
 }))
 vi.mock('../components/events/EventDetailDialog.vue', () => ({
   default: {
@@ -81,7 +88,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function mountPage(items = sample, total = items.length, role = 'viewer') {
+async function mountPage(
+  items = sample,
+  total = items.length,
+  role = 'viewer',
+) {
   const auth = useAuthStore()
   auth.user = { id: 1, username: 'a', role }
   vi.spyOn(eventsApi, 'list').mockResolvedValue({ items, total })
@@ -105,7 +116,9 @@ describe('Events — timeline', () => {
   it('shows the cover image and a photo-count badge when >1 photo', async () => {
     const wrapper = await mountPage()
     const firstEntry = wrapper.findAll('[data-test="timeline-entry"]')[0]
-    expect(firstEntry.find('img').attributes('src')).toBe('/api/events/1/photos/10')
+    expect(firstEntry.find('img').attributes('src')).toBe(
+      '/api/events/1/photos/10',
+    )
     expect(firstEntry.find('.photo-badge').text()).toContain('3')
   })
 
@@ -118,10 +131,14 @@ describe('Events — timeline', () => {
 describe('Events — filters', () => {
   it('toggles sort order and re-queries', async () => {
     const wrapper = await mountPage()
-    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: sample, total: 2 })
+    const listSpy = vi
+      .spyOn(eventsApi, 'list')
+      .mockResolvedValue({ items: sample, total: 2 })
     await wrapper.find('[data-test="sort-toggle"]').trigger('click')
     await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ order: 'asc' }))
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ order: 'asc' }),
+    )
   })
 })
 
@@ -137,7 +154,9 @@ describe('Events — admin', () => {
   it('has no inline edit/delete on cards — admin edits via the detail dialog', async () => {
     const wrapper = await mountPage(sample, 2, 'admin')
     expect(wrapper.find('[data-test="edit-event-button"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="delete-event-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="delete-event-button"]').exists()).toBe(
+      false,
+    )
   })
 })
 
@@ -151,7 +170,9 @@ describe('Events — delete', () => {
 
     wrapper.vm.askDelete(sample[0])
     await flushPromises()
-    wrapper.findComponent(DeleteWithPasswordDialog).vm.$emit('confirm', 'admin-pw')
+    wrapper
+      .findComponent(DeleteWithPasswordDialog)
+      .vm.$emit('confirm', 'admin-pw')
     await flushPromises()
 
     expect(remove).toHaveBeenCalledWith(1, 'admin-pw')
@@ -160,7 +181,9 @@ describe('Events — delete', () => {
 
   it('maps a 422 delete error to a password message and keeps the dialog open', async () => {
     const wrapper = await mountPage(sample, 2, 'admin')
-    vi.spyOn(eventsApi, 'remove').mockRejectedValue({ response: { status: 422 } })
+    vi.spyOn(eventsApi, 'remove').mockRejectedValue({
+      response: { status: 422 },
+    })
 
     wrapper.vm.askDelete(sample[0])
     await flushPromises()
@@ -183,30 +206,42 @@ describe('Events — detail delete permission', () => {
     const viewer = await mountPage(sample, 2, 'viewer')
     viewer.vm.detailEvent = sample[0]
     await flushPromises()
-    expect(viewer.find('[data-test="detail-delete-button"]').exists()).toBe(false)
+    expect(viewer.find('[data-test="detail-delete-button"]').exists()).toBe(
+      false,
+    )
   })
 })
 
 describe('Events — filter params', () => {
   it('passes the year filter to the API', async () => {
     const wrapper = await mountPage()
-    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: [], total: 0 })
+    const listSpy = vi
+      .spyOn(eventsApi, 'list')
+      .mockResolvedValue({ items: [], total: 0 })
     wrapper.vm.year = 2026
     await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ year: 2026 }))
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ year: 2026 }),
+    )
   })
 
   it('passes selected tags to the API', async () => {
     const wrapper = await mountPage()
-    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: [], total: 0 })
+    const listSpy = vi
+      .spyOn(eventsApi, 'list')
+      .mockResolvedValue({ items: [], total: 0 })
     wrapper.vm.tag = ['出遊']
     await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ tag: ['出遊'] }))
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: ['出遊'] }),
+    )
   })
 
   it('passes the debounced search query to the API', async () => {
     const wrapper = await mountPage()
-    const listSpy = vi.spyOn(eventsApi, 'list').mockResolvedValue({ items: [], total: 0 })
+    const listSpy = vi
+      .spyOn(eventsApi, 'list')
+      .mockResolvedValue({ items: [], total: 0 })
     vi.useFakeTimers()
     wrapper.vm.q = '桌遊'
     await vi.advanceTimersByTimeAsync(300)

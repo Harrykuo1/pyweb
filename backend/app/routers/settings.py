@@ -1,4 +1,12 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin

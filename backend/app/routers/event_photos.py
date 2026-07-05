@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import (
@@ -67,22 +67,14 @@ def _require_admin_password(password: str, admin: User) -> None:
 def _get_event_or_404(db: Session, event_id: int) -> Event:
     event = db.query(Event).filter_by(id=event_id).one_or_none()
     if event is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
     return event
 
 
 def _get_photo_or_404(db: Session, event_id: int, photo_id: int) -> EventPhoto:
-    photo = (
-        db.query(EventPhoto)
-        .filter_by(id=photo_id, event_id=event_id)
-        .one_or_none()
-    )
+    photo = db.query(EventPhoto).filter_by(id=photo_id, event_id=event_id).one_or_none()
     if photo is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="找不到照片"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到照片")
     return photo
 
 
@@ -149,9 +141,7 @@ async def upload_photo(
             detail=f"照片格式僅支援 {sorted(PHOTO_MIME_TO_EXT)}",
         )
 
-    current_count = (
-        db.query(EventPhoto).filter_by(event_id=event_id).count()
-    )
+    current_count = db.query(EventPhoto).filter_by(event_id=event_id).count()
     if current_count >= MAX_PHOTOS_PER_EVENT:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -175,7 +165,7 @@ async def upload_photo(
         mime_type=file.content_type,
         size_bytes=len(data),
         caption=trimmed_caption or None,
-        uploaded_at=datetime.now(timezone.utc),
+        uploaded_at=datetime.now(UTC),
     )
     db.add(photo)
     db.flush()
@@ -191,9 +181,7 @@ async def upload_photo(
     return photo
 
 
-@router.put(
-    "/{event_id}/photos/{photo_id}", response_model=EventPhotoResponse
-)
+@router.put("/{event_id}/photos/{photo_id}", response_model=EventPhotoResponse)
 def update_photo_caption(
     event_id: int,
     photo_id: int,

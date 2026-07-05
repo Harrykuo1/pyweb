@@ -80,9 +80,7 @@ const activeSection = computed(
         <h1 class="settings-page__title">設定</h1>
         <span class="settings-page__accent" aria-hidden="true"></span>
       </div>
-      <p class="settings-page__subtitle">
-        管理帳號、外觀與系統參數
-      </p>
+      <p class="settings-page__subtitle">管理帳號、外觀與系統參數</p>
     </header>
 
     <div class="settings-page__body">
@@ -200,7 +198,11 @@ const activeSection = computed(
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 6px 16px rgba(99, 102, 241, 0.28);
   flex: 0 0 auto;
 }

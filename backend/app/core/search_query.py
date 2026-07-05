@@ -15,8 +15,8 @@ turns the IR into a SQLAlchemy expression for use by routers.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from sqlalchemy import and_, not_, or_
 from sqlalchemy.sql import ColumnElement
@@ -132,9 +132,9 @@ def build_ilike_filter(
             # IS NOT NULL guard so SQL's three-valued logic doesn't drop rows
             # under negation: `NOT (NULL ILIKE p OR FALSE)` evaluates to NULL,
             # which `WHERE` treats as filtered-out.
-            positive = or_(*(
-                and_(col.is_not(None), col.ilike(pattern)) for col in columns
-            ))
+            positive = or_(
+                *(and_(col.is_not(None), col.ilike(pattern)) for col in columns)
+            )
             term_exprs.append(not_(positive) if term.negate else positive)
         if term_exprs:
             group_exprs.append(and_(*term_exprs))

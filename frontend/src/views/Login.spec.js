@@ -79,7 +79,9 @@ describe('Login.vue', () => {
     const wrapper = mount(Login)
     await submitWithPassword(wrapper, 'pw')
 
-    expect(wrapper.find('[data-test="error"]').text()).toBe('登入失敗，請稍後再試')
+    expect(wrapper.find('[data-test="error"]').text()).toBe(
+      '登入失敗，請稍後再試',
+    )
   })
 
   it('declares a required rule for password so Element Plus blocks empty submits', () => {
@@ -100,7 +102,9 @@ describe('Login.vue', () => {
     const wrapper = mount(Login)
     const img = wrapper.find('[data-test="logo-image"]')
     expect(img.exists()).toBe(true)
-    expect(img.attributes('src')).toMatch(/^\/api\/settings\/login_logo\/image\?v=/)
+    expect(img.attributes('src')).toMatch(
+      /^\/api\/settings\/login_logo\/image\?v=/,
+    )
     expect(wrapper.find('[data-test="logo-fallback"]').exists()).toBe(false)
   })
 

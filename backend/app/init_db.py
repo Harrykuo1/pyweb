@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy.orm import Session
 
+from alembic import command
 from app.core.config import settings
 from app.core.runtime_config import CONFIG_FIELDS
 from app.core.security import hash_password
@@ -26,7 +26,9 @@ def run_migrations() -> None:
     command.upgrade(cfg, "head")
 
 
-def _upsert_seed_user(db: Session, username: str, password: str, role: UserRole) -> None:
+def _upsert_seed_user(
+    db: Session, username: str, password: str, role: UserRole
+) -> None:
     # Probe by role, not username. The seed represents the initial slot
     # for that role; once any user of the role exists we've moved past
     # initialization. Looking up by the original username would treat a

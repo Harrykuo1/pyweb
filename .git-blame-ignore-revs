@@ -1,0 +1,10 @@
+# Bulk reformat commits. git blame ignores these so line authorship points
+# at the real change, not the one-time ruff/prettier sweep.
+#
+# Enable locally once:  git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub applies this file automatically.
+
+# style(backend): apply ruff format and lint fixes
+f8be9d275424c4b6d0c4fde9e03f6792283bfbaf
+# style(frontend): apply prettier format and eslint fixes
+ca92cff4d40ba7d0f71c60608b683985a3d2fedb

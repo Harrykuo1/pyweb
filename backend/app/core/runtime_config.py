@@ -9,6 +9,7 @@ which defaults the init_db seeder writes on first boot.
 Distinct from `app.core.config.Settings`, which loads immutable
 environment variables at process start (secrets, DB URL, etc.).
 """
+
 from dataclasses import dataclass
 from typing import Literal
 

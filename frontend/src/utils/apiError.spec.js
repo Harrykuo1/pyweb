@@ -10,7 +10,9 @@ describe('extractError', () => {
 
   it('falls back when detail is missing or not a string', () => {
     expect(extractError({ response: { data: {} } }, 'fb')).toBe('fb')
-    expect(extractError({ response: { data: { detail: 42 } } }, 'fb')).toBe('fb')
+    expect(extractError({ response: { data: { detail: 42 } } }, 'fb')).toBe(
+      'fb',
+    )
     expect(extractError(undefined, 'fb')).toBe('fb')
     expect(extractError(new Error('x'), 'fb')).toBe('fb')
   })

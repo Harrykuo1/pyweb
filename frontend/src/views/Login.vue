@@ -1,13 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  ElButton,
-  ElForm,
-  ElFormItem,
-  ElIcon,
-  ElInput,
-} from 'element-plus'
+import { ElButton, ElForm, ElFormItem, ElIcon, ElInput } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 
 import { settingImageUrl } from '../api/settings'
@@ -45,7 +39,8 @@ async function handleSubmit() {
   errorMessage.value = ''
   try {
     await auth.login(form.password)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    const redirect =
+      typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.push(redirect)
   } catch (err) {
     if (err?.response?.status === 401) {
@@ -81,7 +76,9 @@ async function handleSubmit() {
               data-test="logo-image"
               @error="onLogoError"
             />
-            <el-icon v-else :size="26" data-test="logo-fallback"><Lock /></el-icon>
+            <el-icon v-else :size="26" data-test="logo-fallback"
+              ><Lock
+            /></el-icon>
           </div>
           <h1 class="brand-name">pyweb 社群</h1>
           <p class="brand-tagline">
@@ -184,7 +181,8 @@ async function handleSubmit() {
   border-radius: var(--radius-xl);
   overflow: hidden;
   background: #ffffff;
-  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28),
+  box-shadow:
+    0 30px 80px rgba(15, 23, 42, 0.28),
     0 12px 32px rgba(15, 23, 42, 0.18);
 }
 
@@ -333,7 +331,11 @@ async function handleSubmit() {
   height: 44px;
   font-weight: 600;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   border: 0;
   box-shadow: 0 6px 18px rgba(99, 102, 241, 0.28);
 }

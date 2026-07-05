@@ -13,6 +13,7 @@ The command bumps `password_version` alongside the hash so any existing
 session for that user is evicted on its next request, matching the
 behaviour of the web-UI password change endpoint.
 """
+
 from __future__ import annotations
 
 import argparse

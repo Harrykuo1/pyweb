@@ -67,7 +67,9 @@ function _matchesCurrent(next) {
   if (next.length !== rows.value.length) return false
   return next.every((entry, i) => {
     const r = rows.value[i]
-    return r && r.date === (entry.date ?? null) && r.event === (entry.event ?? '')
+    return (
+      r && r.date === (entry.date ?? null) && r.event === (entry.event ?? '')
+    )
   })
 }
 
