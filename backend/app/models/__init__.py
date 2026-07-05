@@ -4,6 +4,7 @@ from app.models.job import Job, JobKind
 from app.models.job_attachment import JobAttachment
 from app.models.member import Member
 from app.models.post_status import PostStatus
+from app.models.registration_invite import RegistrationInvite
 from app.models.site_setting import SiteSetting
 from app.models.user import User, UserRole
 
@@ -17,6 +18,7 @@ __all__ = [
     "JobKind",
     "Member",
     "PostStatus",
+    "RegistrationInvite",
     "SiteSetting",
     "User",
     "UserRole",
