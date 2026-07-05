@@ -141,3 +141,54 @@ def test_job_year_required(db_session):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+
+def test_job_new_columns_default_and_link(db_session):
+    from app.models import Member, PostStatus, User, UserRole
+
+    author = User(role=UserRole.MEMBER, discord_id="700")
+    db_session.add(author)
+    db_session.flush()
+    subject = Member(
+        graduation_year=2024, real_name="王小明", institution="X", user_id=author.id
+    )
+    db_session.add(subject)
+    db_session.flush()
+
+    job = Job(
+        job_year=2024,
+        job_month=3,
+        company="Foo",
+        kind=JobKind.INTERNSHIP,
+        experience_md="hi",
+        subject_member_id=subject.id,
+        author_user_id=author.id,
+        is_anonymous=True,
+        status=PostStatus.PENDING,
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    fetched = db_session.query(Job).one()
+    assert fetched.status is PostStatus.PENDING
+    assert fetched.is_anonymous is True
+    assert fetched.subject_member_id == subject.id
+    assert fetched.author_user_id == author.id
+    assert fetched.reviewed_at is None
+
+
+def test_job_status_rejects_invalid(db_session):
+    from sqlalchemy.exc import SQLAlchemyError
+
+    job = Job(
+        job_year=2024,
+        job_month=3,
+        company="Foo",
+        kind=JobKind.INTERNSHIP,
+        experience_md="hi",
+        status="approved",  # not a PostStatus value
+    )
+    db_session.add(job)
+    with pytest.raises(SQLAlchemyError):
+        db_session.commit()
+    db_session.rollback()
