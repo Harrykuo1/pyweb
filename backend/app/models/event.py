@@ -1,9 +1,10 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.post_status import PostStatus
 
 
 class Event(Base):
@@ -17,6 +18,32 @@ class Event(Base):
     event_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     location: Mapped[str | None] = mapped_column(String(128), nullable=True)
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Events are never anonymous; author is the actual creator and drives
+    # both display and ownership (edit/delete own).
+    author_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    last_edited_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    status: Mapped[PostStatus] = mapped_column(
+        Enum(
+            PostStatus,
+            name="event_status",
+            values_callable=lambda e: [m.value for m in e],
+            create_constraint=True,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=PostStatus.PENDING,
+    )
+    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
