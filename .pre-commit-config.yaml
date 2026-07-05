@@ -1,0 +1,24 @@
+# Fast lint/format gate that runs on `git commit`. The full pytest / vitest
+# suites deliberately stay in CI — this hook only runs the seconds-level
+# ruff / eslint / prettier checks so committing stays quick.
+#
+# One-time setup per clone (pre-commit ships in backend/requirements-dev.txt):
+#   cd backend && pip install -r requirements-dev.txt && cd ..
+#   backend/.venv/bin/pre-commit install
+#
+# Run manually against everything:  pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-backend
+        name: ruff check + format (backend)
+        entry: bash -c 'cd backend && .venv/bin/ruff check . && .venv/bin/ruff format --check .'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: lint-frontend
+        name: eslint + prettier (frontend)
+        entry: bash -c 'cd frontend && npm run lint && npm run format:check'
+        language: system
+        files: ^frontend/.*\.(js|vue)$
+        pass_filenames: false
