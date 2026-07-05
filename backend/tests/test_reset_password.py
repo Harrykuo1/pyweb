@@ -7,18 +7,20 @@ from app.reset_password import reset_password
 
 @pytest.fixture
 def seeded(db_session):
-    db_session.add_all([
-        User(
-            username="admin",
-            password_hash=hash_password("old-pw"),
-            role=UserRole.ADMIN,
-        ),
-        User(
-            username="viewer",
-            password_hash=hash_password("viewer-pw"),
-            role=UserRole.VIEWER,
-        ),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("old-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
     return db_session
 

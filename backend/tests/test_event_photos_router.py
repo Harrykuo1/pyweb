@@ -25,10 +25,20 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def client_factory(db_session, uploads_dir):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.add(Event(id=1, title="春酒", event_date=date(2026, 3, 1)))
     db_session.commit()
 
@@ -40,8 +50,12 @@ def client_factory(db_session, uploads_dir):
     client = TestClient(app)
 
     def login_as(role):
-        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[role]
-        r = client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]})
+        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[
+            role
+        ]
+        r = client.post(
+            "/api/auth/login", json={"username": creds[0], "password": creds[1]}
+        )
         assert r.status_code == 200, r.text
 
     try:
@@ -51,13 +65,16 @@ def client_factory(db_session, uploads_dir):
         app.dependency_overrides.clear()
 
 
-def _upload(client, event_id=1, *, data=TINY_PNG, mime="image/png", name="p.png", caption=None):
+def _upload(
+    client, event_id=1, *, data=TINY_PNG, mime="image/png", name="p.png", caption=None
+):
     files = {"file": (name, data, mime)}
     payload = {"caption": caption} if caption is not None else None
     return client.post(f"/api/events/{event_id}/photos", files=files, data=payload)
 
 
 # ---------- upload ----------
+
 
 def test_upload_requires_admin(client_factory):
     client, login_as = client_factory
@@ -95,6 +112,7 @@ def test_upload_missing_event_404(client_factory):
 
 # ---------- list / serve ----------
 
+
 def test_list_photos_ordered_by_id(client_factory):
     client, login_as = client_factory
     login_as("admin")
@@ -126,6 +144,7 @@ def test_serve_missing_photo_404(client_factory):
 
 # ---------- caption ----------
 
+
 def test_update_caption(client_factory):
     client, login_as = client_factory
     login_as("admin")
@@ -140,6 +159,7 @@ def test_update_caption(client_factory):
 
 # ---------- delete ----------
 
+
 def test_delete_requires_password(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     login_as("admin")
@@ -147,8 +167,18 @@ def test_delete_requires_password(client_factory, db_session, uploads_dir):
     on_disk = uploads_dir / "events" / "1" / f"{pid}.png"
     assert on_disk.exists()
 
-    assert client.request("DELETE", f"/api/events/1/photos/{pid}", json={"password": "wrong"}).status_code == 422
-    assert client.request("DELETE", f"/api/events/1/photos/{pid}", json={"password": "admin-pw"}).status_code == 204
+    assert (
+        client.request(
+            "DELETE", f"/api/events/1/photos/{pid}", json={"password": "wrong"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.request(
+            "DELETE", f"/api/events/1/photos/{pid}", json={"password": "admin-pw"}
+        ).status_code
+        == 204
+    )
     assert not on_disk.exists()
     assert db_session.query(EventPhoto).count() == 0
 

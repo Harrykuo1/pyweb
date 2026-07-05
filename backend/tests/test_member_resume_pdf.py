@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -21,17 +21,27 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def client_factory(db_session, uploads_dir):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.add(
         Member(
             id=1,
             graduation_year=2024,
             real_name="Alice",
             institution="SWE",
-            joined_at=datetime.now(timezone.utc),
+            joined_at=datetime.now(UTC),
         )
     )
     db_session.commit()
@@ -44,8 +54,12 @@ def client_factory(db_session, uploads_dir):
     client = TestClient(app)
 
     def login_as(role):
-        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[role]
-        r = client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]})
+        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[
+            role
+        ]
+        r = client.post(
+            "/api/auth/login", json={"username": creds[0], "password": creds[1]}
+        )
         assert r.status_code == 200, r.text
 
     try:
@@ -66,12 +80,13 @@ def _seed_pdf_on_disk(
     on_disk.write_bytes(data)
     member = db_session.query(Member).filter_by(id=member_id).one()
     member.resume_pdf_path = relpath
-    member.resume_pdf_updated_at = datetime.now(timezone.utc)
+    member.resume_pdf_updated_at = datetime.now(UTC)
     db_session.commit()
     return on_disk
 
 
 # ---------- upload ----------
+
 
 def test_upload_pdf_admin(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
@@ -92,9 +107,7 @@ def test_upload_pdf_admin(client_factory, db_session, uploads_dir):
     assert member.resume_pdf_updated_at is not None
 
 
-def test_upload_pdf_overwrites_existing(
-    client_factory, db_session, uploads_dir
-):
+def test_upload_pdf_overwrites_existing(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     login_as("admin")
 
@@ -188,6 +201,7 @@ def test_upload_pdf_404(client_factory):
 
 # ---------- get ----------
 
+
 def test_get_pdf_returns_bytes(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     _seed_pdf_on_disk(db_session, uploads_dir)
@@ -200,9 +214,7 @@ def test_get_pdf_returns_bytes(client_factory, db_session, uploads_dir):
     assert r.content == TINY_PDF
 
 
-def test_get_pdf_sends_nosniff_header(
-    client_factory, db_session, uploads_dir
-):
+def test_get_pdf_sends_nosniff_header(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     _seed_pdf_on_disk(db_session, uploads_dir)
     login_as("viewer")
@@ -234,9 +246,7 @@ def test_get_pdf_404_when_missing(client_factory):
     assert r.status_code == 404
 
 
-def test_get_pdf_404_when_disk_file_missing(
-    client_factory, db_session, uploads_dir
-):
+def test_get_pdf_404_when_disk_file_missing(client_factory, db_session, uploads_dir):
     """resume_pdf_path points at a vanished file — surface a 404
     instead of a 500 from FileResponse failing to stat."""
     client, login_as = client_factory
@@ -256,13 +266,16 @@ def test_get_pdf_unauth_401(client_factory):
 
 # ---------- delete ----------
 
+
 def test_delete_pdf_admin(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     on_disk = _seed_pdf_on_disk(db_session, uploads_dir)
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/resume.pdf", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/resume.pdf",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
 
@@ -273,9 +286,7 @@ def test_delete_pdf_admin(client_factory, db_session, uploads_dir):
     assert not on_disk.exists()
 
 
-def test_delete_pdf_removes_empty_member_dir(
-    client_factory, db_session, uploads_dir
-):
+def test_delete_pdf_removes_empty_member_dir(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     _seed_pdf_on_disk(db_session, uploads_dir)
     member_dir = uploads_dir / "members" / "1"
@@ -283,7 +294,9 @@ def test_delete_pdf_removes_empty_member_dir(
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/resume.pdf", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/resume.pdf",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
     assert not member_dir.exists()
@@ -303,12 +316,14 @@ def test_delete_pdf_keeps_member_dir_when_photo_remains(
     member = db_session.query(Member).filter_by(id=1).one()
     member.photo_path = "members/1/photo.png"
     member.photo_content_type = "image/png"
-    member.photo_updated_at = datetime.now(timezone.utc)
+    member.photo_updated_at = datetime.now(UTC)
     db_session.commit()
 
     login_as("admin")
     r = client.request(
-        "DELETE", "/api/members/1/resume.pdf", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/resume.pdf",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
     assert photo_path.exists()
@@ -324,23 +339,25 @@ def test_delete_pdf_when_disk_file_missing_still_clears_row(
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/resume.pdf", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/resume.pdf",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
     member = db_session.query(Member).filter_by(id=1).one()
     assert member.resume_pdf_path is None
 
 
-def test_delete_pdf_wrong_password_returns_422(
-    client_factory, db_session, uploads_dir
-):
+def test_delete_pdf_wrong_password_returns_422(client_factory, db_session, uploads_dir):
     # See members router helper for why this is 422 instead of 401.
     client, login_as = client_factory
     on_disk = _seed_pdf_on_disk(db_session, uploads_dir)
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/resume.pdf", json={"password": "wrong-pw"},
+        "DELETE",
+        "/api/members/1/resume.pdf",
+        json={"password": "wrong-pw"},
     )
     assert r.status_code == 422
 
@@ -360,6 +377,8 @@ def test_delete_pdf_viewer_403(client_factory):
     client, login_as = client_factory
     login_as("viewer")
     r = client.request(
-        "DELETE", "/api/members/1/resume.pdf", json={"password": "viewer-pw"},
+        "DELETE",
+        "/api/members/1/resume.pdf",
+        json={"password": "viewer-pw"},
     )
     assert r.status_code == 403

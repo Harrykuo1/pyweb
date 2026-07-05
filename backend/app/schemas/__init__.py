@@ -1,9 +1,3 @@
-from app.schemas.timeline import (
-    JobCreatedItem,
-    MemberJoinedItem,
-    TimelineItem,
-    TimelineResponse,
-)
 from app.schemas.auth import (
     LoginRequest,
     PasswordConfirmRequest,
@@ -37,6 +31,12 @@ from app.schemas.setting import (
     ConfigUpdateRequest,
 )
 from app.schemas.stats import StatsResponse
+from app.schemas.timeline import (
+    JobCreatedItem,
+    MemberJoinedItem,
+    TimelineItem,
+    TimelineResponse,
+)
 
 __all__ = [
     "BulkDeleteRequest",

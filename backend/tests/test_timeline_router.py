@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -107,13 +107,13 @@ def test_list_timeline_only_members(client_factory, db_session):
     _add_member(
         db_session,
         real_name="Alice",
-        joined_at=datetime(2025, 5, 1, tzinfo=timezone.utc),
+        joined_at=datetime(2025, 5, 1, tzinfo=UTC),
         position="SWE",
     )
     _add_member(
         db_session,
         real_name="Bob",
-        joined_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        joined_at=datetime(2025, 6, 1, tzinfo=UTC),
     )
     db_session.commit()
     login_as("viewer")
@@ -133,13 +133,13 @@ def test_list_timeline_only_jobs(client_factory, db_session):
     _add_job(
         db_session,
         company="Acme",
-        created_at=datetime(2025, 5, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 5, 1, tzinfo=UTC),
         real_name="Alice",
     )
     _add_job(
         db_session,
         company="Globex",
-        created_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 6, 1, tzinfo=UTC),
         real_name=None,
         category="Backend",
     )
@@ -168,31 +168,29 @@ def test_list_timeline_merges_members_and_jobs_by_timestamp_desc(
     _add_member(
         db_session,
         real_name="Alice",
-        joined_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        joined_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
     _add_job(
         db_session,
         company="Acme",
-        created_at=datetime(2025, 2, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 2, 1, tzinfo=UTC),
     )
     _add_member(
         db_session,
         real_name="Bob",
-        joined_at=datetime(2025, 3, 1, tzinfo=timezone.utc),
+        joined_at=datetime(2025, 3, 1, tzinfo=UTC),
     )
     _add_job(
         db_session,
         company="Globex",
-        created_at=datetime(2025, 4, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 4, 1, tzinfo=UTC),
     )
     db_session.commit()
     login_as("viewer")
 
     r = client.get("/api/timeline")
     items = r.json()["items"]
-    labels = [
-        (x["type"], x.get("company") or x.get("real_name")) for x in items
-    ]
+    labels = [(x["type"], x.get("company") or x.get("real_name")) for x in items]
     assert labels == [
         ("job_created", "Globex"),
         ("member_joined", "Bob"),
@@ -207,13 +205,13 @@ def test_list_timeline_respects_limit(client_factory, db_session):
         _add_member(
             db_session,
             real_name=f"M{idx}",
-            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=UTC),
         )
     for idx in range(8):
         _add_job(
             db_session,
             company=f"J{idx}",
-            created_at=datetime(2025, 2, 1 + idx, tzinfo=timezone.utc),
+            created_at=datetime(2025, 2, 1 + idx, tzinfo=UTC),
         )
     db_session.commit()
     login_as("viewer")
@@ -231,7 +229,7 @@ def test_list_timeline_default_limit_is_ten(client_factory, db_session):
         _add_member(
             db_session,
             real_name=f"M{idx}",
-            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=UTC),
         )
     db_session.commit()
     login_as("viewer")
@@ -266,7 +264,7 @@ def test_list_timeline_has_more_true_when_more_rows_exist(client_factory, db_ses
         _add_member(
             db_session,
             real_name=f"M{idx}",
-            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=UTC),
         )
     db_session.commit()
     login_as("viewer")
@@ -277,13 +275,15 @@ def test_list_timeline_has_more_true_when_more_rows_exist(client_factory, db_ses
     assert body["has_more"] is True
 
 
-def test_list_timeline_has_more_false_when_exactly_limit_rows(client_factory, db_session):
+def test_list_timeline_has_more_false_when_exactly_limit_rows(
+    client_factory, db_session
+):
     client, login_as = client_factory
     for idx in range(5):
         _add_member(
             db_session,
             real_name=f"M{idx}",
-            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=UTC),
         )
     db_session.commit()
     login_as("viewer")
@@ -302,13 +302,13 @@ def test_list_timeline_paginates_via_before_cursor(client_factory, db_session):
         _add_member(
             db_session,
             real_name=f"M{idx}",
-            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=UTC),
         )
     for idx in range(6):
         _add_job(
             db_session,
             company=f"J{idx}",
-            created_at=datetime(2025, 1, 1 + idx, 12, tzinfo=timezone.utc),
+            created_at=datetime(2025, 1, 1 + idx, 12, tzinfo=UTC),
         )
     db_session.commit()
     login_as("viewer")
@@ -324,8 +324,12 @@ def test_list_timeline_paginates_via_before_cursor(client_factory, db_session):
     assert len(page2["items"]) == 4
     assert page2["has_more"] is True
     # No overlap between the two pages — `before` is a strict <.
-    seen_keys_p1 = {(x["type"], x.get("member_id") or x.get("job_id")) for x in page1["items"]}
-    seen_keys_p2 = {(x["type"], x.get("member_id") or x.get("job_id")) for x in page2["items"]}
+    seen_keys_p1 = {
+        (x["type"], x.get("member_id") or x.get("job_id")) for x in page1["items"]
+    }
+    seen_keys_p2 = {
+        (x["type"], x.get("member_id") or x.get("job_id")) for x in page2["items"]
+    }
     assert seen_keys_p1.isdisjoint(seen_keys_p2)
 
     # Page 2's last item is older than page 1's last item.
@@ -338,7 +342,7 @@ def test_list_timeline_pagination_walks_to_end(client_factory, db_session):
         _add_member(
             db_session,
             real_name=f"M{idx}",
-            joined_at=datetime(2025, 1, 1 + idx, tzinfo=timezone.utc),
+            joined_at=datetime(2025, 1, 1 + idx, tzinfo=UTC),
         )
     db_session.commit()
     login_as("viewer")
@@ -361,18 +365,18 @@ def test_list_timeline_pagination_walks_to_end(client_factory, db_session):
     assert collected == [f"M{idx}" for idx in reversed(range(7))]
 
 
-def test_list_timeline_before_with_no_older_rows_returns_empty(client_factory, db_session):
+def test_list_timeline_before_with_no_older_rows_returns_empty(
+    client_factory, db_session
+):
     client, login_as = client_factory
     _add_member(
         db_session,
         real_name="Alice",
-        joined_at=datetime(2025, 5, 1, tzinfo=timezone.utc),
+        joined_at=datetime(2025, 5, 1, tzinfo=UTC),
     )
     db_session.commit()
     login_as("viewer")
 
     # Cursor older than the only row → empty + has_more=False.
-    body = client.get(
-        "/api/timeline?before=2025-01-01T00:00:00%2B00:00"
-    ).json()
+    body = client.get("/api/timeline?before=2025-01-01T00:00:00%2B00:00").json()
     assert body == {"items": [], "has_more": False}

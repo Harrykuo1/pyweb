@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,10 +11,20 @@ from app.models import Job, JobKind, User, UserRole
 
 @pytest.fixture
 def client_factory(db_session):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():
@@ -24,8 +34,12 @@ def client_factory(db_session):
     client = TestClient(app)
 
     def login_as(role):
-        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[role]
-        r = client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]})
+        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[
+            role
+        ]
+        r = client.post(
+            "/api/auth/login", json={"username": creds[0], "password": creds[1]}
+        )
         assert r.status_code == 200, r.text
 
     try:
@@ -37,7 +51,7 @@ def client_factory(db_session):
 
 def _seed(db_session, rows):
     """rows = list of dicts; created_at offsets monotonically per index."""
-    base = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    base = datetime(2025, 1, 1, tzinfo=UTC)
     for idx, row in enumerate(rows):
         db_session.add(
             Job(
@@ -56,6 +70,7 @@ def _seed(db_session, rows):
 
 # ---------- list / sort / filter / search ----------
 
+
 def test_list_requires_auth(client_factory):
     client, _ = client_factory
     r = client.get("/api/jobs")
@@ -64,11 +79,14 @@ def test_list_requires_auth(client_factory):
 
 def test_list_default_sort_created_at_desc(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme"},      # idx 0, oldest
-        {"company": "Globex"},
-        {"company": "Initech"},   # idx 2, newest
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme"},  # idx 0, oldest
+            {"company": "Globex"},
+            {"company": "Initech"},  # idx 2, newest
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs")
@@ -80,11 +98,14 @@ def test_list_default_sort_created_at_desc(client_factory, db_session):
 
 def test_list_sort_company_asc(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Globex"},
-        {"company": "Acme"},
-        {"company": "Initech"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Globex"},
+            {"company": "Acme"},
+            {"company": "Initech"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?sort=company&order=asc")
@@ -93,11 +114,14 @@ def test_list_sort_company_asc(client_factory, db_session):
 
 def test_list_sort_job_year_desc(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "job_year": 2023},
-        {"company": "B", "job_year": 2025},
-        {"company": "C", "job_year": 2024},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "job_year": 2023},
+            {"company": "B", "job_year": 2025},
+            {"company": "C", "job_year": 2024},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?sort=job_year&order=desc")
@@ -107,12 +131,15 @@ def test_list_sort_job_year_desc(client_factory, db_session):
 
 def test_list_sort_real_name_anonymous_sinks(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "real_name": "Bob"},
-        {"company": "B", "real_name": None},   # anonymous — should sink
-        {"company": "C", "real_name": "Alice"},
-        {"company": "D", "real_name": None},   # anonymous — should sink
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "real_name": "Bob"},
+            {"company": "B", "real_name": None},  # anonymous — should sink
+            {"company": "C", "real_name": "Alice"},
+            {"company": "D", "real_name": None},  # anonymous — should sink
+        ],
+    )
     login_as("viewer")
 
     r_asc = client.get("/api/jobs?sort=real_name&order=asc")
@@ -128,13 +155,16 @@ def test_list_sort_real_name_anonymous_sinks(client_factory, db_session):
 
 def test_list_sort_kind_asc_groups_internships_first(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        # idx 0..3 — created_at runs 1/1, 1/2, 1/3, 1/4
-        {"company": "F1", "kind": JobKind.FULLTIME},
-        {"company": "I1", "kind": JobKind.INTERNSHIP},
-        {"company": "F2", "kind": JobKind.FULLTIME},
-        {"company": "I2", "kind": JobKind.INTERNSHIP},
-    ])
+    _seed(
+        db_session,
+        [
+            # idx 0..3 — created_at runs 1/1, 1/2, 1/3, 1/4
+            {"company": "F1", "kind": JobKind.FULLTIME},
+            {"company": "I1", "kind": JobKind.INTERNSHIP},
+            {"company": "F2", "kind": JobKind.FULLTIME},
+            {"company": "I2", "kind": JobKind.INTERNSHIP},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?sort=kind&order=asc")
@@ -150,10 +180,13 @@ def test_list_sort_kind_asc_groups_internships_first(client_factory, db_session)
 
 def test_list_sort_kind_desc_groups_fulltime_first(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "F1", "kind": JobKind.FULLTIME},
-        {"company": "I1", "kind": JobKind.INTERNSHIP},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "F1", "kind": JobKind.FULLTIME},
+            {"company": "I1", "kind": JobKind.INTERNSHIP},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?sort=kind&order=desc")
@@ -163,11 +196,14 @@ def test_list_sort_kind_desc_groups_fulltime_first(client_factory, db_session):
 
 def test_list_filter_by_year(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "job_year": 2024},
-        {"company": "B", "job_year": 2025},
-        {"company": "C", "job_year": 2024},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "job_year": 2024},
+            {"company": "B", "job_year": 2025},
+            {"company": "C", "job_year": 2024},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?year=2024")
@@ -176,11 +212,14 @@ def test_list_filter_by_year(client_factory, db_session):
 
 def test_list_filter_by_company_exact_match(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme"},
-        {"company": "Acme Inc"},
-        {"company": "Globex"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme"},
+            {"company": "Acme Inc"},
+            {"company": "Globex"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?company=Acme")
@@ -191,12 +230,15 @@ def test_list_filter_by_company_exact_match(client_factory, db_session):
 
 def test_list_filter_by_company_multi_or(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme"},
-        {"company": "Globex"},
-        {"company": "Initech"},
-        {"company": "Other"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme"},
+            {"company": "Globex"},
+            {"company": "Initech"},
+            {"company": "Other"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?company=Acme&company=Globex")
@@ -207,11 +249,14 @@ def test_list_filter_by_company_multi_or(client_factory, db_session):
 
 def test_list_filter_by_kind_internship(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "kind": JobKind.INTERNSHIP},
-        {"company": "B", "kind": JobKind.FULLTIME},
-        {"company": "C", "kind": JobKind.INTERNSHIP},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "kind": JobKind.INTERNSHIP},
+            {"company": "B", "kind": JobKind.FULLTIME},
+            {"company": "C", "kind": JobKind.INTERNSHIP},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?kind=internship")
@@ -222,10 +267,13 @@ def test_list_filter_by_kind_internship(client_factory, db_session):
 
 def test_list_filter_by_kind_fulltime(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "kind": JobKind.INTERNSHIP},
-        {"company": "B", "kind": JobKind.FULLTIME},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "kind": JobKind.INTERNSHIP},
+            {"company": "B", "kind": JobKind.FULLTIME},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?kind=fulltime")
@@ -243,11 +291,14 @@ def test_list_filter_kind_rejects_invalid_value(client_factory):
 
 def test_list_search_q_matches_real_name_and_experience(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme", "experience_md": "interview was tough"},
-        {"company": "Globex", "real_name": "interview-fan", "experience_md": "x"},
-        {"company": "Other", "experience_md": "system design"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme", "experience_md": "interview was tough"},
+            {"company": "Globex", "real_name": "interview-fan", "experience_md": "x"},
+            {"company": "Other", "experience_md": "system design"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=interview")
@@ -257,10 +308,13 @@ def test_list_search_q_matches_real_name_and_experience(client_factory, db_sessi
 
 def test_list_search_q_does_not_match_company_name(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme", "real_name": "alice", "experience_md": "fine"},
-        {"company": "Other", "real_name": "Acme person", "experience_md": "x"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme", "real_name": "alice", "experience_md": "fine"},
+            {"company": "Other", "real_name": "Acme person", "experience_md": "x"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=Acme")
@@ -270,11 +324,24 @@ def test_list_search_q_does_not_match_company_name(client_factory, db_session):
 
 def test_list_combined_filter_and_search(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme", "job_year": 2024, "experience_md": "interview", "kind": JobKind.INTERNSHIP},
-        {"company": "Acme", "job_year": 2025, "experience_md": "interview", "kind": JobKind.FULLTIME},
-        {"company": "Globex", "job_year": 2024, "experience_md": "interview"},
-    ])
+    _seed(
+        db_session,
+        [
+            {
+                "company": "Acme",
+                "job_year": 2024,
+                "experience_md": "interview",
+                "kind": JobKind.INTERNSHIP,
+            },
+            {
+                "company": "Acme",
+                "job_year": 2025,
+                "experience_md": "interview",
+                "kind": JobKind.FULLTIME,
+            },
+            {"company": "Globex", "job_year": 2024, "experience_md": "interview"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?company=Acme&year=2024&q=interview&kind=internship")
@@ -285,12 +352,19 @@ def test_list_combined_filter_and_search(client_factory, db_session):
 def test_list_search_q_implicit_and_two_terms(client_factory, db_session):
     # Both terms must appear; either field is fine for either term.
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Has-both", "experience_md": "senior react work"},
-        {"company": "Only-senior", "experience_md": "senior backend"},
-        {"company": "Only-react", "real_name": "react-fan", "experience_md": "x"},
-        {"company": "Cross-fields", "real_name": "senior person", "experience_md": "react notes"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Has-both", "experience_md": "senior react work"},
+            {"company": "Only-senior", "experience_md": "senior backend"},
+            {"company": "Only-react", "real_name": "react-fan", "experience_md": "x"},
+            {
+                "company": "Cross-fields",
+                "real_name": "senior person",
+                "experience_md": "react notes",
+            },
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=senior react")
@@ -300,11 +374,14 @@ def test_list_search_q_implicit_and_two_terms(client_factory, db_session):
 
 def test_list_search_q_or_groups(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "experience_md": "react notes"},
-        {"company": "B", "experience_md": "vue notes"},
-        {"company": "C", "experience_md": "go notes"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "experience_md": "react notes"},
+            {"company": "B", "experience_md": "vue notes"},
+            {"company": "C", "experience_md": "go notes"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=react OR vue")
@@ -314,11 +391,14 @@ def test_list_search_q_or_groups(client_factory, db_session):
 
 def test_list_search_q_dash_excludes(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Senior-only", "experience_md": "senior react"},
-        {"company": "Senior+junior", "experience_md": "senior react junior"},
-        {"company": "Junior-only", "experience_md": "junior react"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Senior-only", "experience_md": "senior react"},
+            {"company": "Senior+junior", "experience_md": "senior react junior"},
+            {"company": "Junior-only", "experience_md": "junior react"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=react -junior")
@@ -328,10 +408,13 @@ def test_list_search_q_dash_excludes(client_factory, db_session):
 
 def test_list_search_q_not_keyword_excludes(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "experience_md": "team lead role"},
-        {"company": "B", "experience_md": "team member role"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "experience_md": "team lead role"},
+            {"company": "B", "experience_md": "team member role"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=team NOT lead")
@@ -341,11 +424,14 @@ def test_list_search_q_not_keyword_excludes(client_factory, db_session):
 
 def test_list_search_q_quoted_phrase_preserves_whitespace(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Match", "experience_md": "promoted to team lead in 2024"},
-        {"company": "Wrong-order", "experience_md": "the lead of the team"},
-        {"company": "Tokens-only", "experience_md": "led the team and was a lead"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Match", "experience_md": "promoted to team lead in 2024"},
+            {"company": "Wrong-order", "experience_md": "the lead of the team"},
+            {"company": "Tokens-only", "experience_md": "led the team and was a lead"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get('/api/jobs?q="team lead"')
@@ -357,14 +443,26 @@ def test_list_search_q_combined_boolean_query(client_factory, db_session):
     # `senior react OR vue -junior "team lead"` (Google-style):
     # (senior AND react) OR (vue AND NOT junior AND "team lead")
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "G1-hit", "experience_md": "senior react work"},
-        {"company": "G1-also-junior", "experience_md": "senior react junior"},  # still hits G1
-        {"company": "G2-hit", "experience_md": "vue role, team lead"},
-        {"company": "G2-junior", "experience_md": "vue role, team lead, junior"},  # excluded
-        {"company": "G2-no-phrase", "experience_md": "vue role, the lead of the team"},  # phrase missing
-        {"company": "Neither", "experience_md": "go backend"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "G1-hit", "experience_md": "senior react work"},
+            {
+                "company": "G1-also-junior",
+                "experience_md": "senior react junior",
+            },  # still hits G1
+            {"company": "G2-hit", "experience_md": "vue role, team lead"},
+            {
+                "company": "G2-junior",
+                "experience_md": "vue role, team lead, junior",
+            },  # excluded
+            {
+                "company": "G2-no-phrase",
+                "experience_md": "vue role, the lead of the team",
+            },  # phrase missing
+            {"company": "Neither", "experience_md": "go backend"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get('/api/jobs?q=senior react OR vue -junior "team lead"')
@@ -375,10 +473,13 @@ def test_list_search_q_combined_boolean_query(client_factory, db_session):
 def test_list_search_q_single_term_remains_substring(client_factory, db_session):
     # Backwards-compatible with the old single-term ILIKE behavior.
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "A", "experience_md": "interview tips"},
-        {"company": "B", "experience_md": "system design"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "A", "experience_md": "interview tips"},
+            {"company": "B", "experience_md": "system design"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=interview")
@@ -389,10 +490,13 @@ def test_list_search_q_single_term_remains_substring(client_factory, db_session)
 def test_list_search_q_still_excludes_company_field(client_factory, db_session):
     # Company is filtered via the multi-select picker, not q.
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme", "real_name": "alice", "experience_md": "x"},
-        {"company": "Other", "real_name": "bob", "experience_md": "y"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme", "real_name": "alice", "experience_md": "x"},
+            {"company": "Other", "real_name": "bob", "experience_md": "y"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs?q=Acme")
@@ -408,13 +512,17 @@ def test_list_rejects_invalid_sort(client_factory):
 
 # ---------- companies autocomplete ----------
 
+
 def test_companies_autocomplete_distinct(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme"},
-        {"company": "Acme"},          # dup
-        {"company": "Globex"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme"},
+            {"company": "Acme"},  # dup
+            {"company": "Globex"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs/companies")
@@ -424,14 +532,34 @@ def test_companies_autocomplete_distinct(client_factory, db_session):
 
 def test_list_filter_by_category_single(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all([
-        Job(job_year=2025, job_month=1, company="A", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=2, company="B", category="DevOps",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=3, company="C", category=None,
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-    ])
+    db_session.add_all(
+        [
+            Job(
+                job_year=2025,
+                job_month=1,
+                company="A",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=2,
+                company="B",
+                category="DevOps",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=3,
+                company="C",
+                category=None,
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -442,14 +570,34 @@ def test_list_filter_by_category_single(client_factory, db_session):
 
 def test_list_filter_by_category_multi_or(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all([
-        Job(job_year=2025, job_month=1, company="A", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=2, company="B", category="DevOps",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=3, company="C", category="R&D",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-    ])
+    db_session.add_all(
+        [
+            Job(
+                job_year=2025,
+                job_month=1,
+                company="A",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=2,
+                company="B",
+                category="DevOps",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=3,
+                company="C",
+                category="R&D",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -460,12 +608,26 @@ def test_list_filter_by_category_multi_or(client_factory, db_session):
 
 def test_list_filter_by_category_excludes_null(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all([
-        Job(job_year=2025, job_month=1, company="A", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=2, company="B", category=None,
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-    ])
+    db_session.add_all(
+        [
+            Job(
+                job_year=2025,
+                job_month=1,
+                company="A",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=2,
+                company="B",
+                category=None,
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -476,14 +638,34 @@ def test_list_filter_by_category_excludes_null(client_factory, db_session):
 def test_list_filter_by_category_combined_with_company(client_factory, db_session):
     # Filters compose with AND across orthogonal facets.
     client, login_as = client_factory
-    db_session.add_all([
-        Job(job_year=2025, job_month=1, company="Acme", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=2, company="Acme", category="DevOps",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=3, company="Globex", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-    ])
+    db_session.add_all(
+        [
+            Job(
+                job_year=2025,
+                job_month=1,
+                company="Acme",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=2,
+                company="Acme",
+                category="DevOps",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=3,
+                company="Globex",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -496,16 +678,42 @@ def test_list_filter_by_category_combined_with_company(client_factory, db_sessio
 
 def test_categories_autocomplete_distinct_skips_nulls(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all([
-        Job(job_year=2025, job_month=1, company="A", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=2, company="B", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),  # dup
-        Job(job_year=2025, job_month=3, company="C", category="DevOps",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=4, company="D", category=None,
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-    ])
+    db_session.add_all(
+        [
+            Job(
+                job_year=2025,
+                job_month=1,
+                company="A",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=2,
+                company="B",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),  # dup
+            Job(
+                job_year=2025,
+                job_month=3,
+                company="C",
+                category="DevOps",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=4,
+                company="D",
+                category=None,
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -516,14 +724,34 @@ def test_categories_autocomplete_distinct_skips_nulls(client_factory, db_session
 
 def test_categories_autocomplete_prefix(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all([
-        Job(job_year=2025, job_month=1, company="A", category="Backend",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=2, company="B", category="DevOps",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-        Job(job_year=2025, job_month=3, company="C", category="Data",
-            kind=JobKind.INTERNSHIP, experience_md="x"),
-    ])
+    db_session.add_all(
+        [
+            Job(
+                job_year=2025,
+                job_month=1,
+                company="A",
+                category="Backend",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=2,
+                company="B",
+                category="DevOps",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+            Job(
+                job_year=2025,
+                job_month=3,
+                company="C",
+                category="Data",
+                kind=JobKind.INTERNSHIP,
+                experience_md="x",
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -540,11 +768,14 @@ def test_categories_autocomplete_requires_auth(client_factory):
 
 def test_companies_autocomplete_prefix(client_factory, db_session):
     client, login_as = client_factory
-    _seed(db_session, [
-        {"company": "Acme"},
-        {"company": "Acme Inc"},
-        {"company": "Globex"},
-    ])
+    _seed(
+        db_session,
+        [
+            {"company": "Acme"},
+            {"company": "Acme Inc"},
+            {"company": "Globex"},
+        ],
+    )
     login_as("viewer")
 
     r = client.get("/api/jobs/companies?prefix=ac")
@@ -558,6 +789,7 @@ def test_companies_autocomplete_requires_auth(client_factory):
 
 
 # ---------- detail ----------
+
 
 def test_get_job_404(client_factory):
     client, login_as = client_factory
@@ -579,6 +811,7 @@ def test_get_job_returns_full_markdown(client_factory, db_session):
 
 
 # ---------- create ----------
+
 
 def test_create_internship_job_admin_succeeds(client_factory):
     client, login_as = client_factory
@@ -680,7 +913,12 @@ def test_create_viewer_403(client_factory):
     login_as("viewer")
     r = client.post(
         "/api/jobs",
-        json={"job_year": 2025, "company": "Acme", "kind": "internship", "experience_md": "x"},
+        json={
+            "job_year": 2025,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+        },
     )
     assert r.status_code == 403
 
@@ -689,7 +927,12 @@ def test_create_unauth_401(client_factory):
     client, _ = client_factory
     r = client.post(
         "/api/jobs",
-        json={"job_year": 2025, "company": "Acme", "kind": "internship", "experience_md": "x"},
+        json={
+            "job_year": 2025,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+        },
     )
     assert r.status_code == 401
 
@@ -699,7 +942,12 @@ def test_create_rejects_year_below_min(client_factory):
     login_as("admin")
     r = client.post(
         "/api/jobs",
-        json={"job_year": 1999, "company": "Acme", "kind": "internship", "experience_md": "x"},
+        json={
+            "job_year": 1999,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+        },
     )
     assert r.status_code == 422
 
@@ -707,7 +955,7 @@ def test_create_rejects_year_below_min(client_factory):
 def test_create_rejects_year_above_max(client_factory):
     client, login_as = client_factory
     login_as("admin")
-    far_future = datetime.now(timezone.utc).year + 5
+    far_future = datetime.now(UTC).year + 5
     r = client.post(
         "/api/jobs",
         json={
@@ -721,6 +969,7 @@ def test_create_rejects_year_above_max(client_factory):
 
 
 # ---------- update ----------
+
 
 def test_update_admin_partial(client_factory, db_session):
     client, login_as = client_factory
@@ -769,6 +1018,7 @@ def test_update_404(client_factory):
 
 
 # ---------- timeline_events ----------
+
 
 def test_create_with_timeline_events_round_trips(client_factory):
     client, login_as = client_factory
@@ -874,7 +1124,9 @@ def test_create_rejects_timeline_event_with_invalid_date(client_factory):
                 "timeline_events": [{"date": bad, "event": "x"}],
             },
         )
-        assert r.status_code == 422, f"expected 422 for date={bad!r}, got {r.status_code}"
+        assert r.status_code == 422, (
+            f"expected 422 for date={bad!r}, got {r.status_code}"
+        )
 
 
 def test_create_rejects_timeline_event_with_blank_text(client_factory):
@@ -975,13 +1227,16 @@ def test_legacy_timeline_md_and_new_timeline_events_are_independent(
 
 # ---------- delete ----------
 
+
 def test_delete_admin_with_correct_password(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [{"company": "Acme"}])
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/jobs/1", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/jobs/1",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
     assert client.get("/api/jobs/1").status_code == 404
@@ -996,7 +1251,9 @@ def test_delete_wrong_password_returns_422(client_factory, db_session):
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/jobs/1", json={"password": "nope"},
+        "DELETE",
+        "/api/jobs/1",
+        json={"password": "nope"},
     )
     assert r.status_code == 422
     assert client.get("/api/jobs/1").status_code == 200
@@ -1015,7 +1272,9 @@ def test_delete_viewer_403(client_factory, db_session):
     _seed(db_session, [{"company": "Acme"}])
     login_as("viewer")
     r = client.request(
-        "DELETE", "/api/jobs/1", json={"password": "viewer-pw"},
+        "DELETE",
+        "/api/jobs/1",
+        json={"password": "viewer-pw"},
     )
     assert r.status_code == 403
 
@@ -1024,7 +1283,9 @@ def test_delete_404(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.request(
-        "DELETE", "/api/jobs/9999", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/jobs/9999",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 404
 
@@ -1052,7 +1313,9 @@ def test_delete_removes_on_disk_uploads_dir(client_factory, db_session, tmp_path
 
     try:
         r = client.request(
-            "DELETE", "/api/jobs/1", json={"password": "admin-pw"},
+            "DELETE",
+            "/api/jobs/1",
+            json={"password": "admin-pw"},
         )
         assert r.status_code == 204
         assert not job_dir.exists()
@@ -1071,18 +1334,24 @@ def test_get_reports_attachment_count(client_factory, db_session):
     client, login_as = client_factory
     _seed(db_session, [{"company": "Acme"}, {"company": "Beta"}])
     # Two attachments on job 1, zero on job 2.
-    db_session.add_all([
-        JobAttachment(
-            job_id=1, filename="a.pdf",
-            mime_type="application/pdf", size_bytes=1,
-            uploaded_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
-        ),
-        JobAttachment(
-            job_id=1, filename="b.pdf",
-            mime_type="application/pdf", size_bytes=1,
-            uploaded_at=datetime(2026, 5, 2, tzinfo=timezone.utc),
-        ),
-    ])
+    db_session.add_all(
+        [
+            JobAttachment(
+                job_id=1,
+                filename="a.pdf",
+                mime_type="application/pdf",
+                size_bytes=1,
+                uploaded_at=datetime(2026, 5, 1, tzinfo=UTC),
+            ),
+            JobAttachment(
+                job_id=1,
+                filename="b.pdf",
+                mime_type="application/pdf",
+                size_bytes=1,
+                uploaded_at=datetime(2026, 5, 2, tzinfo=UTC),
+            ),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 
@@ -1099,13 +1368,16 @@ def test_get_reports_attachment_count(client_factory, db_session):
 def test_create_reports_zero_attachment_count(client_factory):
     client, login_as = client_factory
     login_as("admin")
-    r = client.post("/api/jobs", json={
-        "kind": "internship",
-        "job_year": 2026,
-        "job_month": 5,
-        "company": "Acme",
-        "experience_md": "hi",
-    })
+    r = client.post(
+        "/api/jobs",
+        json={
+            "kind": "internship",
+            "job_year": 2026,
+            "job_month": 5,
+            "company": "Acme",
+            "experience_md": "hi",
+        },
+    )
     assert r.status_code == 201
     assert r.json()["attachment_count"] == 0
 
@@ -1126,7 +1398,9 @@ def test_delete_succeeds_when_no_uploads_dir_exists(
     app.dependency_overrides[get_uploads_root] = lambda: uploads_dir
     try:
         r = client.request(
-            "DELETE", "/api/jobs/1", json={"password": "admin-pw"},
+            "DELETE",
+            "/api/jobs/1",
+            json={"password": "admin-pw"},
         )
         assert r.status_code == 204
     finally:

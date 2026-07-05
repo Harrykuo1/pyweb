@@ -10,18 +10,20 @@ from app.models import User, UserRole
 @pytest.fixture
 def client(db_session):
     """TestClient wired to the in-memory db_session via dependency override."""
-    db_session.add_all([
-        User(
-            username="admin",
-            password_hash=hash_password("admin-pw"),
-            role=UserRole.ADMIN,
-        ),
-        User(
-            username="viewer",
-            password_hash=hash_password("viewer-pw"),
-            role=UserRole.VIEWER,
-        ),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():

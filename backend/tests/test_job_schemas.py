@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -13,7 +13,7 @@ from app.schemas import (
 
 
 def _current_max_year() -> int:
-    return datetime.now(timezone.utc).year + 1
+    return datetime.now(UTC).year + 1
 
 
 def _payload(**overrides):
@@ -176,7 +176,7 @@ def test_job_update_rejects_invalid_kind_when_provided():
 
 
 def test_job_response_from_orm_object():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     j = Job(
         id=1,
         job_year=2025,
@@ -197,7 +197,7 @@ def test_job_response_from_orm_object():
 
 
 def test_job_response_exposes_category_when_set():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     j = Job(
         id=3,
         job_year=2025,
@@ -212,7 +212,7 @@ def test_job_response_exposes_category_when_set():
 
 
 def test_job_response_from_fulltime_orm_object():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     j = Job(
         id=2,
         job_year=2024,
@@ -227,7 +227,7 @@ def test_job_response_from_fulltime_orm_object():
 
 
 def test_list_response_carries_items_and_total():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     item = JobResponse(
         id=1,
         job_year=2025,

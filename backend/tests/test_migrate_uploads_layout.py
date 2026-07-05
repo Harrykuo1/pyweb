@@ -3,6 +3,7 @@
 The function operates on whatever ``settings.uploads_dir`` points at,
 so the test monkeypatches the setting to a tmp dir per case.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

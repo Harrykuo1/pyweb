@@ -7,6 +7,7 @@ hands control to alembic with a Config that points at the project's
 alembic.ini, and that init_db.main() runs migrations *before* seeding
 so the seed never targets a missing schema.
 """
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -45,9 +46,11 @@ def test_main_runs_migrations_then_seeds(db_session):
         def __exit__(self, *_):
             return False
 
-    with patch("app.init_db.command.upgrade", side_effect=fake_upgrade), \
-         patch("app.init_db.SessionLocal", return_value=_SessionCtx()), \
-         patch("app.init_db.seed_accounts", side_effect=fake_seed):
+    with (
+        patch("app.init_db.command.upgrade", side_effect=fake_upgrade),
+        patch("app.init_db.SessionLocal", return_value=_SessionCtx()),
+        patch("app.init_db.seed_accounts", side_effect=fake_seed),
+    ):
         init_db.main()
 
     assert call_order == ["migrate", "seed"]

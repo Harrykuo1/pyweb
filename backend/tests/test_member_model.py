@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -40,7 +40,7 @@ def test_member_has_flags_when_populated(db_session):
     # themselves live on disk via photo_path / resume_pdf_path. Upload
     # endpoints set the companion columns in lockstep with writing the
     # file, so we mirror that invariant here.
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     m = Member(
         graduation_year=2024,
         real_name="A",

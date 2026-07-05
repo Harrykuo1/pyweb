@@ -24,7 +24,6 @@ import time
 from collections import OrderedDict, deque
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from typing import Optional
 
 # 10-minute rolling window for "recent" failures.
 WINDOW_SECONDS = 10 * 60
@@ -90,7 +89,7 @@ class _FailureTracker:
 
     def __init__(self) -> None:
         # OrderedDict makes FIFO eviction O(1) via popitem(last=False).
-        self._by_ip: "OrderedDict[str, deque[float]]" = OrderedDict()
+        self._by_ip: OrderedDict[str, deque[float]] = OrderedDict()
         self._lock = threading.Lock()
 
     def record_failure(self, ip: str) -> None:

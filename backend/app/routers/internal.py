@@ -12,6 +12,7 @@ fetched the source, the polling loop had already given up and dropped
 the token. Serving the file straight off disk by (job_id, filename)
 is idempotent and survives any restart / retry timing.
 """
+
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -36,7 +37,7 @@ def serve_source(
     try:
         safe = sanitize_relpath(filename)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
 
     file_path = job_uploads_dir(uploads_root, job_id) / safe
     if not file_path.exists():

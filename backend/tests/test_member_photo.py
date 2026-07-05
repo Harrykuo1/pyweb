@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -25,17 +25,27 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def client_factory(db_session, uploads_dir):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.add(
         Member(
             id=1,
             graduation_year=2024,
             real_name="Alice",
             institution="SWE",
-            joined_at=datetime.now(timezone.utc),
+            joined_at=datetime.now(UTC),
         )
     )
     db_session.commit()
@@ -48,8 +58,12 @@ def client_factory(db_session, uploads_dir):
     client = TestClient(app)
 
     def login_as(role):
-        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[role]
-        r = client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]})
+        creds = {"admin": ("admin", "admin-pw"), "viewer": ("viewer", "viewer-pw")}[
+            role
+        ]
+        r = client.post(
+            "/api/auth/login", json={"username": creds[0], "password": creds[1]}
+        )
         assert r.status_code == 200, r.text
 
     try:
@@ -60,8 +74,13 @@ def client_factory(db_session, uploads_dir):
 
 
 def _seed_photo_on_disk(
-    db_session, uploads_dir: Path, member_id: int = 1,
-    *, ext: str = ".png", mime: str = "image/png", data: bytes = TINY_PNG,
+    db_session,
+    uploads_dir: Path,
+    member_id: int = 1,
+    *,
+    ext: str = ".png",
+    mime: str = "image/png",
+    data: bytes = TINY_PNG,
 ) -> Path:
     """Mirror what the upload endpoint persists for an existing photo:
     a file on disk plus the matching path / MIME / timestamp columns."""
@@ -72,12 +91,13 @@ def _seed_photo_on_disk(
     member = db_session.query(Member).filter_by(id=member_id).one()
     member.photo_path = relpath
     member.photo_content_type = mime
-    member.photo_updated_at = datetime.now(timezone.utc)
+    member.photo_updated_at = datetime.now(UTC)
     db_session.commit()
     return on_disk
 
 
 # ---------- upload ----------
+
 
 def test_upload_photo_admin(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
@@ -221,6 +241,7 @@ def test_upload_photo_404(client_factory):
 
 # ---------- get ----------
 
+
 def test_get_photo_returns_bytes_with_content_type(
     client_factory, db_session, uploads_dir
 ):
@@ -234,9 +255,7 @@ def test_get_photo_returns_bytes_with_content_type(
     assert r.content == TINY_PNG
 
 
-def test_get_photo_sends_nosniff_header(
-    client_factory, db_session, uploads_dir
-):
+def test_get_photo_sends_nosniff_header(client_factory, db_session, uploads_dir):
     # Defence-in-depth: the FS payload is whatever the admin uploaded;
     # nosniff stops browsers from second-guessing the declared MIME
     # and trying to render a hostile upload inline.
@@ -271,9 +290,7 @@ def test_get_photo_404_when_missing(client_factory):
     assert r.status_code == 404
 
 
-def test_get_photo_404_when_disk_file_missing(
-    client_factory, db_session, uploads_dir
-):
+def test_get_photo_404_when_disk_file_missing(client_factory, db_session, uploads_dir):
     """photo_path points at a vanished file — surface a 404 instead of
     a 500 from FileResponse failing to stat the missing path."""
     client, login_as = client_factory
@@ -293,13 +310,16 @@ def test_get_photo_unauth_401(client_factory):
 
 # ---------- delete ----------
 
+
 def test_delete_photo_admin(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     on_disk = _seed_photo_on_disk(db_session, uploads_dir)
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/photo", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/photo",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
 
@@ -311,9 +331,7 @@ def test_delete_photo_admin(client_factory, db_session, uploads_dir):
     assert not on_disk.exists()
 
 
-def test_delete_photo_removes_empty_member_dir(
-    client_factory, db_session, uploads_dir
-):
+def test_delete_photo_removes_empty_member_dir(client_factory, db_session, uploads_dir):
     client, login_as = client_factory
     _seed_photo_on_disk(db_session, uploads_dir)
     member_dir = uploads_dir / "members" / "1"
@@ -321,7 +339,9 @@ def test_delete_photo_removes_empty_member_dir(
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/photo", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/photo",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
 
@@ -339,7 +359,9 @@ def test_delete_photo_when_disk_file_missing_still_clears_row(
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/photo", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/1/photo",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 204
     member = db_session.query(Member).filter_by(id=1).one()
@@ -355,7 +377,9 @@ def test_delete_photo_wrong_password_returns_422(
     login_as("admin")
 
     r = client.request(
-        "DELETE", "/api/members/1/photo", json={"password": "wrong-pw"},
+        "DELETE",
+        "/api/members/1/photo",
+        json={"password": "wrong-pw"},
     )
     assert r.status_code == 422
 
@@ -375,7 +399,9 @@ def test_delete_photo_viewer_403(client_factory):
     client, login_as = client_factory
     login_as("viewer")
     r = client.request(
-        "DELETE", "/api/members/1/photo", json={"password": "viewer-pw"},
+        "DELETE",
+        "/api/members/1/photo",
+        json={"password": "viewer-pw"},
     )
     assert r.status_code == 403
 
@@ -384,6 +410,8 @@ def test_delete_photo_404(client_factory):
     client, login_as = client_factory
     login_as("admin")
     r = client.request(
-        "DELETE", "/api/members/9999/photo", json={"password": "admin-pw"},
+        "DELETE",
+        "/api/members/9999/photo",
+        json={"password": "admin-pw"},
     )
     assert r.status_code == 404

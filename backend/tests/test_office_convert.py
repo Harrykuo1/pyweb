@@ -6,6 +6,7 @@ and serves back canned conversion responses. Anything that actually
 exercises OnlyOffice belongs in an integration check against a
 running container, not here.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +18,6 @@ import pytest
 
 from app.core import office_convert
 from app.core.config import settings
-
 
 JOB_ID = 7
 
@@ -43,7 +43,9 @@ def configured(monkeypatch):
 
 
 class FakeResponse:
-    def __init__(self, status_code: int, *, json_body: Any | None = None, body: bytes = b""):
+    def __init__(
+        self, status_code: int, *, json_body: Any | None = None, body: bytes = b""
+    ):
         self.status_code = status_code
         self._json = json_body
         self.content = body
@@ -82,7 +84,9 @@ class FakeClient:
         return response
 
     def post(self, url, *, json=None, headers=None):
-        self.calls.append({"method": "POST", "url": url, "json": json, "headers": headers})
+        self.calls.append(
+            {"method": "POST", "url": url, "json": json, "headers": headers}
+        )
         return self._next("POST", url)
 
     def get(self, url):
@@ -116,14 +120,27 @@ def test_convert_to_pdf_signs_request_and_writes_returned_pdf(
 ):
     convert_response = FakeResponse(
         200,
-        json_body={"endConvert": True, "fileUrl": "http://onlyoffice/cache/files/abc.pdf"},
+        json_body={
+            "endConvert": True,
+            "fileUrl": "http://onlyoffice/cache/files/abc.pdf",
+        },
     )
     pdf_response = FakeResponse(200, body=b"%PDF-1.4 fake bytes")
 
-    fake = FakeClient([
-        ("POST", lambda u: u == "http://onlyoffice/ConvertService.ashx", convert_response),
-        ("GET", lambda u: u == "http://onlyoffice/cache/files/abc.pdf", pdf_response),
-    ])
+    fake = FakeClient(
+        [
+            (
+                "POST",
+                lambda u: u == "http://onlyoffice/ConvertService.ashx",
+                convert_response,
+            ),
+            (
+                "GET",
+                lambda u: u == "http://onlyoffice/cache/files/abc.pdf",
+                pdf_response,
+            ),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is True
@@ -160,16 +177,21 @@ def test_convert_to_pdf_polls_until_endconvert_true(
     in_flight = FakeResponse(200, json_body={"endConvert": False, "percent": 30})
     done = FakeResponse(
         200,
-        json_body={"endConvert": True, "fileUrl": "http://onlyoffice/cache/files/x.pdf"},
+        json_body={
+            "endConvert": True,
+            "fileUrl": "http://onlyoffice/cache/files/x.pdf",
+        },
     )
     pdf = FakeResponse(200, body=b"%PDF")
 
-    fake = FakeClient([
-        ("POST", lambda u: True, in_flight),
-        ("POST", lambda u: True, in_flight),
-        ("POST", lambda u: True, done),
-        ("GET", lambda u: True, pdf),
-    ])
+    fake = FakeClient(
+        [
+            ("POST", lambda u: True, in_flight),
+            ("POST", lambda u: True, in_flight),
+            ("POST", lambda u: True, done),
+            ("GET", lambda u: True, pdf),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is True
@@ -190,17 +212,22 @@ def test_convert_to_pdf_returns_false_when_polling_exceeds_deadline(
     monkeypatch.setattr(office_convert, "POLL_INTERVAL_SECONDS", 0.005)
     monkeypatch.setattr(settings, "onlyoffice_convert_timeout_seconds", 0.02)
 
-    fake = FakeClient([
-        ("POST", lambda u: True, FakeResponse(200, json_body={"endConvert": False})),
-    ] * 200)
+    fake = FakeClient(
+        [
+            (
+                "POST",
+                lambda u: True,
+                FakeResponse(200, json_body={"endConvert": False}),
+            ),
+        ]
+        * 200
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
-def test_convert_to_pdf_url_encodes_filename(
-    output, configured, monkeypatch, tmp_path
-):
+def test_convert_to_pdf_url_encodes_filename(output, configured, monkeypatch, tmp_path):
     """Unicode filenames have to survive the round-trip to OnlyOffice
     intact — the documentserver reaches our internal endpoint via the
     URL it sees in the request body, so a raw 簡報.pptx would explode
@@ -212,10 +239,12 @@ def test_convert_to_pdf_url_encodes_filename(
         200,
         json_body={"endConvert": True, "fileUrl": "http://onlyoffice/cache/x.pdf"},
     )
-    fake = FakeClient([
-        ("POST", lambda u: True, done),
-        ("GET", lambda u: True, FakeResponse(200, body=b"%PDF")),
-    ])
+    fake = FakeClient(
+        [
+            ("POST", lambda u: True, done),
+            ("GET", lambda u: True, FakeResponse(200, body=b"%PDF")),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, src, src.name, output) is True
@@ -237,15 +266,15 @@ def test_convert_to_pdf_preserves_slashes_in_folder_relpath(
         200,
         json_body={"endConvert": True, "fileUrl": "http://onlyoffice/cache/x.pdf"},
     )
-    fake = FakeClient([
-        ("POST", lambda u: True, done),
-        ("GET", lambda u: True, FakeResponse(200, body=b"%PDF")),
-    ])
+    fake = FakeClient(
+        [
+            ("POST", lambda u: True, done),
+            ("GET", lambda u: True, FakeResponse(200, body=b"%PDF")),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
-    assert (
-        office_convert.convert_to_pdf(JOB_ID, src, "src/foo.docx", output) is True
-    )
+    assert office_convert.convert_to_pdf(JOB_ID, src, "src/foo.docx", output) is True
 
     posted_url = fake.calls[0]["json"]["url"]
     assert posted_url.endswith("/internal/source/7/src/foo.docx")
@@ -254,24 +283,21 @@ def test_convert_to_pdf_preserves_slashes_in_folder_relpath(
 # ---------- convert_to_pdf — failure modes ----------
 
 
-def test_convert_to_pdf_returns_false_when_config_missing(
-    source, output, monkeypatch
-):
+def test_convert_to_pdf_returns_false_when_config_missing(source, output, monkeypatch):
     monkeypatch.setattr(settings, "onlyoffice_internal_url", "")
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
 
 
-def test_convert_to_pdf_returns_false_when_source_missing(
-    tmp_path, output, configured
-):
+def test_convert_to_pdf_returns_false_when_source_missing(tmp_path, output, configured):
     assert (
-        office_convert.convert_to_pdf(JOB_ID, tmp_path / "nope.docx", "nope.docx", output) is False
+        office_convert.convert_to_pdf(
+            JOB_ID, tmp_path / "nope.docx", "nope.docx", output
+        )
+        is False
     )
 
 
-def test_convert_to_pdf_rejects_non_office_source(
-    tmp_path, output, configured
-):
+def test_convert_to_pdf_rejects_non_office_source(tmp_path, output, configured):
     source = tmp_path / "x.png"
     source.write_bytes(b"PNG")
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
@@ -280,9 +306,11 @@ def test_convert_to_pdf_rejects_non_office_source(
 def test_convert_to_pdf_returns_false_on_non_200_post(
     source, output, configured, monkeypatch
 ):
-    fake = FakeClient([
-        ("POST", lambda u: True, FakeResponse(500)),
-    ])
+    fake = FakeClient(
+        [
+            ("POST", lambda u: True, FakeResponse(500)),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
@@ -292,9 +320,11 @@ def test_convert_to_pdf_returns_false_on_non_200_post(
 def test_convert_to_pdf_returns_false_on_onlyoffice_error_code(
     source, output, configured, monkeypatch
 ):
-    fake = FakeClient([
-        ("POST", lambda u: True, FakeResponse(200, json_body={"error": -8})),
-    ])
+    fake = FakeClient(
+        [
+            ("POST", lambda u: True, FakeResponse(200, json_body={"error": -8})),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
@@ -303,9 +333,11 @@ def test_convert_to_pdf_returns_false_on_onlyoffice_error_code(
 def test_convert_to_pdf_returns_false_when_endconvert_true_but_fileurl_missing(
     source, output, configured, monkeypatch
 ):
-    fake = FakeClient([
-        ("POST", lambda u: True, FakeResponse(200, json_body={"endConvert": True})),
-    ])
+    fake = FakeClient(
+        [
+            ("POST", lambda u: True, FakeResponse(200, json_body={"endConvert": True})),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False
@@ -314,10 +346,18 @@ def test_convert_to_pdf_returns_false_when_endconvert_true_but_fileurl_missing(
 def test_convert_to_pdf_returns_false_on_pdf_fetch_failure(
     source, output, configured, monkeypatch
 ):
-    fake = FakeClient([
-        ("POST", lambda u: True, FakeResponse(200, json_body={"endConvert": True, "fileUrl": "http://x/y"})),
-        ("GET", lambda u: True, FakeResponse(404)),
-    ])
+    fake = FakeClient(
+        [
+            (
+                "POST",
+                lambda u: True,
+                FakeResponse(
+                    200, json_body={"endConvert": True, "fileUrl": "http://x/y"}
+                ),
+            ),
+            ("GET", lambda u: True, FakeResponse(404)),
+        ]
+    )
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: fake)
 
     assert office_convert.convert_to_pdf(JOB_ID, source, source.name, output) is False

@@ -1,11 +1,11 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from datetime import date
-
 from app.models import Event, Job, JobKind, Member, User, UserRole
 
 
@@ -119,10 +119,12 @@ def test_stats_counts_members_and_jobs(client_factory, db_session):
 
 def test_stats_counts_events(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all([
-        Event(title="春酒", event_date=date(2026, 3, 1)),
-        Event(title="溪頭兩日遊", event_date=date(2026, 1, 15)),
-    ])
+    db_session.add_all(
+        [
+            Event(title="春酒", event_date=date(2026, 3, 1)),
+            Event(title="溪頭兩日遊", event_date=date(2026, 1, 15)),
+        ]
+    )
     db_session.commit()
     login_as("viewer")
 

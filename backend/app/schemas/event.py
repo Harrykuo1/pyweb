@@ -33,9 +33,7 @@ class EventCreate(BaseModel):
     event_date: date
     location: str | None = Field(default=None, min_length=1, max_length=128)
     description_md: str | None = None
-    tags: list[str] = Field(
-        default_factory=list, max_length=EVENT_TAGS_MAX
-    )
+    tags: list[str] = Field(default_factory=list, max_length=EVENT_TAGS_MAX)
 
     @field_validator("tags")
     @classmethod

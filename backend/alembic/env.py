@@ -5,17 +5,18 @@ Reads DATABASE_URL from the application's pydantic Settings so a single
 Base.metadata so `alembic revision --autogenerate` can compare model
 definitions against the live database.
 """
+
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.core.config import settings
-from app.database import Base
+from alembic import context
 
 # Importing the models package registers every Mapped class on
 # Base.metadata, which autogenerate diffs against the live DB.
 from app import models  # noqa: F401
+from app.core.config import settings
+from app.database import Base
 
 config = context.config
 

@@ -35,10 +35,20 @@ def job(db_session) -> Job:
 
 @pytest.fixture
 def client(db_session, uploads_dir):
-    db_session.add_all([
-        User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN),
-        User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER),
-    ])
+    db_session.add_all(
+        [
+            User(
+                username="admin",
+                password_hash=hash_password("admin-pw"),
+                role=UserRole.ADMIN,
+            ),
+            User(
+                username="viewer",
+                password_hash=hash_password("viewer-pw"),
+                role=UserRole.VIEWER,
+            ),
+        ]
+    )
     db_session.commit()
 
     def _override_db():
@@ -54,11 +64,16 @@ def client(db_session, uploads_dir):
 
 
 def _login_admin(client):
-    assert client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    )
 
 
 def _login_viewer(client):
-    assert client.post("/api/auth/login", json={"password": "viewer-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "viewer-pw"}).status_code
+        == 200
+    )
 
 
 def _upload(client, job_id, filename="report.pdf", body=TINY_PDF):
@@ -268,8 +283,7 @@ def test_delete_attachment_wrong_password_422(client, job):
     # And the row + file are still there — the wrong-password path
     # must not delete anything on its way out.
     assert (
-        client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}").status_code
-        == 200
+        client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}").status_code == 200
     )
 
 
@@ -279,7 +293,8 @@ def test_delete_attachment_missing_password_422(client, job):
     attachment_id = up.json()["id"]
 
     r = client.request(
-        "DELETE", f"/api/jobs/{job.id}/attachments/{attachment_id}",
+        "DELETE",
+        f"/api/jobs/{job.id}/attachments/{attachment_id}",
     )
     assert r.status_code == 422
 
@@ -294,11 +309,16 @@ def test_delete_removes_row_and_disk_file(client, job, db_session, uploads_dir):
 
     r = _delete_attachment(client, job.id, attachment_id)
     assert r.status_code == 204
-    assert db_session.query(JobAttachment).filter_by(id=attachment_id).one_or_none() is None
+    assert (
+        db_session.query(JobAttachment).filter_by(id=attachment_id).one_or_none()
+        is None
+    )
     assert not on_disk.exists()
 
 
-def test_delete_when_disk_file_already_gone_still_clears_row(client, job, db_session, uploads_dir):
+def test_delete_when_disk_file_already_gone_still_clears_row(
+    client, job, db_session, uploads_dir
+):
     """If the disk file vanished out-of-band (manual cleanup, prior
     partial crash), the row deletion must still proceed so the
     attachment list reflects reality."""
@@ -310,7 +330,10 @@ def test_delete_when_disk_file_already_gone_still_clears_row(client, job, db_ses
 
     r = _delete_attachment(client, job.id, attachment_id)
     assert r.status_code == 204
-    assert db_session.query(JobAttachment).filter_by(id=attachment_id).one_or_none() is None
+    assert (
+        db_session.query(JobAttachment).filter_by(id=attachment_id).one_or_none()
+        is None
+    )
 
 
 def test_delete_404_when_attachment_unknown(client, job):
@@ -319,9 +342,7 @@ def test_delete_404_when_attachment_unknown(client, job):
     assert r.status_code == 404
 
 
-def test_delete_last_attachment_removes_job_directory(
-    client, job, uploads_dir
-):
+def test_delete_last_attachment_removes_job_directory(client, job, uploads_dir):
     _login_admin(client)
     up = _upload(client, job.id, filename="report.pdf")
     attachment_id = up.json()["id"]
@@ -333,9 +354,7 @@ def test_delete_last_attachment_removes_job_directory(
     assert not job_dir.exists()
 
 
-def test_delete_keeps_directory_when_other_attachments_remain(
-    client, job, uploads_dir
-):
+def test_delete_keeps_directory_when_other_attachments_remain(client, job, uploads_dir):
     _login_admin(client)
     a = _upload(client, job.id, filename="a.pdf").json()["id"]
     _upload(client, job.id, filename="b.pdf")
@@ -375,9 +394,7 @@ def test_delete_cleans_empty_intermediate_dirs_in_folder_upload(
     assert not job_dir.exists()
 
 
-def test_delete_keeps_intermediate_dir_with_sibling_file(
-    client, job, uploads_dir
-):
+def test_delete_keeps_intermediate_dir_with_sibling_file(client, job, uploads_dir):
     _login_admin(client)
     files = {"file": ("a.pdf", BytesIO(TINY_PDF), "application/pdf")}
     a = client.post(
@@ -497,9 +514,7 @@ def test_preview_endpoint_returns_pdf_when_available(
     assert r.content == FAKE_PDF
 
 
-def test_preview_endpoint_404_when_no_preview_was_generated(
-    client, job, monkeypatch
-):
+def test_preview_endpoint_404_when_no_preview_was_generated(client, job, monkeypatch):
     _stub_convert(monkeypatch, succeed=False)
     _login_admin(client)
     up = _upload_pptx(client, job.id)
@@ -520,9 +535,7 @@ def test_preview_endpoint_requires_auth(client, job, monkeypatch):
     assert r.status_code == 401
 
 
-def test_overwrite_regenerates_preview(
-    client, job, monkeypatch, uploads_dir
-):
+def test_overwrite_regenerates_preview(client, job, monkeypatch, uploads_dir):
     succeed = True
     pdfs = [b"%PDF-1.4\nFIRST", b"%PDF-1.4\nSECOND"]
     from app.routers import job_attachments as router_mod
@@ -544,9 +557,7 @@ def test_overwrite_regenerates_preview(
 
     # Confirm the first preview is what we expect.
     assert (
-        client.get(
-            f"/api/jobs/{job.id}/attachments/{attachment_id}/preview"
-        ).content
+        client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}/preview").content
         == pdfs[0]
     )
 
@@ -566,16 +577,12 @@ def test_overwrite_regenerates_preview(
     assert r.status_code == 201
 
     assert (
-        client.get(
-            f"/api/jobs/{job.id}/attachments/{attachment_id}/preview"
-        ).content
+        client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}/preview").content
         == pdfs[1]
     )
 
 
-def test_delete_also_removes_preview_pdf(
-    client, job, monkeypatch, uploads_dir
-):
+def test_delete_also_removes_preview_pdf(client, job, monkeypatch, uploads_dir):
     _stub_convert(monkeypatch, succeed=True)
     _login_admin(client)
     up = _upload_pptx(client, job.id, filename="deck.pptx")
@@ -618,9 +625,7 @@ def test_bulk_delete_wrong_password_422(client, job):
     assert r.status_code == 422
     # Row must still be present — no silent partial deletion when the
     # password doesn't match.
-    assert (
-        client.get(f"/api/jobs/{job.id}/attachments/{a}").status_code == 200
-    )
+    assert client.get(f"/api/jobs/{job.id}/attachments/{a}").status_code == 200
 
 
 def test_bulk_delete_rejects_empty_ids(client, job):
@@ -658,9 +663,7 @@ def test_bulk_delete_removes_multiple_rows_and_files(
     assert (job_dir / "c.pdf").exists()
 
 
-def test_bulk_delete_also_removes_preview_pdfs(
-    client, job, monkeypatch, uploads_dir
-):
+def test_bulk_delete_also_removes_preview_pdfs(client, job, monkeypatch, uploads_dir):
     _stub_convert(monkeypatch, succeed=True)
     _login_admin(client)
     deck = _upload_pptx(client, job.id, filename="deck.pptx").json()["id"]
@@ -672,9 +675,7 @@ def test_bulk_delete_also_removes_preview_pdfs(
     assert not preview.exists()
 
 
-def test_bulk_delete_clears_empty_intermediate_dirs(
-    client, job, uploads_dir
-):
+def test_bulk_delete_clears_empty_intermediate_dirs(client, job, uploads_dir):
     """Bulk delete spanning multiple folder branches must collapse
     every newly-empty descendant, not just the parents of the last
     file processed."""
@@ -701,9 +702,7 @@ def test_bulk_delete_clears_empty_intermediate_dirs(
     assert not job_dir.exists()
 
 
-def test_bulk_delete_keeps_dirs_with_surviving_siblings(
-    client, job, uploads_dir
-):
+def test_bulk_delete_keeps_dirs_with_surviving_siblings(client, job, uploads_dir):
     _login_admin(client)
     a = client.post(
         f"/api/jobs/{job.id}/attachments",
@@ -730,12 +729,18 @@ def test_bulk_delete_silently_skips_ids_from_other_jobs(client, db_session):
     the SQL layer rather than 404-ing, so a partial selection on the
     UI side still cleans up what's legitimately the user's."""
     job_a = Job(
-        job_year=2026, job_month=5, company="A",
-        kind=JobKind.INTERNSHIP, experience_md="x",
+        job_year=2026,
+        job_month=5,
+        company="A",
+        kind=JobKind.INTERNSHIP,
+        experience_md="x",
     )
     job_b = Job(
-        job_year=2026, job_month=5, company="B",
-        kind=JobKind.INTERNSHIP, experience_md="y",
+        job_year=2026,
+        job_month=5,
+        company="B",
+        kind=JobKind.INTERNSHIP,
+        experience_md="y",
     )
     db_session.add_all([job_a, job_b])
     db_session.commit()
@@ -751,7 +756,9 @@ def test_bulk_delete_silently_skips_ids_from_other_jobs(client, db_session):
     assert r.json() == {"deleted": 1}
 
     # job_b's row is untouched.
-    assert db_session.query(JobAttachment).filter_by(id=b_in_b).one_or_none() is not None
+    assert (
+        db_session.query(JobAttachment).filter_by(id=b_in_b).one_or_none() is not None
+    )
 
 
 def test_bulk_delete_unknown_ids_count_as_zero(client, job):
@@ -842,12 +849,18 @@ def test_bulk_download_filters_cross_job_ids(client, db_session):
     level so a partial selection on the UI side can't leak files from
     another job into the zip."""
     job_a = Job(
-        job_year=2026, job_month=5, company="A",
-        kind=JobKind.INTERNSHIP, experience_md="x",
+        job_year=2026,
+        job_month=5,
+        company="A",
+        kind=JobKind.INTERNSHIP,
+        experience_md="x",
     )
     job_b = Job(
-        job_year=2026, job_month=5, company="B",
-        kind=JobKind.INTERNSHIP, experience_md="y",
+        job_year=2026,
+        job_month=5,
+        company="B",
+        kind=JobKind.INTERNSHIP,
+        experience_md="y",
     )
     db_session.add_all([job_a, job_b])
     db_session.commit()
