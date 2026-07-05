@@ -135,3 +135,40 @@ def test_member_asset_paths_persist_when_set(db_session):
     fetched = db_session.query(Member).one()
     assert fetched.photo_path == "members/1/photo.png"
     assert fetched.resume_pdf_path == "members/1/resume.pdf"
+
+
+def test_member_links_to_user(db_session):
+    from app.models import User, UserRole
+
+    user = User(role=UserRole.MEMBER, discord_id="900")
+    db_session.add(user)
+    db_session.flush()
+
+    member = Member(
+        graduation_year=2024,
+        real_name="測試員",
+        institution="測試大學",
+        user_id=user.id,
+    )
+    db_session.add(member)
+    db_session.commit()
+
+    assert db_session.query(Member).one().user_id == user.id
+
+
+def test_member_user_id_is_unique(db_session):
+    from app.models import User, UserRole
+
+    u = User(role=UserRole.MEMBER, discord_id="901")
+    db_session.add(u)
+    db_session.flush()
+    db_session.add(
+        Member(graduation_year=2024, real_name="A", institution="X", user_id=u.id)
+    )
+    db_session.commit()
+    db_session.add(
+        Member(graduation_year=2024, real_name="B", institution="Y", user_id=u.id)
+    )
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -10,6 +10,11 @@ class Member(Base):
     __tablename__ = "members"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 1:1 link to the auth account. Nullable so legacy rows exist before the
+    # migration wires them up; unique so a user maps to at most one member.
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), unique=True, nullable=True
+    )
     graduation_year: Mapped[int] = mapped_column(Integer, nullable=False)
     real_name: Mapped[str] = mapped_column(String(64), nullable=False)
     institution: Mapped[str] = mapped_column(String(128), nullable=False)
