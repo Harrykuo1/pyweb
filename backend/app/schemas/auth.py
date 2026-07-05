@@ -9,7 +9,9 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
-    username: str
+    # Null for Discord-linked accounts (they have no traditional username);
+    # still set for the legacy password accounts during the transition.
+    username: str | None = None
     role: UserRole
 
     model_config = ConfigDict(from_attributes=True)
