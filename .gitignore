@@ -56,6 +56,9 @@ pnpm-debug.log*
 # Superpowers plan / scratch docs (tool-generated, kept local)
 docs/superpowers/
 
+# Superpowers brainstorm scratch (tool-generated HTML / server pid / state, local only)
+.superpowers/
+
 # Agent-skills artifacts (skills CLI lockfile + ui-ux-pro-max design-system output)
 skills-lock.json
 design-system/
