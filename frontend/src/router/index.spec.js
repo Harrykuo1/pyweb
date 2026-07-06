@@ -53,6 +53,35 @@ describe('auth guard', () => {
     expect(result).toBe(true)
   })
 
+  it('redirects a member without a profile to /register/profile', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 3, role: 'member', has_profile: false }
+
+    const guard = createAuthGuard()
+    expect(await guard(homeRoute)).toEqual({ path: '/register/profile' })
+  })
+
+  it('lets a member with a profile through', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 3, role: 'member', has_profile: true }
+
+    const guard = createAuthGuard()
+    expect(await guard(homeRoute)).toBe(true)
+  })
+
+  it('bounces a profiled user off the completion page', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, role: 'admin', has_profile: false }
+
+    const rpRoute = {
+      path: '/register/profile',
+      fullPath: '/register/profile',
+      meta: { requiresAuth: true },
+    }
+    const guard = createAuthGuard()
+    expect(await guard(rpRoute)).toEqual({ path: '/' })
+  })
+
   it('bootstraps the session via fetchMe on the first navigation when user is null', async () => {
     const auth = useAuthStore()
     const fetchMe = vi.spyOn(auth, 'fetchMe').mockImplementation(async () => {

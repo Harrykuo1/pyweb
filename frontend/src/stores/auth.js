@@ -19,6 +19,17 @@ export const useAuthStore = defineStore('auth', () => {
     () => isActuallyAdmin.value && viewAsViewer.value,
   )
 
+  // A member who hasn't completed their profile is gated out of the app
+  // until they do — mirrors the backend require_completed_member gate.
+  const needsProfile = computed(
+    () => actualRole.value === 'member' && user.value?.has_profile === false,
+  )
+
+  // The id of this account's own member card, or null. Drives the
+  // self-edit affordances on the Members page (edit / photo / resume of
+  // exactly this card, even for non-admins).
+  const myMemberId = computed(() => user.value?.member_id ?? null)
+
   async function login(password) {
     user.value = await authApi.login(password)
     viewAsViewer.value = false
@@ -78,6 +89,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     isActuallyAdmin,
     isViewingAsViewer,
+    needsProfile,
+    myMemberId,
     actualRole,
     login,
     logout,

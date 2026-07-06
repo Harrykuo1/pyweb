@@ -10,6 +10,13 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
+    // Standalone (no navbar) completion page for freshly-registered members.
+    path: '/register/profile',
+    name: 'register-profile',
+    component: () => import('../views/RegisterProfile.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/',
     component: () => import('../layouts/AuthLayout.vue'),
     meta: { requiresAuth: true },
@@ -68,6 +75,23 @@ export function createAuthGuard() {
     }
 
     if (to.path === '/login' && auth.isAuthenticated) {
+      return { path: '/' }
+    }
+
+    // Members must finish their profile before using the rest of the app.
+    if (
+      auth.isAuthenticated &&
+      auth.needsProfile &&
+      to.path !== '/register/profile'
+    ) {
+      return { path: '/register/profile' }
+    }
+    // Don't linger on the completion page once a profile exists.
+    if (
+      to.path === '/register/profile' &&
+      auth.isAuthenticated &&
+      !auth.needsProfile
+    ) {
       return { path: '/' }
     }
 

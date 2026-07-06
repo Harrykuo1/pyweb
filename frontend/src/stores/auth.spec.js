@@ -32,6 +32,18 @@ describe('useAuthStore', () => {
     expect(store.isAdmin).toBe(true)
   })
 
+  it('needsProfile is true only for a member without a profile', () => {
+    const store = useAuthStore()
+    store.user = { id: 3, role: 'member', has_profile: false }
+    expect(store.needsProfile).toBe(true)
+
+    store.user = { id: 3, role: 'member', has_profile: true }
+    expect(store.needsProfile).toBe(false)
+
+    store.user = { id: 1, role: 'admin', has_profile: false }
+    expect(store.needsProfile).toBe(false)
+  })
+
   it('isAdmin is false for viewer role', async () => {
     vi.spyOn(authApi, 'login').mockResolvedValue({
       id: 2,

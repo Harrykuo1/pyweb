@@ -13,6 +13,11 @@ export const membersApi = {
     const { data } = await client.post('/members', payload)
     return data
   },
+  // Self-service: a freshly-registered member creates their own profile once.
+  async createMyProfile(payload) {
+    const { data } = await client.post('/members/me', payload)
+    return data
+  },
   async update(id, payload) {
     const { data } = await client.put(`/members/${id}`, payload)
     return data
