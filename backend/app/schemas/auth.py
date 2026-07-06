@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.user import UserRole
@@ -13,6 +15,16 @@ class UserResponse(BaseModel):
     # still set for the legacy password accounts during the transition.
     username: str | None = None
     role: UserRole
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PendingLinkResponse(BaseModel):
+    id: int
+    discord_id: str
+    discord_username: str | None = None
+    discord_global_name: str | None = None
+    first_seen_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

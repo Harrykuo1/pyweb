@@ -11,9 +11,10 @@ from app.core.rate_limit import limiter
 from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str
 from app.core.security import hash_password, verify_password
 from app.database import get_db
-from app.models import User, UserRole
+from app.models import PendingDiscordLink, User, UserRole
 from app.schemas import (
     LoginRequest,
+    PendingLinkResponse,
     UpdatePasswordRequest,
     UpdateUsernameRequest,
     UserResponse,
@@ -167,6 +168,16 @@ def list_users(
     _: User = Depends(require_admin),
 ) -> list[User]:
     return db.query(User).order_by(User.id).all()
+
+
+@router.get("/pending-links", response_model=list[PendingLinkResponse])
+def list_pending_links(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[PendingDiscordLink]:
+    return (
+        db.query(PendingDiscordLink).order_by(PendingDiscordLink.first_seen_at).all()
+    )
 
 
 @router.patch("/users/{role}/username", response_model=UserResponse)

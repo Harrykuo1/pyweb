@@ -1,6 +1,7 @@
 from app.schemas.auth import (
     LoginRequest,
     PasswordConfirmRequest,
+    PendingLinkResponse,
     UpdatePasswordRequest,
     UpdateUsernameRequest,
     UserResponse,
@@ -62,6 +63,7 @@ __all__ = [
     "MemberResponse",
     "MemberUpdate",
     "PasswordConfirmRequest",
+    "PendingLinkResponse",
     "StatsResponse",
     "TimelineItem",
     "TimelineResponse",
