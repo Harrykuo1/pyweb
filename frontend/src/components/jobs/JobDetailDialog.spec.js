@@ -186,18 +186,19 @@ describe('JobDetailDialog — markdown tabs', () => {
   })
 })
 
-describe('JobDetailDialog — admin edit button', () => {
-  it('emits edit with the current job and closes when admin clicks 編輯', async () => {
-    const wrapper = await mountDialog()
+describe('JobDetailDialog — edit button', () => {
+  it('emits edit and closes when can_edit and 編輯 is clicked', async () => {
+    const job = { ...sample, can_edit: true }
+    const wrapper = await mountDialog({ job })
     const btn = wrapper.find('[data-test="detail-edit-button"]')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
-    expect(wrapper.emitted('edit')?.[0]?.[0]).toEqual(sample)
+    expect(wrapper.emitted('edit')?.[0]?.[0]).toEqual(job)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })
 
-  it('hides the edit button for viewers', async () => {
-    const wrapper = await mountDialog({}, 'viewer')
+  it('hides the edit button when can_edit is false', async () => {
+    const wrapper = await mountDialog({ job: { ...sample, can_edit: false } })
     expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(
       false,
     )

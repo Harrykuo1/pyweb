@@ -47,8 +47,12 @@ export const jobsApi = {
     const { data } = await client.put(`/jobs/${id}`, payload)
     return data
   },
+  // password is admin-only re-auth; an owning member deletes their own post
+  // with no body at all. Sending {password: undefined} would serialize to an
+  // empty object and 422, so omit the body entirely.
   async remove(id, password) {
-    await client.delete(`/jobs/${id}`, { data: { password } })
+    const config = password === undefined ? undefined : { data: { password } }
+    await client.delete(`/jobs/${id}`, config)
   },
   async listCompanies(prefix) {
     const params = {}

@@ -60,6 +60,12 @@ const sample = [
   },
 ]
 
+// The same rows as the backend would return them to someone allowed to edit
+// (admin, or the owning member): can_edit drives the edit/delete affordances.
+const ownedSample = sample.map((j) => ({ ...j, can_edit: true }))
+
+let pendingTeardowns = []
+
 beforeEach(() => {
   setActivePinia(createPinia())
   routeQuery.value = {}
@@ -67,6 +73,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Unmount every Jobs instance a test mounted so their watchers, debounces
+  // and URL-sync timers don't accumulate and interfere with later tests.
+  for (const w of pendingTeardowns) w.unmount()
+  pendingTeardowns = []
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
@@ -80,6 +90,7 @@ async function mountPage(
   auth.user = { id: 1, username: 'a', role }
   const listSpy = vi.spyOn(jobsApi, 'list').mockResolvedValue({ items, total })
   const wrapper = mount(Jobs)
+  pendingTeardowns.push(wrapper)
   await flushPromises()
   return { wrapper, listSpy }
 }
@@ -525,12 +536,23 @@ describe('Jobs.vue — refresh button', () => {
   })
 })
 
-describe('Jobs.vue — admin delete flow', () => {
-  // Edit/delete moved off the card into JobDetailDialog's footer-extra
-  // slot (admin-only). These tests open the detail dialog first, then
-  // exercise the delete button there.
+describe('Jobs.vue — post affordances', () => {
+  it('hides the add button for viewers but shows it for members and admins', async () => {
+    const viewer = await mountPage(sample, sample.length, 'viewer')
+    expect(viewer.wrapper.find('[data-test="add-job-button"]').exists()).toBe(
+      false,
+    )
+    const member = await mountPage(sample, sample.length, 'member')
+    expect(member.wrapper.find('[data-test="add-job-button"]').exists()).toBe(
+      true,
+    )
+    const admin = await mountPage(sample, sample.length, 'admin')
+    expect(admin.wrapper.find('[data-test="add-job-button"]').exists()).toBe(
+      true,
+    )
+  })
 
-  it('hides delete button for viewers inside the detail dialog', async () => {
+  it('hides the delete button when the row is not editable', async () => {
     const { wrapper } = await mountPage(sample, sample.length, 'viewer')
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
@@ -539,8 +561,8 @@ describe('Jobs.vue — admin delete flow', () => {
     )
   })
 
-  it('shows delete button for admin inside the detail dialog', async () => {
-    const { wrapper } = await mountPage(sample, sample.length, 'admin')
+  it('shows the delete button when the row is editable (can_edit)', async () => {
+    const { wrapper } = await mountPage(ownedSample, ownedSample.length, 'admin')
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="detail-delete-button"]').exists()).toBe(
@@ -548,11 +570,14 @@ describe('Jobs.vue — admin delete flow', () => {
     )
   })
 
-  it('calls jobsApi.remove with the entered password and refetches on success', async () => {
+  it('admin delete goes through the password dialog and refetches on success', async () => {
     const remove = vi.spyOn(jobsApi, 'remove').mockResolvedValue()
-    const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
+    const { wrapper, listSpy } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
 
-    // Open the first card's detail dialog, then click delete inside it.
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
     await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
@@ -564,7 +589,33 @@ describe('Jobs.vue — admin delete flow', () => {
     dialog.vm.$emit('confirm', 'admin-pw')
     await flushPromises()
 
-    expect(remove).toHaveBeenCalledWith(sample[0].id, 'admin-pw')
+    expect(remove).toHaveBeenCalledWith(ownedSample[0].id, 'admin-pw')
+    expect(listSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('member owner delete confirms then removes without a password', async () => {
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const remove = vi.spyOn(jobsApi, 'remove').mockResolvedValue()
+    const { wrapper, listSpy } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'member',
+    )
+
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    listSpy.mockClear()
+    await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
+    await flushPromises()
+
+    // Bodyless delete (no password) and no password dialog is mounted.
+    expect(remove).toHaveBeenCalledWith(ownedSample[0].id)
+    expect(
+      wrapper.findComponent({ name: 'DeleteWithPasswordDialog' }).props(
+        'modelValue',
+      ),
+    ).toBe(false)
     expect(listSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -572,7 +623,11 @@ describe('Jobs.vue — admin delete flow', () => {
     const remove = vi.spyOn(jobsApi, 'remove').mockRejectedValue({
       response: { status: 422 },
     })
-    const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
+    const { wrapper, listSpy } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
 
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
@@ -593,7 +648,7 @@ describe('Jobs.vue — admin delete flow', () => {
 describe('Jobs.vue — cache invalidation on mutation', () => {
   it('invalidates the jobs cache after a successful delete', async () => {
     vi.spyOn(jobsApi, 'remove').mockResolvedValue()
-    const { wrapper } = await mountPage(sample, sample.length, 'admin')
+    const { wrapper } = await mountPage(ownedSample, ownedSample.length, 'admin')
     const invalidate = vi.spyOn(useJobsStore(), 'invalidate')
 
     await wrapper.find('[data-test="record-card"]').trigger('click')

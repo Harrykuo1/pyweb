@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElButton, ElIcon, ElMessage } from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
 import { Briefcase, Delete, Plus, Refresh } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
 
@@ -102,6 +102,12 @@ const {
   fetchItem: (id) => jobsApi.get(id),
 })
 
+// Admins and members can post (viewers can't). Based on the real role so an
+// admin previewing as a member still sees the affordance a member would have.
+const canPost = computed(() =>
+  ['admin', 'member'].includes(auth.actualRole),
+)
+
 function openCreate() {
   editingJob.value = null
   formOpen.value = true
@@ -139,6 +145,35 @@ const {
     reloadFresh()
   },
 })
+
+// Admins re-authenticate with a password (backend requires it); an owning
+// member deletes their own post after a plain confirm, with no password body.
+async function requestDeleteJob(job) {
+  if (!job) return
+  if (auth.isActuallyAdmin) {
+    askDelete(job)
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '將永久刪除這筆求職紀錄，包含心得、時程表與附件，此操作無法復原。',
+      '刪除求職紀錄',
+      { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // user cancelled
+  }
+  try {
+    await jobsApi.remove(job.id)
+    ElMessage.success(`已刪除「${job.company}」的紀錄`)
+    if (detailOpen.value && detailJob.value?.id === job.id) {
+      detailOpen.value = false
+    }
+    reloadFresh()
+  } catch {
+    ElMessage.error('刪除失敗，請稍後再試')
+  }
+}
 
 async function loadItems() {
   try {
@@ -198,7 +233,7 @@ onMounted(loadItems)
           重新整理
         </el-button>
         <el-button
-          v-if="auth.isAdmin"
+          v-if="canPost"
           type="primary"
           :icon="Plus"
           data-test="add-job-button"
@@ -243,7 +278,7 @@ onMounted(loadItems)
       </div>
       <p class="empty-text">尚無符合條件的紀錄</p>
       <el-button
-        v-if="auth.isAdmin && total === 0"
+        v-if="canPost && total === 0"
         type="primary"
         :icon="Plus"
         @click="openCreate"
@@ -255,12 +290,12 @@ onMounted(loadItems)
     <JobDetailDialog v-model="detailOpen" :job="detailJob" @edit="onDetailEdit">
       <template #footer-extra>
         <el-button
-          v-if="auth.isAdmin && detailJob"
+          v-if="detailJob?.can_edit"
           type="danger"
           plain
           :icon="Delete"
           data-test="detail-delete-button"
-          @click="askDelete(detailJob)"
+          @click="requestDeleteJob(detailJob)"
         >
           刪除整筆紀錄
         </el-button>

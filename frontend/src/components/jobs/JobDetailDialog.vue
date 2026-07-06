@@ -18,7 +18,6 @@ import {
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 
-import { useAuthStore } from '../../stores/auth'
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
 import TimelineDisplay from '../TimelineDisplay.vue'
 
@@ -28,8 +27,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'edit'])
-
-const auth = useAuthStore()
 
 const KIND_META = {
   internship: { label: '實習', cls: 'kind-internship' },
@@ -238,7 +235,7 @@ function formatJobYearMonth(j) {
         <slot name="footer-extra" />
         <div class="footer-spacer" />
         <el-button
-          v-if="auth.isAdmin && job"
+          v-if="job?.can_edit"
           :icon="Edit"
           plain
           data-test="detail-edit-button"
