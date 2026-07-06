@@ -58,6 +58,17 @@ class RoleUpdateRequest(BaseModel):
     role: UserRole
 
 
+class GuildConfigResponse(BaseModel):
+    # The configured Discord guild id, or "" when unset (Discord login is
+    # then effectively disabled until an admin sets it).
+    guild_id: str
+
+
+class GuildConfigUpdate(BaseModel):
+    # Discord snowflakes are 17-20 digit numeric strings.
+    guild_id: str = Field(pattern=r"^\d{17,20}$")
+
+
 class UpdateUsernameRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
 

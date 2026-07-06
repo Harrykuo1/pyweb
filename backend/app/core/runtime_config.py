@@ -74,3 +74,14 @@ def get_str(db: Session, key: str, default: str = "") -> str:
 
     row = db.query(AppConfig).filter_by(key=key).one_or_none()
     return row.value if row is not None else default
+
+
+def set_str(db: Session, key: str, value: str) -> None:
+    """Upsert a string-valued runtime config row. The caller commits."""
+    from app.models import AppConfig
+
+    row = db.query(AppConfig).filter_by(key=key).one_or_none()
+    if row is None:
+        db.add(AppConfig(key=key, value=value))
+    else:
+        row.value = value

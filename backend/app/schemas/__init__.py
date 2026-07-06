@@ -1,4 +1,6 @@
 from app.schemas.auth import (
+    GuildConfigResponse,
+    GuildConfigUpdate,
     LoginRequest,
     PasswordConfirmRequest,
     PendingLinkResponse,
@@ -60,6 +62,8 @@ __all__ = [
     "EventPhotoResponse",
     "EventResponse",
     "EventUpdate",
+    "GuildConfigResponse",
+    "GuildConfigUpdate",
     "JobAttachmentResponse",
     "JobCreate",
     "JobCreatedItem",

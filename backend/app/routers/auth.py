@@ -9,11 +9,13 @@ from app.core import audit_log, discord_link, discord_oauth, discord_register
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
-from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str
+from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str, set_str
 from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models import Member, PendingDiscordLink, RegistrationInvite, User, UserRole
 from app.schemas import (
+    GuildConfigResponse,
+    GuildConfigUpdate,
     LoginRequest,
     PendingLinkResponse,
     RegistrationInviteResponse,
@@ -303,6 +305,25 @@ def update_user_role(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.get("/discord/guild", response_model=GuildConfigResponse)
+def get_discord_guild(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> GuildConfigResponse:
+    return GuildConfigResponse(guild_id=get_str(db, DISCORD_GUILD_ID_KEY))
+
+
+@router.put("/discord/guild", response_model=GuildConfigResponse)
+def update_discord_guild(
+    payload: GuildConfigUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> GuildConfigResponse:
+    set_str(db, DISCORD_GUILD_ID_KEY, payload.guild_id)
+    db.commit()
+    return GuildConfigResponse(guild_id=payload.guild_id)
 
 
 # One-time member-registration links. 48h, single-use. Shared to a new
