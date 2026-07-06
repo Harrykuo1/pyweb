@@ -189,7 +189,10 @@ const {
   confirm: handleDeleteConfirm,
 } = useDeleteWithPassword({
   remove: (member, password) => membersApi.remove(member.id, password),
-  messages: { 404: '刪除失敗，請稍後再試' },
+  messages: {
+    404: '刪除失敗，請稍後再試',
+    409: '此成員已啟用帳號，請至 設定 → 成員角色 停權',
+  },
   onSuccess: (member) => {
     ElMessage.success(`已刪除「${member.real_name}」`)
     reloadFresh()
