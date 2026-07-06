@@ -154,6 +154,29 @@ def test_resolve_pending_link_requires_admin(client, db_session):
     assert r.status_code == 401
 
 
+# ---------- delete (dismiss) pending link ----------
+
+
+def test_delete_pending_link_requires_admin(client, db_session):
+    _seed_pending(db_session, "P1")
+    assert client.delete("/api/auth/pending-links/P1").status_code == 401
+
+
+def test_delete_pending_link_removes_row(client, db_session):
+    _seed_pending(db_session, "P1")
+    _login_admin(client)
+
+    assert client.delete("/api/auth/pending-links/P1").status_code == 204
+    assert (
+        db_session.query(PendingDiscordLink).filter_by(discord_id="P1").count() == 0
+    )
+
+
+def test_delete_pending_link_404_when_missing(client):
+    _login_admin(client)
+    assert client.delete("/api/auth/pending-links/nope").status_code == 404
+
+
 # ---------- assign user role ----------
 
 

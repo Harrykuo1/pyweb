@@ -83,6 +83,34 @@ def test_list_invites_requires_admin(client):
     assert client.get("/api/auth/registration-invites").status_code == 401
 
 
+def test_delete_invite_requires_admin(client, db_session):
+    now = datetime.now(UTC)
+    inv = RegistrationInvite(
+        token="tok", created_at=now, expires_at=now + timedelta(hours=1)
+    )
+    db_session.add(inv)
+    db_session.commit()
+    assert client.delete(f"/api/auth/registration-invites/{inv.id}").status_code == 401
+
+
+def test_delete_invite_removes_row(client, db_session):
+    _login_admin(client)
+    created = client.post("/api/auth/registration-invites").json()
+
+    assert (
+        client.delete(f"/api/auth/registration-invites/{created['id']}").status_code
+        == 204
+    )
+    assert (
+        db_session.query(RegistrationInvite).filter_by(id=created["id"]).count() == 0
+    )
+
+
+def test_delete_invite_404_when_missing(client):
+    _login_admin(client)
+    assert client.delete("/api/auth/registration-invites/9999").status_code == 404
+
+
 def test_register_start_redirects_to_discord_for_valid_token(
     client, db_session, monkeypatch
 ):

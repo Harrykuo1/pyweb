@@ -287,6 +287,27 @@ def resolve_pending_link(
     return user
 
 
+@router.delete(
+    "/pending-links/{discord_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_pending_link(
+    discord_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> None:
+    # Dismiss a queued Discord login without linking it. The person can log
+    # in again to re-queue, so this is a low-stakes cleanup action.
+    row = (
+        db.query(PendingDiscordLink).filter_by(discord_id=discord_id).one_or_none()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Pending link not found"
+        )
+    db.delete(row)
+    db.commit()
+
+
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
 def update_user_role(
     user_id: int,
@@ -376,6 +397,25 @@ def list_registration_invites(
         .order_by(RegistrationInvite.created_at.desc())
         .all()
     )
+
+
+@router.delete(
+    "/registration-invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_registration_invite(
+    invite_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> None:
+    # Revoke an invite. Deleting a used invite only removes the record; the
+    # member account it created is untouched.
+    row = db.query(RegistrationInvite).filter_by(id=invite_id).one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found"
+        )
+    db.delete(row)
+    db.commit()
 
 
 @router.patch("/users/{role}/username", response_model=UserResponse)
