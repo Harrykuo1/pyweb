@@ -63,6 +63,12 @@ def login(
     # accounts means the linear scan is fine; revisit if the user count grows.
     for user in db.query(User).all():
         if verify_password(payload.password, user.password_hash):
+            if not user.is_active:
+                audit_log.record_failure(ip)
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Account suspended",
+                )
             request.session["user_id"] = user.id
             request.session["role"] = user.role.value
             request.session["password_version"] = user.password_version
@@ -197,6 +203,9 @@ def discord_callback(
             if user is None:
                 return _oauth_error("not_linked")
         redirect_target = _HOME_PATH
+
+    if not user.is_active:
+        return _oauth_error("account_suspended")
 
     request.session["user_id"] = user.id
     request.session["role"] = user.role.value

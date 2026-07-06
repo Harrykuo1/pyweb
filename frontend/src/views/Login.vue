@@ -39,6 +39,7 @@ const OAUTH_ERRORS = {
   state_mismatch: '登入逾時或連結失效，請再登入一次。',
   invalid_invite: '註冊連結無效或已過期。',
   guild_not_configured: '系統尚未設定 Discord 群組，請聯絡管理員。',
+  account_suspended: '此帳號已停權，請聯絡管理員',
   discord_denied: '你取消了 Discord 授權。',
 }
 const oauthError = computed(() => {

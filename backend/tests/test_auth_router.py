@@ -63,6 +63,14 @@ def test_login_wrong_password_returns_401(client):
     assert r.json()["detail"] == "Invalid password"
 
 
+def test_suspended_password_account_cannot_login(client, db_session):
+    viewer = db_session.query(User).filter_by(username="viewer").one()
+    viewer.is_active = False
+    db_session.commit()
+    r = client.post("/api/auth/login", json={"password": "viewer-pw"})
+    assert r.status_code == 403
+
+
 def test_login_rejects_empty_password(client):
     r = client.post("/api/auth/login", json={"password": ""})
     assert r.status_code == 422

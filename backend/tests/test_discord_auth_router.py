@@ -96,6 +96,23 @@ def test_callback_links_existing_user_and_establishes_session(client, monkeypatc
     assert me.json()["role"] == "member"
 
 
+def test_callback_blocks_suspended_account(client, db_session, monkeypatch):
+    suspended = db_session.query(User).filter_by(discord_id="D123").one()
+    suspended.is_active = False
+    db_session.commit()
+
+    _patch_flow(monkeypatch, identity_id="D123", is_member=True)
+    state = _start_and_get_state(client)
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert "error=account_suspended" in r.headers["location"]
+    assert client.get("/api/auth/me").status_code == 401
+
+
 def test_callback_blocks_non_guild_member(client, monkeypatch):
     _patch_flow(monkeypatch, identity_id="D123", is_member=False)
     state = _start_and_get_state(client)
