@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core import audit_log, discord_oauth
+from app.core import audit_log, discord_link, discord_oauth
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
@@ -136,11 +136,12 @@ def discord_callback(
 
     user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
     if user is None:
-        # Not linked yet. The first-login bridge (match by
-        # pending_discord_username) + the pending-link queue land in a
-        # later phase; until then a verified-but-unlinked identity is
-        # turned away cleanly.
-        return _oauth_error("not_linked")
+        # First login of a pre-created account: bridge by the resume handle.
+        # On a unique match we get the now-linked user; otherwise the
+        # identity is queued for an admin and we turn them away.
+        user = discord_link.link_or_queue(db, identity)
+        if user is None:
+            return _oauth_error("not_linked")
 
     request.session["user_id"] = user.id
     request.session["role"] = user.role.value

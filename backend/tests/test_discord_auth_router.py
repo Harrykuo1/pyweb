@@ -128,3 +128,61 @@ def test_callback_rejects_state_mismatch(client, monkeypatch):
     assert r.status_code == 302
     assert "error=state_mismatch" in r.headers["location"]
     assert client.get("/api/auth/me").status_code == 401
+
+
+def test_callback_first_login_links_precreated_account(client, db_session, monkeypatch):
+    # A pre-created account waiting on its resume handle (no discord_id yet).
+    from app.models import Member
+
+    u = User(role=UserRole.MEMBER, pending_discord_username="harry")
+    db_session.add(u)
+    db_session.flush()
+    db_session.add(
+        Member(graduation_year=2024, real_name="H", institution="X", user_id=u.id)
+    )
+    db_session.commit()
+
+    _patch_flow(monkeypatch, identity_id="NEWID", is_member=True)
+    # fetch_identity must return username "harry" to match the pending handle
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="NEWID", username="harry", global_name="H"
+        ),
+    )
+    state = _start_and_get_state(client)
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert r.headers["location"] == "/"
+    # discord_id got backfilled and the account can now log in by id.
+    db_session.expire_all()
+    linked = db_session.query(User).filter_by(id=u.id).one()
+    assert linked.discord_id == "NEWID"
+    assert linked.pending_discord_username is None
+
+
+def test_callback_unmatched_first_login_queues_pending(client, db_session, monkeypatch):
+    _patch_flow(monkeypatch, identity_id="Z9", is_member=True)
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="Z9", username="nobody", global_name=None
+        ),
+    )
+    state = _start_and_get_state(client)
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert "error=not_linked" in r.headers["location"]
+    from app.models import PendingDiscordLink
+
+    assert db_session.query(PendingDiscordLink).filter_by(discord_id="Z9").count() == 1

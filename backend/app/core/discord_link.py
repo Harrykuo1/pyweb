@@ -1,0 +1,68 @@
+"""First-login migration bridge for existing (pre-created) member accounts.
+
+A Phase-1 backfilled account carries pending_discord_username (the @handle
+parsed from the member's resume) and a null discord_id. On that member's
+first Discord login we match the live username against it and, on a unique
+hit, permanently bind discord_id -- every later login goes by id, so the
+handle can change afterwards without breaking anything.
+
+No unique match -> the verified Discord identity is parked in
+pending_discord_links for an admin to attach to the right member. We never
+auto-link when the match is ambiguous (two candidates), so a re-registered
+old handle can't silently bind to the wrong person.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core.discord_oauth import DiscordIdentity
+from app.models import PendingDiscordLink, User
+
+
+def link_or_queue(db: Session, identity: DiscordIdentity) -> User | None:
+    """Try to bind this Discord identity to a waiting pre-created account.
+
+    Returns the now-linked User (caller logs them in) on a unique handle
+    match; returns None after queueing a PendingDiscordLink otherwise.
+    """
+    candidates = (
+        db.query(User)
+        .filter(
+            User.discord_id.is_(None),
+            func.lower(User.pending_discord_username) == identity.username.lower(),
+        )
+        .all()
+    )
+
+    if len(candidates) == 1:
+        user = candidates[0]
+        user.discord_id = identity.id
+        user.discord_username = identity.username
+        user.discord_global_name = identity.global_name
+        user.pending_discord_username = None
+        db.commit()
+        db.refresh(user)
+        return user
+
+    # Zero or ambiguous match -> queue for manual admin linking.
+    existing = (
+        db.query(PendingDiscordLink).filter_by(discord_id=identity.id).one_or_none()
+    )
+    if existing is None:
+        db.add(
+            PendingDiscordLink(
+                discord_id=identity.id,
+                discord_username=identity.username,
+                discord_global_name=identity.global_name,
+                first_seen_at=datetime.now(UTC),
+            )
+        )
+    else:
+        existing.discord_username = identity.username
+        existing.discord_global_name = identity.global_name
+    db.commit()
+    return None
