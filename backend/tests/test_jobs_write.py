@@ -191,3 +191,63 @@ def test_member_cannot_reassign_subject(ctx):
     assert r.status_code == 200
     # Subject stays the member themselves.
     assert r.json()["subject_member_id"] == ids["mem_member"]
+
+
+# ---------- delete: ownership ----------
+
+
+def test_member_owner_can_delete_without_password(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    r = client.request("DELETE", f"/api/jobs/{jid}")
+    assert r.status_code == 204
+
+
+def test_non_owner_member_cannot_delete(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    client.post("/api/auth/logout")
+    login("other-pw")
+    r = client.request("DELETE", f"/api/jobs/{jid}")
+    assert r.status_code == 403
+
+
+# ---------- approval: accept / reject ----------
+
+
+def test_admin_accept_publishes_pending_post(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)  # pending
+    client.post("/api/auth/logout")
+    login("admin-pw")
+    r = client.post(f"/api/jobs/{jid}/accept")
+    assert r.status_code == 200
+    assert r.json()["status"] == "accepted"
+
+
+def test_admin_reject_sets_reason(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    client.post("/api/auth/logout")
+    login("admin-pw")
+    r = client.post(f"/api/jobs/{jid}/reject", json={"reason": "請補充公司名"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "rejected"
+    assert body["review_reason"] == "請補充公司名"
+
+
+def test_reject_requires_reason(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    client.post("/api/auth/logout")
+    login("admin-pw")
+    r = client.post(f"/api/jobs/{jid}/reject", json={})
+    assert r.status_code == 422
+
+
+def test_member_cannot_accept(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    r = client.post(f"/api/jobs/{jid}/accept")
+    assert r.status_code == 403

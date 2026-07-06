@@ -1,4 +1,5 @@
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -20,6 +21,7 @@ from app.schemas import (
     JobUpdate,
     ListResponse,
     PasswordConfirmRequest,
+    RejectRequest,
 )
 from app.schemas.job import JobKindLiteral, PostStatusLiteral
 
@@ -380,13 +382,31 @@ def update_job(
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_job(
     job_id: int,
-    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> None:
-    _require_admin_password(payload, admin)
     obj = _get_or_404(db, job_id)
+    is_admin = current_user.role is UserRole.ADMIN
+    viewer_member_id = _viewer_member_id(db, current_user)
+    is_owner = (
+        obj.subject_member_id is not None
+        and obj.subject_member_id == viewer_member_id
+    )
+    if not is_admin and not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not your post"
+        )
+    if is_admin:
+        # Admin re-auth for the destructive action; owners deleting their
+        # own post don't need to re-enter a password.
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Password is required",
+            )
+        _require_admin_password(payload, current_user)
     db.delete(obj)
     db.commit()
     # DB rows for job_attachments cascade-delete via the FK, but the
@@ -396,3 +416,41 @@ def delete_job(
     # races against a concurrent upload the missing files will at
     # worst surface as 404s on download, not data loss.
     shutil.rmtree(job_uploads_dir(uploads_root, job_id), ignore_errors=True)
+
+
+def _review(db: Session, job_id: int, admin: User, new_status, reason) -> JobResponse:
+    obj = _get_or_404(db, job_id)
+    obj.status = new_status
+    obj.review_reason = reason
+    obj.reviewed_by_user_id = admin.id
+    obj.reviewed_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(obj)
+    counts = _attachment_counts(db, [obj.id])
+    names = _subject_names(db, [obj.subject_member_id])
+    return serialize_job(
+        obj,
+        is_admin=True,
+        viewer_member_id=None,
+        attachment_count=counts.get(obj.id, 0),
+        subject_name=names.get(obj.subject_member_id),
+    )
+
+
+@router.post("/{job_id}/accept", response_model=JobResponse)
+def accept_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> JobResponse:
+    return _review(db, job_id, admin, PostStatus.ACCEPTED, None)
+
+
+@router.post("/{job_id}/reject", response_model=JobResponse)
+def reject_job(
+    job_id: int,
+    payload: RejectRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> JobResponse:
+    return _review(db, job_id, admin, PostStatus.REJECTED, payload.reason)
