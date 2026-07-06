@@ -226,3 +226,61 @@ def test_callback_registers_new_member_via_invite(client, db_session, monkeypatc
     created = db_session.query(User).filter_by(discord_id="FRESH").one()
     assert created.role.value == "member"
     assert client.get("/api/auth/me").status_code == 200
+
+
+def test_failed_registration_does_not_hijack_a_later_login(
+    client, db_session, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+    from urllib.parse import parse_qs, urlparse
+
+    from app.models import RegistrationInvite
+
+    now = datetime.now(UTC)
+    db_session.add(
+        RegistrationInvite(
+            token="inv2", created_at=now, expires_at=now + timedelta(hours=1)
+        )
+    )
+    db_session.commit()
+
+    # The fixture already seeded a linked member with discord_id="D123".
+    monkeypatch.setattr(discord_oauth, "exchange_code", lambda code: "tok")
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="D123", username="harry", global_name="H"
+        ),
+    )
+
+    # 1) Start registration, then fail the guild check on the callback.
+    monkeypatch.setattr(discord_oauth, "is_guild_member", lambda tok, gid: False)
+    r0 = client.get(
+        "/api/auth/discord/register?token=inv2", follow_redirects=False
+    )
+    state0 = parse_qs(urlparse(r0.headers["location"]).query)["state"][0]
+    r1 = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state0}",
+        follow_redirects=False,
+    )
+    assert "error=not_member" in r1.headers["location"]
+    assert (
+        db_session.query(RegistrationInvite).filter_by(token="inv2").one().used_at
+        is None
+    )
+
+    # 2) The same (already-linked) account now logs in normally. The stale
+    #    invite token must not turn this into a registration attempt.
+    monkeypatch.setattr(discord_oauth, "is_guild_member", lambda tok, gid: True)
+    r2 = client.get("/api/auth/discord/login", follow_redirects=False)
+    state2 = parse_qs(urlparse(r2.headers["location"]).query)["state"][0]
+    r3 = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state2}",
+        follow_redirects=False,
+    )
+    assert r3.headers["location"] == "/"
+    assert (
+        db_session.query(RegistrationInvite).filter_by(token="inv2").one().used_at
+        is None
+    )

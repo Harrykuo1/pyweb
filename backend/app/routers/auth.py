@@ -142,8 +142,12 @@ def discord_callback(
     if error is not None:
         return _oauth_error("discord_denied")
 
-    # CSRF: the state we stored before redirecting must come back intact.
+    # Consume both single-use session values up front so any early return
+    # below leaves no stale registration intent behind — otherwise a failed
+    # registration could later hijack a normal login into a registration.
     expected_state = request.session.pop("discord_oauth_state", None)
+    invite_token = request.session.pop("registration_invite_token", None)
+    # CSRF: the state we stored before redirecting must come back intact.
     if not state or not expected_state or state != expected_state:
         return _oauth_error("state_mismatch")
     if not code:
@@ -165,9 +169,8 @@ def discord_callback(
     if not discord_oauth.is_guild_member(token, guild_id):
         return _oauth_error("not_member")
 
-    # Registration (invite in session) takes priority over login: a fresh
-    # Discord identity coming through an invite becomes a new member here.
-    invite_token = request.session.pop("registration_invite_token", None)
+    # Registration (invite consumed above) takes priority over login: a
+    # fresh Discord identity coming through an invite becomes a new member.
     if invite_token is not None:
         user, err = discord_register.register_via_invite(db, identity, invite_token)
         if err is not None:
