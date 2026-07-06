@@ -161,6 +161,46 @@ def test_require_member_rejects_unauthenticated(db_session):
     assert client.get("/test/member-only").status_code == 401
 
 
+def test_get_current_user_rejects_suspended_account(db_session):
+    seed = [
+        User(
+            id=30,
+            role=UserRole.MEMBER,
+            discord_id="s1",
+            discord_username="s",
+            is_active=False,
+        )
+    ]
+    app = _build_app(db_session, seed_users=seed)
+    client = TestClient(app)
+
+    client.post("/test/_login_as/30")
+    r = client.get("/test/me")
+
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Account suspended"
+
+    # Session was cleared, so a second call is still 401.
+    assert client.get("/test/me").status_code == 401
+
+
+def test_get_current_user_allows_active_account(db_session):
+    seed = [
+        User(
+            id=31,
+            role=UserRole.MEMBER,
+            discord_id="a1",
+            discord_username="a",
+            is_active=True,
+        )
+    ]
+    app = _build_app(db_session, seed_users=seed)
+    client = TestClient(app)
+
+    client.post("/test/_login_as/31")
+    assert client.get("/test/me").status_code == 200
+
+
 def test_get_current_user_evicts_session_after_password_version_bump(db_session):
     seed = [User(id=3, username="rot", password_hash="h", role=UserRole.VIEWER)]
     app = _build_app(db_session, seed_users=seed)

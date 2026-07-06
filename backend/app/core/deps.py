@@ -33,6 +33,13 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session expired due to password change",
         )
+    if not user.is_active:
+        # Admin suspended this account — evict the session immediately.
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account suspended",
+        )
     return user
 
 
