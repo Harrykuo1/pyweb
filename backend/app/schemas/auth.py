@@ -29,6 +29,9 @@ class UserResponse(BaseModel):
     # admin user list identify backfilled accounts that have no username/handle
     # yet ("#4") by who they actually are.
     member_name: str | None = None
+    # False when an admin has suspended the account: login and every
+    # authenticated request are rejected until it is reactivated.
+    is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

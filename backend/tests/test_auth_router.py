@@ -205,6 +205,13 @@ def test_me_reports_has_profile_false_for_account_without_member(client):
     assert r.json()["has_profile"] is False
 
 
+def test_me_reports_is_active(client):
+    client.post("/api/auth/login", json={"password": "admin-pw"})
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200
+    assert r.json()["is_active"] is True
+
+
 def test_me_returns_member_real_name_when_linked(client, db_session):
     admin = db_session.query(User).filter_by(username="admin").one()
     db_session.add(
