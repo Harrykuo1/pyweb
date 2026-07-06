@@ -1,7 +1,7 @@
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -58,6 +58,12 @@ class User(Base):
             validate_strings=True,
         ),
         nullable=False,
+    )
+    # Admin can suspend an account (kick out now, reversibly) without deleting
+    # it — the row and its author FKs survive so content and identity persist.
+    # Enforced at login and on every authenticated request.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

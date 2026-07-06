@@ -67,3 +67,11 @@ def test_discord_id_must_be_unique(db_session):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+
+def test_user_is_active_defaults_true(db_session):
+    u = User(role=UserRole.MEMBER, discord_id="x1", discord_username="x")
+    db_session.add(u)
+    db_session.commit()
+    db_session.refresh(u)
+    assert u.is_active is True
