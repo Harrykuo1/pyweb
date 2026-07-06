@@ -81,3 +81,42 @@ def test_list_invites_returns_created_rows(client, db_session):
 
 def test_list_invites_requires_admin(client):
     assert client.get("/api/auth/registration-invites").status_code == 401
+
+
+def test_register_start_redirects_to_discord_for_valid_token(
+    client, db_session, monkeypatch
+):
+    _configure(monkeypatch)
+    _login_admin(client)
+    token = client.post("/api/auth/registration-invites").json()["token"]
+    client.post("/api/auth/logout")
+
+    r = client.get(
+        f"/api/auth/discord/register?token={token}", follow_redirects=False
+    )
+    assert r.status_code == 302
+    assert "discord.com" in r.headers["location"]
+
+
+def test_register_start_rejects_unknown_token(client, monkeypatch):
+    _configure(monkeypatch)
+    r = client.get(
+        "/api/auth/discord/register?token=nope", follow_redirects=False
+    )
+    assert r.status_code == 302
+    assert "error=invalid_invite" in r.headers["location"]
+
+
+def test_register_start_rejects_used_token(client, db_session, monkeypatch):
+    _configure(monkeypatch)
+    _login_admin(client)
+    token = client.post("/api/auth/registration-invites").json()["token"]
+    row = db_session.query(RegistrationInvite).filter_by(token=token).one()
+    row.used_at = datetime.now(UTC)
+    db_session.commit()
+    client.post("/api/auth/logout")
+
+    r = client.get(
+        f"/api/auth/discord/register?token={token}", follow_redirects=False
+    )
+    assert "error=invalid_invite" in r.headers["location"]

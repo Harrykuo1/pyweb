@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core import audit_log, discord_link, discord_oauth
+from app.core import audit_log, discord_link, discord_oauth, discord_register
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
@@ -92,6 +92,30 @@ def discord_login(request: Request) -> Response:
         )
     state = secrets.token_urlsafe(32)
     request.session["discord_oauth_state"] = state
+    return RedirectResponse(
+        url=discord_oauth.build_authorize_url(state),
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/discord/register")
+def discord_register_start(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
+    if not settings.discord_oauth_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord login is not configured",
+        )
+    invite = db.query(RegistrationInvite).filter_by(token=token).one_or_none()
+    if not discord_register.invite_is_valid(invite, datetime.now(UTC)):
+        return _oauth_error("invalid_invite")
+
+    state = secrets.token_urlsafe(32)
+    request.session["discord_oauth_state"] = state
+    request.session["registration_invite_token"] = token
     return RedirectResponse(
         url=discord_oauth.build_authorize_url(state),
         status_code=status.HTTP_302_FOUND,
