@@ -21,12 +21,17 @@ def ctx(db_session):
     np = User(
         username="np", password_hash=hash_password("np-pw"), role=UserRole.MEMBER
     )
-    db_session.add_all([admin, viewer, mem, np])
+    otheru = User(
+        username="otheru", password_hash=hash_password("other-pw"), role=UserRole.MEMBER
+    )
+    db_session.add_all([admin, viewer, mem, np, otheru])
     db_session.flush()
     mem_member = Member(
         graduation_year=2024, real_name="我本人", institution="X", user_id=mem.id
     )
-    other = Member(graduation_year=2024, real_name="別人", institution="Y")
+    other = Member(
+        graduation_year=2024, real_name="別人", institution="Y", user_id=otheru.id
+    )
     db_session.add_all([mem_member, other])
     db_session.commit()
 
@@ -126,3 +131,63 @@ def test_viewer_cannot_create(ctx):
     login("viewer-pw")
     r = client.post("/api/jobs", json=_payload())
     assert r.status_code == 403
+
+
+# ---------- update: ownership + resubmit ----------
+
+
+def _member_creates(client, login, **kw):
+    login("mem-pw")
+    r = client.post("/api/jobs", json=_payload(**kw))
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_owner_can_update_own_post(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    r = client.put(f"/api/jobs/{jid}", json={"company": "Updated"})
+    assert r.status_code == 200
+    assert r.json()["company"] == "Updated"
+
+
+def test_non_owner_member_cannot_update(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)  # owned by mem
+    client.post("/api/auth/logout")
+    login("other-pw")  # a different member
+    r = client.put(f"/api/jobs/{jid}", json={"company": "Hijack"})
+    assert r.status_code == 403
+
+
+def test_admin_can_update_any_post(ctx):
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    client.post("/api/auth/logout")
+    login("admin-pw")
+    r = client.put(f"/api/jobs/{jid}", json={"company": "AdminEdit"})
+    assert r.status_code == 200
+    assert r.json()["company"] == "AdminEdit"
+
+
+def test_member_editing_rejected_post_resubmits_to_pending(ctx, db_session):
+    from app.models import Job, PostStatus
+
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    # Admin rejects it out of band.
+    db_session.query(Job).filter_by(id=jid).update({"status": PostStatus.REJECTED})
+    db_session.commit()
+
+    r = client.put(f"/api/jobs/{jid}", json={"experience_md": "revised"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+
+
+def test_member_cannot_reassign_subject(ctx):
+    client, login, ids = ctx
+    jid = _member_creates(client, login)
+    r = client.put(f"/api/jobs/{jid}", json={"subject_member_id": ids["other"]})
+    assert r.status_code == 200
+    # Subject stays the member themselves.
+    assert r.json()["subject_member_id"] == ids["mem_member"]

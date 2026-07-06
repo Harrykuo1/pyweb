@@ -326,24 +326,52 @@ def update_job(
     job_id: int,
     payload: JobUpdate,
     db: Session = Depends(get_db),
-    _: object = Depends(require_admin),
+    current_user: User = Depends(require_member),
 ) -> JobResponse:
     obj = _get_or_404(db, job_id)
-    # mode="json" so any nested date objects (timeline_events[].date)
-    # arrive at the SQLAlchemy JSON column already serialised to ISO
-    # strings — same boundary handling as create_job above.
-    for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
+    is_admin = current_user.role is UserRole.ADMIN
+    viewer_member_id = _viewer_member_id(db, current_user)
+    is_owner = (
+        obj.subject_member_id is not None
+        and obj.subject_member_id == viewer_member_id
+    )
+    if not is_admin and not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not your post"
+        )
+
+    # mode="json" so nested timeline dates arrive as ISO strings for the
+    # JSON column — same boundary handling as create_job.
+    data = payload.model_dump(exclude_unset=True, mode="json")
+    if not is_admin:
+        # Members cannot reassign a post to someone else or set a free-text
+        # name — their subject stays themselves.
+        data.pop("subject_member_id", None)
+        data.pop("real_name", None)
+    elif data.get("subject_member_id") is not None and (
+        db.query(Member.id).filter_by(id=data["subject_member_id"]).first() is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Subject member not found"
+        )
+
+    for field, value in data.items():
         if field == "kind" and value is not None:
             value = JobKind(value)
         setattr(obj, field, value)
+    obj.last_edited_by_user_id = current_user.id
+    # An owner editing a rejected post resubmits it for review.
+    if not is_admin and is_owner and obj.status is PostStatus.REJECTED:
+        obj.status = PostStatus.PENDING
+
     db.commit()
     db.refresh(obj)
     counts = _attachment_counts(db, [obj.id])
     names = _subject_names(db, [obj.subject_member_id])
     return serialize_job(
         obj,
-        is_admin=True,
-        viewer_member_id=None,
+        is_admin=is_admin,
+        viewer_member_id=viewer_member_id,
         attachment_count=counts.get(obj.id, 0),
         subject_name=names.get(obj.subject_member_id),
     )
