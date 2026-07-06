@@ -206,7 +206,16 @@ def delete_member(
 ) -> None:
     _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
+    linked_user = (
+        db.query(User).filter_by(id=member.user_id).one_or_none()
+        if member.user_id is not None
+        else None
+    )
+    # delete the member first: it holds the FK to users, so the linked user
+    # can only be removed once nothing references it.
     db.delete(member)
+    if linked_user is not None:
+        db.delete(linked_user)
     db.commit()
 
 

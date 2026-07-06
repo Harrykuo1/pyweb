@@ -403,3 +403,47 @@ def test_delete_member_404(client_factory):
         json={"password": "admin-pw"},
     )
     assert r.status_code == 404
+
+
+def test_delete_member_also_deletes_linked_account(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Dora",
+            "institution": "NYCU",
+            "discord_username": "dora.x",
+        },
+    )
+    member_id = r.json()["id"]
+    user_id = db_session.query(Member).filter_by(id=member_id).one().user_id
+    assert user_id is not None
+
+    resp = client.request(
+        "DELETE",
+        f"/api/members/{member_id}",
+        json={"password": "admin-pw"},
+    )
+    assert resp.status_code == 204, resp.text
+
+    assert db_session.query(Member).filter_by(id=member_id).one_or_none() is None
+    assert db_session.query(User).filter_by(id=user_id).one_or_none() is None
+
+
+def test_delete_orphan_member_without_account_still_works(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    m = Member(graduation_year=2020, real_name="Legacy", institution="Old", user_id=None)
+    db_session.add(m)
+    db_session.commit()
+    mid = m.id
+
+    resp = client.request(
+        "DELETE",
+        f"/api/members/{mid}",
+        json={"password": "admin-pw"},
+    )
+    assert resp.status_code == 204, resp.text
+    assert db_session.query(Member).filter_by(id=mid).one_or_none() is None
