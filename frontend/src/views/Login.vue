@@ -1,9 +1,10 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElForm, ElFormItem, ElIcon, ElInput } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 
+import { DISCORD_LOGIN_URL } from '../api/auth'
 import { settingImageUrl } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import loginBg from '../assets/login-bg.jpg'
@@ -28,6 +29,26 @@ function onLogoError() {
 
 const rules = {
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }],
+}
+
+// The Discord OAuth callback bounces failures back here as ?error=<reason>.
+const OAUTH_ERRORS = {
+  not_member: '你不是社群 Discord 群組的成員，無法登入。',
+  guild_check_failed: 'Discord 群組驗證暫時失敗（可能是太頻繁），請稍後再試。',
+  not_linked: '找不到對應的成員帳號，請聯絡管理員為你連結。',
+  state_mismatch: '登入逾時或連結失效，請再登入一次。',
+  invalid_invite: '註冊連結無效或已過期。',
+  guild_not_configured: '系統尚未設定 Discord 群組，請聯絡管理員。',
+  discord_denied: '你取消了 Discord 授權。',
+}
+const oauthError = computed(() => {
+  const e = typeof route.query.error === 'string' ? route.query.error : ''
+  if (!e) return ''
+  return OAUTH_ERRORS[e] || 'Discord 登入失敗，請稍後再試。'
+})
+
+function loginWithDiscord() {
+  window.location.href = DISCORD_LOGIN_URL
 }
 
 async function handleSubmit() {
@@ -93,7 +114,22 @@ async function handleSubmit() {
       <main class="form-panel">
         <div class="form-inner">
           <h2 class="form-title">歡迎回來</h2>
-          <p class="form-sub">請輸入密碼以繼續。</p>
+          <p class="form-sub">用 Discord 登入，或輸入密碼。</p>
+
+          <p v-if="oauthError" class="error-message" data-test="oauth-error">
+            {{ oauthError }}
+          </p>
+
+          <el-button
+            size="large"
+            class="discord-button"
+            data-test="discord-login"
+            @click="loginWithDiscord"
+          >
+            使用 Discord 登入
+          </el-button>
+
+          <div class="login-divider"><span>或用密碼</span></div>
 
           <el-form
             ref="formRef"
@@ -322,6 +358,37 @@ async function handleSubmit() {
   color: #ef4444;
   font-size: 13px;
   margin: -4px 0 16px;
+}
+
+/* Discord brand button — the primary login path going forward. */
+:deep(.discord-button) {
+  width: 100%;
+  height: 44px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  background: #5865f2;
+  color: #ffffff;
+  border: 0;
+}
+:deep(.discord-button:hover) {
+  background: #4752c4;
+  color: #ffffff;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  color: var(--ink-400, #94a3b8);
+  font-size: 12px;
+}
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(15, 23, 42, 0.1);
 }
 
 /* Override Element's primary-button gradient + height inside the form. */

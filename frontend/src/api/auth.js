@@ -1,5 +1,9 @@
 import client from './client'
 
+// Discord OAuth is a full-page browser redirect (not an XHR), so the login
+// button navigates the window here rather than calling it via axios.
+export const DISCORD_LOGIN_URL = '/api/auth/discord/login'
+
 export const authApi = {
   async login(password) {
     const { data } = await client.post('/auth/login', { password })
