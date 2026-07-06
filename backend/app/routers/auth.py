@@ -211,9 +211,11 @@ def me(
     db: Session = Depends(get_db),
 ) -> UserResponse:
     resp = UserResponse.model_validate(current_user)
-    resp.has_profile = (
-        db.query(Member.id).filter_by(user_id=current_user.id).first() is not None
+    member_id = (
+        db.query(Member.id).filter_by(user_id=current_user.id).scalar()
     )
+    resp.member_id = member_id
+    resp.has_profile = member_id is not None
     return resp
 
 

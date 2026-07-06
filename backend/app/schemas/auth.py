@@ -22,6 +22,9 @@ class UserResponse(BaseModel):
     # True once the account has a member profile. Members without one are
     # gated out of all data endpoints until they complete registration.
     has_profile: bool = False
+    # The id of this account's own member profile, or null. Lets the frontend
+    # tell which member card is "mine" so it can offer self-edit affordances.
+    member_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -42,6 +42,7 @@ def test_member_without_profile_is_gated_from_all_reads(client):
     me = client.get("/api/auth/me")
     assert me.status_code == 200
     assert me.json()["has_profile"] is False
+    assert me.json()["member_id"] is None
 
 
 def test_member_unlocks_reads_after_creating_profile(client):
@@ -52,6 +53,11 @@ def test_member_unlocks_reads_after_creating_profile(client):
         json={"graduation_year": 2024, "real_name": "新人", "institution": "X"},
     )
     assert r.status_code == 201
+    created_id = r.json()["id"]
 
     assert client.get("/api/members").status_code == 200
-    assert client.get("/api/auth/me").json()["has_profile"] is True
+    me = client.get("/api/auth/me").json()
+    assert me["has_profile"] is True
+    # /me now surfaces the account's own member id so the frontend can offer
+    # self-edit affordances on exactly that card.
+    assert me["member_id"] == created_id

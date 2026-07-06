@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.deps import require_admin, require_completed_member, require_member
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Member, User
+from app.models import Member, User, UserRole
 from app.schemas import (
     MemberCreate,
     MemberResponse,
@@ -71,6 +71,18 @@ def _get_member_or_404(db: Session, member_id: int) -> Member:
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
     return member
+
+
+def _owned_member_or_403(db: Session, member_id: int, user: User) -> Member:
+    """Fetch the member, allowing admins or the member's own account through."""
+    member = _get_member_or_404(db, member_id)
+    if user.role is UserRole.ADMIN:
+        return member
+    if member.user_id is not None and member.user_id == user.id:
+        return member
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail="Not your profile"
+    )
 
 
 def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
@@ -160,10 +172,13 @@ def update_member(
     member_id: int,
     payload: MemberUpdate,
     db: Session = Depends(get_db),
-    _: object = Depends(require_admin),
+    current_user: User = Depends(require_member),
 ) -> Member:
-    member = _get_member_or_404(db, member_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    member = _owned_member_or_403(db, member_id, current_user)
+    data = payload.model_dump(exclude_unset=True)
+    if current_user.role is not UserRole.ADMIN:
+        data.pop("joined_at", None)  # members can't backdate their own join
+    for field, value in data.items():
         setattr(member, field, value)
     db.commit()
     db.refresh(member)
@@ -226,7 +241,7 @@ async def upload_member_photo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(require_admin),
+    current_user: User = Depends(require_member),
 ) -> Member:
     if file.content_type not in ALLOWED_PHOTO_TYPES:
         raise HTTPException(
@@ -240,7 +255,7 @@ async def upload_member_photo(
             detail=f"Photo must be at most {PHOTO_MAX_BYTES} bytes",
         )
 
-    member = _get_member_or_404(db, member_id)
+    member = _owned_member_or_403(db, member_id, current_user)
     ext = PHOTO_MIME_TO_EXT[file.content_type]
     new_relpath = f"members/{member_id}/photo{ext}"
 
@@ -268,13 +283,19 @@ async def upload_member_photo(
 @router.delete("/{member_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
 def delete_member_photo(
     member_id: int,
-    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> None:
-    _require_admin_password(payload, admin)
-    member = _get_member_or_404(db, member_id)
+    member = _owned_member_or_403(db, member_id, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Password is required",
+            )
+        _require_admin_password(payload, current_user)
     if member.photo_path:
         file_path = uploads_root / member.photo_path
         if file_path.exists():
@@ -325,7 +346,7 @@ async def upload_member_resume_pdf(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(require_admin),
+    current_user: User = Depends(require_member),
 ) -> Member:
     if file.content_type != RESUME_PDF_TYPE:
         raise HTTPException(
@@ -339,7 +360,7 @@ async def upload_member_resume_pdf(
             detail=f"Resume must be at most {RESUME_PDF_MAX_BYTES} bytes",
         )
 
-    member = _get_member_or_404(db, member_id)
+    member = _owned_member_or_403(db, member_id, current_user)
     relpath = f"members/{member_id}/resume.pdf"
     target = uploads_root / relpath
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -355,13 +376,19 @@ async def upload_member_resume_pdf(
 @router.delete("/{member_id}/resume.pdf", status_code=status.HTTP_204_NO_CONTENT)
 def delete_member_resume_pdf(
     member_id: int,
-    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> None:
-    _require_admin_password(payload, admin)
-    member = _get_member_or_404(db, member_id)
+    member = _owned_member_or_403(db, member_id, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Password is required",
+            )
+        _require_admin_password(payload, current_user)
     if member.resume_pdf_path:
         file_path = uploads_root / member.resume_pdf_path
         if file_path.exists():
