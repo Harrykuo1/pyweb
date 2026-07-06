@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_admin, require_completed_member
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Event, EventPhoto, User
@@ -82,7 +82,7 @@ def _get_photo_or_404(db: Session, event_id: int, photo_id: int) -> EventPhoto:
 def list_photos(
     event_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> list[EventPhoto]:
     _get_event_or_404(db, event_id)
     return (
@@ -99,7 +99,7 @@ async def get_photo(
     photo_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> Response:
     photo = _get_photo_or_404(db, event_id, photo_id)
     file_path = event_uploads_dir(uploads_root, event_id) / photo.filename

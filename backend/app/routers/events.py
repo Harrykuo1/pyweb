@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_admin, require_completed_member
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.core.security import verify_password
@@ -135,7 +135,7 @@ def list_events(
     tag: list[str] = Query(default_factory=list, max_length=20),
     q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> ListResponse[EventResponse]:
     query = db.query(Event)
 
@@ -178,7 +178,7 @@ def list_events(
 def list_tags(
     prefix: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> list[str]:
     query = db.query(EventTag.name).distinct()
     if prefix:
@@ -191,7 +191,7 @@ def list_tags(
 def get_event(
     event_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> EventResponse:
     obj = _get_or_404(db, event_id)
     return _serialize_many(db, [obj])[0]

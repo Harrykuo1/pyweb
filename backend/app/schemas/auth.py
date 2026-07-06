@@ -19,6 +19,9 @@ class UserResponse(BaseModel):
     # accounts that have no username. Null for legacy password accounts.
     discord_username: str | None = None
     discord_global_name: str | None = None
+    # True once the account has a member profile. Members without one are
+    # gated out of all data endpoints until they complete registration.
+    has_profile: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

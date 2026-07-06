@@ -9,7 +9,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_admin, require_completed_member
 from app.core.runtime_config import CONFIG_BY_KEY, CONFIG_FIELDS
 from app.database import get_db
 from app.models import AppConfig, SiteSetting, User
@@ -62,7 +62,7 @@ def _read_config(db: Session) -> ConfigResponse:
 @router.get("/config", response_model=ConfigResponse)
 def get_runtime_config(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_completed_member),
 ) -> ConfigResponse:
     return _read_config(db)
 

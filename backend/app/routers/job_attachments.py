@@ -28,7 +28,7 @@ from app.core.attachments import (
     sanitize_relpath,
 )
 from app.core.config import settings
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_admin, require_completed_member
 from app.core.runtime_config import get_int
 from app.core.security import verify_password
 from app.database import get_db
@@ -290,7 +290,7 @@ def list_attachments(
     job_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_completed_member),
 ) -> list[JobAttachmentResponse]:
     _get_job_or_404(db, job_id)
     rows = (
@@ -308,7 +308,7 @@ def download_attachment(
     attachment_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_completed_member),
 ) -> FileResponse:
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
@@ -347,7 +347,7 @@ def preview_attachment(
     attachment_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_completed_member),
 ) -> FileResponse:
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
@@ -391,7 +391,7 @@ def bulk_download_attachments(
     payload: BulkDownloadRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_completed_member),
 ) -> Response:
     """Stream a zip of the selected attachments. Read-only — viewer
     permission is sufficient (anyone who can list/download individually

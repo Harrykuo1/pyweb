@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_user, require_admin, require_member
+from app.core.deps import require_admin, require_completed_member, require_member
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Member, User
@@ -93,7 +93,7 @@ def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> Non
 def list_members(
     order: Literal["asc", "desc"] = "asc",
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> list[Member]:
     column = Member.joined_at.asc() if order == "asc" else Member.joined_at.desc()
     return db.query(Member).order_by(column).all()
@@ -103,7 +103,7 @@ def list_members(
 def get_member(
     member_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> Member:
     return _get_member_or_404(db, member_id)
 
@@ -191,7 +191,7 @@ async def get_member_photo(
     member_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> Response:
     member = _get_member_or_404(db, member_id)
     if not member.photo_path:
@@ -294,7 +294,7 @@ async def get_member_resume_pdf(
     member_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> Response:
     member = _get_member_or_404(db, member_id)
     if not member.resume_pdf_path:

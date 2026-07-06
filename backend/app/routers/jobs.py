@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_admin, require_completed_member
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.core.security import verify_password
@@ -105,7 +105,7 @@ def list_jobs(
     kind: JobKindLiteral | None = None,
     q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> ListResponse[JobResponse]:
     query = db.query(Job)
 
@@ -163,7 +163,7 @@ def list_jobs(
 def list_companies(
     prefix: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> list[str]:
     query = db.query(Job.company).distinct()
     if prefix:
@@ -176,7 +176,7 @@ def list_companies(
 def list_categories(
     prefix: str | None = Query(default=None, max_length=64),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> list[str]:
     # Skip NULL rows so they don't surface as a phantom autocomplete option.
     query = db.query(Job.category).distinct().filter(Job.category.is_not(None))
@@ -190,7 +190,7 @@ def list_categories(
 def get_job(
     job_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> JobResponse:
     obj = _get_or_404(db, job_id)
     counts = _attachment_counts(db, [obj.id])

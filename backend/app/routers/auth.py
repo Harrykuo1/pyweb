@@ -201,8 +201,15 @@ def logout(request: Request) -> Response:
 
 
 @router.get("/me", response_model=UserResponse)
-def me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    resp = UserResponse.model_validate(current_user)
+    resp.has_profile = (
+        db.query(Member.id).filter_by(user_id=current_user.id).first() is not None
+    )
+    return resp
 
 
 @router.get("/users", response_model=list[UserResponse])

@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import require_completed_member
 from app.database import get_db
 from app.models import Job, Member
 from app.schemas.timeline import (
@@ -23,7 +23,7 @@ def list_timeline(
     limit: int = Query(default=TIMELINE_LIMIT_DEFAULT, ge=1, le=TIMELINE_LIMIT_MAX),
     before: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_completed_member),
 ) -> TimelineResponse:
     # Cursor pagination: when `before` is supplied, return only rows
     # strictly older than that timestamp. Frontend passes the timestamp

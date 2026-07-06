@@ -198,6 +198,13 @@ def test_me_after_login_returns_current_user(client):
     assert r.json()["role"] == "viewer"
 
 
+def test_me_reports_has_profile_false_for_account_without_member(client):
+    client.post("/api/auth/login", json={"password": "admin-pw"})
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200
+    assert r.json()["has_profile"] is False
+
+
 def test_logout_clears_session(client):
     client.post("/api/auth/login", json={"password": "admin-pw"})
     assert client.get("/api/auth/me").status_code == 200
