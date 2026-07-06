@@ -18,6 +18,7 @@ from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models import Member, PendingDiscordLink, RegistrationInvite, User, UserRole
 from app.schemas import (
+    ActiveUpdateRequest,
     GuildConfigResponse,
     GuildConfigUpdate,
     LoginRequest,
@@ -353,6 +354,39 @@ def update_user_role(
                 detail="Cannot demote the last admin",
             )
     user.role = payload.role
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/active", response_model=UserResponse)
+def update_user_active(
+    user_id: int,
+    payload: ActiveUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> User:
+    user = db.query(User).filter_by(id=user_id).one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    # Guards apply to suspension only; reactivation is always allowed.
+    if not payload.is_active:
+        # G2: the break-glass admin (seeded password account) can never be
+        # suspended, whatever its current role — keeps recovery login working.
+        if user.username == settings.seed_admin_username:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The break-glass admin account cannot be suspended",
+            )
+        # G1: never suspend an admin-role account; demote it to member first.
+        if user.role is UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Demote this account to member before suspending it",
+            )
+    user.is_active = payload.is_active
     db.commit()
     db.refresh(user)
     return user

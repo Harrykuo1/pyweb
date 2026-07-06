@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
@@ -530,3 +531,64 @@ def test_stale_password_version_in_db_evicts_session(client, db_session):
     db_session.commit()
 
     assert client.get("/api/auth/me").status_code == 401
+
+
+def _login_admin(client):
+    assert client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+
+
+def test_suspend_member_succeeds(client, db_session):
+    m = User(role=UserRole.MEMBER, discord_id="m1", discord_username="m", is_active=True)
+    db_session.add(m)
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{m.id}/active", json={"is_active": False})
+    assert r.status_code == 200, r.text
+    assert r.json()["is_active"] is False
+
+
+def test_reactivate_member_succeeds(client, db_session):
+    m = User(role=UserRole.MEMBER, discord_id="m2", discord_username="m", is_active=False)
+    db_session.add(m)
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{m.id}/active", json={"is_active": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["is_active"] is True
+
+
+def test_suspend_viewer_succeeds(client, db_session):
+    viewer = db_session.query(User).filter_by(username="viewer").one()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{viewer.id}/active", json={"is_active": False})
+    assert r.status_code == 200, r.text
+
+
+def test_cannot_suspend_admin_role(client, db_session, monkeypatch):
+    # Make sure G2 doesn't fire for this one: protect a different username.
+    monkeypatch.setattr(settings, "seed_admin_username", "__none__")
+    other_admin = User(role=UserRole.ADMIN, discord_id="a2", discord_username="a2", is_active=True)
+    db_session.add(other_admin)
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{other_admin.id}/active", json={"is_active": False})
+    assert r.status_code == 409, r.text
+
+
+def test_cannot_suspend_seed_admin(client, db_session, monkeypatch):
+    # G2: the seeded 'admin' account is the break-glass account; protect it.
+    monkeypatch.setattr(settings, "seed_admin_username", "admin")
+    seed = db_session.query(User).filter_by(username="admin").one()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{seed.id}/active", json={"is_active": False})
+    assert r.status_code == 409, r.text
+    assert "break-glass" in r.json()["detail"].lower() or "admin" in r.json()["detail"].lower()
+
+
+def test_non_admin_cannot_suspend(client, db_session):
+    m = User(role=UserRole.MEMBER, discord_id="m3", discord_username="m", is_active=True)
+    db_session.add(m)
+    db_session.commit()
+    client.post("/api/auth/login", json={"password": "viewer-pw"})  # viewer, not admin
+    r = client.patch(f"/api/auth/users/{m.id}/active", json={"is_active": False})
+    assert r.status_code == 403, r.text

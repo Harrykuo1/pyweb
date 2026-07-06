@@ -65,6 +65,10 @@ class RoleUpdateRequest(BaseModel):
     role: UserRole
 
 
+class ActiveUpdateRequest(BaseModel):
+    is_active: bool
+
+
 class GuildConfigResponse(BaseModel):
     # The configured Discord guild id, or "" when unset (Discord login is
     # then effectively disabled until an admin sets it).
