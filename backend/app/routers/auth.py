@@ -16,6 +16,7 @@ from app.schemas import (
     LoginRequest,
     PendingLinkResponse,
     ResolvePendingLinkRequest,
+    RoleUpdateRequest,
     UpdatePasswordRequest,
     UpdateUsernameRequest,
     UserResponse,
@@ -211,6 +212,39 @@ def resolve_pending_link(
     user.discord_global_name = pending.discord_global_name
     user.pending_discord_username = None
     db.delete(pending)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+def update_user_role(
+    user_id: int,
+    payload: RoleUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> User:
+    # Only admin/member are assignable; the legacy shared VIEWER role is
+    # not something we promote individuals into.
+    if payload.role not in (UserRole.ADMIN, UserRole.MEMBER):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Role must be admin or member",
+        )
+    user = db.query(User).filter_by(id=user_id).one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    # Lockout guard: never demote the last remaining admin.
+    if user.role is UserRole.ADMIN and payload.role is not UserRole.ADMIN:
+        admin_count = db.query(User).filter_by(role=UserRole.ADMIN).count()
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot demote the last admin",
+            )
+    user.role = payload.role
     db.commit()
     db.refresh(user)
     return user

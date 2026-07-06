@@ -132,3 +132,58 @@ def test_resolve_pending_link_requires_admin(client, db_session):
     _seed_pending(db_session, "P1")
     r = client.post("/api/auth/pending-links/P1/resolve", json={"member_id": m.id})
     assert r.status_code == 401
+
+
+# ---------- assign user role ----------
+
+
+def test_assign_role_promotes_member_to_admin(client, db_session):
+    u, _ = _seed_member_account(db_session)
+    _login_admin(client)
+
+    r = client.patch(f"/api/auth/users/{u.id}/role", json={"role": "admin"})
+    assert r.status_code == 200
+    assert r.json()["role"] == "admin"
+
+    db_session.expire_all()
+    assert db_session.query(User).filter_by(id=u.id).one().role is UserRole.ADMIN
+
+
+def test_assign_role_demotes_admin_when_another_admin_exists(client, db_session):
+    # The fixture's "admin" plus this one = two admins, so demotion is allowed.
+    victim = User(role=UserRole.ADMIN, username="admin2", password_hash="h")
+    db_session.add(victim)
+    db_session.commit()
+    _login_admin(client)
+
+    r = client.patch(f"/api/auth/users/{victim.id}/role", json={"role": "member"})
+    assert r.status_code == 200
+    assert r.json()["role"] == "member"
+
+
+def test_assign_role_blocks_demoting_the_last_admin(client, db_session):
+    # Only the fixture admin exists; demoting them would lock everyone out.
+    admin = db_session.query(User).filter_by(role=UserRole.ADMIN).one()
+    _login_admin(client)
+
+    r = client.patch(f"/api/auth/users/{admin.id}/role", json={"role": "member"})
+    assert r.status_code == 409
+
+
+def test_assign_role_rejects_viewer_target_role(client, db_session):
+    u, _ = _seed_member_account(db_session)
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{u.id}/role", json={"role": "viewer"})
+    assert r.status_code == 422
+
+
+def test_assign_role_404_for_unknown_user(client):
+    _login_admin(client)
+    r = client.patch("/api/auth/users/99999/role", json={"role": "admin"})
+    assert r.status_code == 404
+
+
+def test_assign_role_requires_admin(client, db_session):
+    u, _ = _seed_member_account(db_session)
+    r = client.patch(f"/api/auth/users/{u.id}/role", json={"role": "admin"})
+    assert r.status_code == 401

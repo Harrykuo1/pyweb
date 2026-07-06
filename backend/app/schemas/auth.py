@@ -33,6 +33,10 @@ class ResolvePendingLinkRequest(BaseModel):
     member_id: int
 
 
+class RoleUpdateRequest(BaseModel):
+    role: UserRole
+
+
 class UpdateUsernameRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
 
