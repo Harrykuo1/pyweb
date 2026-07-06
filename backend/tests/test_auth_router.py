@@ -592,3 +592,26 @@ def test_non_admin_cannot_suspend(client, db_session):
     client.post("/api/auth/login", json={"password": "viewer-pw"})  # viewer, not admin
     r = client.patch(f"/api/auth/users/{m.id}/active", json={"is_active": False})
     assert r.status_code == 403, r.text
+
+
+def test_cannot_promote_suspended_account_to_admin(client, db_session):
+    suspended = User(
+        role=UserRole.MEMBER, discord_id="susp1", discord_username="s", is_active=False
+    )
+    db_session.add(suspended)
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{suspended.id}/role", json={"role": "admin"})
+    assert r.status_code == 409, r.text
+
+
+def test_can_still_promote_active_member_to_admin(client, db_session):
+    active = User(
+        role=UserRole.MEMBER, discord_id="act1", discord_username="a", is_active=True
+    )
+    db_session.add(active)
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(f"/api/auth/users/{active.id}/role", json={"role": "admin"})
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "admin"

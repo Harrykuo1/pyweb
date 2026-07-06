@@ -345,6 +345,14 @@ def update_user_role(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+    # A suspended account must be reactivated before it can hold admin: an
+    # admin role must always be active, otherwise the last-admin guard (which
+    # counts admins by role) could be tricked into stranding every admin.
+    if payload.role is UserRole.ADMIN and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Reactivate this account before promoting it to admin",
+        )
     # Lockout guard: never demote the last remaining admin.
     if user.role is UserRole.ADMIN and payload.role is not UserRole.ADMIN:
         admin_count = db.query(User).filter_by(role=UserRole.ADMIN).count()
