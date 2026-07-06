@@ -9,7 +9,11 @@ from app.core import audit_log, discord_link, discord_oauth, discord_register
 from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
-from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str, set_str
+from app.core.runtime_config import (
+    DISCORD_GUILD_ID_KEY,
+    resolve_guild_id,
+    set_str,
+)
 from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models import Member, PendingDiscordLink, RegistrationInvite, User, UserRole
@@ -165,7 +169,7 @@ def discord_callback(
 
     # Re-verify guild membership on every login: leaving the guild revokes
     # access immediately.
-    guild_id = get_str(db, DISCORD_GUILD_ID_KEY)
+    guild_id = resolve_guild_id(db)
     if not guild_id:
         return _oauth_error("guild_not_configured")
     membership = discord_oauth.check_guild_membership(token, guild_id)
@@ -346,7 +350,7 @@ def get_discord_guild(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> GuildConfigResponse:
-    return GuildConfigResponse(guild_id=get_str(db, DISCORD_GUILD_ID_KEY))
+    return GuildConfigResponse(guild_id=resolve_guild_id(db))
 
 
 @router.put("/discord/guild", response_model=GuildConfigResponse)

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     discord_client_id: str = ""
     discord_client_secret: str = ""
     discord_redirect_uri: str = ""
+    discord_guild_id: str = ""
 
     seed_admin_username: str
     seed_admin_password: str

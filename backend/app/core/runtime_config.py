@@ -15,6 +15,8 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+
 ConfigType = Literal["int"]
 
 
@@ -74,6 +76,12 @@ def get_str(db: Session, key: str, default: str = "") -> str:
 
     row = db.query(AppConfig).filter_by(key=key).one_or_none()
     return row.value if row is not None else default
+
+
+def resolve_guild_id(db: Session) -> str:
+    """The effective guild ID: the DB value if an admin has set one,
+    otherwise the env-provided bootstrap default."""
+    return get_str(db, DISCORD_GUILD_ID_KEY) or settings.discord_guild_id
 
 
 def set_str(db: Session, key: str, value: str) -> None:
