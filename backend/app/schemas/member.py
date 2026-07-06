@@ -9,6 +9,7 @@ class MemberCreate(BaseModel):
     institution: str = Field(min_length=1, max_length=128)
     position: str | None = Field(default=None, min_length=1, max_length=128)
     resume_md: str | None = None
+    discord_username: str | None = Field(default=None, max_length=64)
     joined_at: datetime | None = None
 
 
