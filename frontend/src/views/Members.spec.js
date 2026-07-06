@@ -404,6 +404,25 @@ describe('Members.vue', () => {
     expect(wrapper.find('[data-test="delete-button"]').exists()).toBe(false)
   })
 
+  it('member sees an edit button only on their own card, and no delete button', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 5, username: null, role: 'member', member_id: 1 }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+
+    // Alice (id=1) is this account's own card; Bob (id=2) is not.
+    expect(
+      wrapper.find('.member-anchor-1 [data-test="edit-button"]').exists(),
+    ).toBe(true)
+    expect(
+      wrapper.find('.member-anchor-2 [data-test="edit-button"]').exists(),
+    ).toBe(false)
+    // Deleting a whole member profile stays admin-only.
+    expect(wrapper.find('[data-test="delete-button"]').exists()).toBe(false)
+  })
+
   it('resume button is enabled for members with at least one resume format', async () => {
     const wrapper = await mountAsAdmin()
     const buttons = wrapper.findAll('[data-test="view-resume-button"]')
@@ -637,6 +656,26 @@ describe('Members.vue', () => {
 
     expect(wrapper.vm.photoDeleteDialogOpen).toBe(true)
     expect(wrapper.vm.photoDeleteError).toBe('密碼錯誤')
+  })
+
+  it('member removing own photo confirms then deletes without the password dialog', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 5, username: null, role: 'member', member_id: 1 }
+    vi.spyOn(membersApi, 'list').mockResolvedValue(sampleMembers)
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const del = vi.spyOn(membersApi, 'deletePhoto').mockResolvedValue()
+
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+
+    await wrapper.vm.requestPhotoDelete(sampleMembers[0])
+    await flushPromises()
+
+    // Bodyless delete (no password) and the admin password dialog never opens.
+    expect(del).toHaveBeenCalledWith(1)
+    expect(wrapper.vm.photoDeleteDialogOpen).toBe(false)
   })
 
   it("a MemberPhotoCell's request-upload event drives the parent's crop state", async () => {

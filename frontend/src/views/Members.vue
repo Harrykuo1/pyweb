@@ -6,6 +6,7 @@ import {
   ElIcon,
   ElInput,
   ElMessage,
+  ElMessageBox,
   ElTable,
   ElTableColumn,
   ElTooltip,
@@ -123,6 +124,38 @@ function openCreate() {
 function openEdit(member) {
   editingMember.value = { ...member }
   dialogOpen.value = true
+}
+
+// A card is self-editable by an admin (any card) or by the member who owns
+// it (their own card only). Deleting the whole member stays admin-only.
+function canEdit(member) {
+  if (auth.isAdmin) return true
+  return auth.myMemberId != null && member?.id === auth.myMemberId
+}
+
+// Photo removal: admins re-authenticate via the password dialog; an owning
+// member just confirms (no password) and deletes directly.
+async function requestPhotoDelete(member) {
+  if (auth.isActuallyAdmin) {
+    onPhotoDeleteRequest(member)
+    return
+  }
+  try {
+    await ElMessageBox.confirm('將移除你的大頭照，確定嗎？', '移除照片', {
+      type: 'warning',
+      confirmButtonText: '移除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return // user cancelled
+  }
+  try {
+    await membersApi.deletePhoto(member.id)
+    ElMessage.success('已移除照片')
+    reloadFresh()
+  } catch {
+    ElMessage.error('移除失敗，請稍後再試')
+  }
 }
 
 // Photo crop+upload and password-confirmed remove. Single dialogs are
@@ -352,9 +385,10 @@ onMounted(() => {
           <MemberPhotoCell
             :member="m"
             variant="card"
+            :can-manage="canEdit(m)"
             :uploading="uploadingPhotoMemberId === m.id"
             @request-upload="onPhotoUploadRequest"
-            @request-delete="onPhotoDeleteRequest"
+            @request-delete="requestPhotoDelete"
           />
 
           <div class="card-body">
@@ -399,7 +433,7 @@ onMounted(() => {
                 履歷
               </el-button>
 
-              <span v-if="auth.isAdmin" class="card-admin-actions">
+              <span v-if="canEdit(m)" class="card-admin-actions">
                 <el-button
                   size="small"
                   plain
@@ -409,6 +443,7 @@ onMounted(() => {
                   編輯
                 </el-button>
                 <el-button
+                  v-if="auth.isAdmin"
                   size="small"
                   type="danger"
                   plain
@@ -499,9 +534,10 @@ onMounted(() => {
         <template #default="{ row }">
           <MemberPhotoCell
             :member="row"
+            :can-manage="canEdit(row)"
             :uploading="uploadingPhotoMemberId === row.id"
             @request-upload="onPhotoUploadRequest"
-            @request-delete="onPhotoDeleteRequest"
+            @request-delete="requestPhotoDelete"
           />
         </template>
       </el-table-column>
@@ -577,13 +613,13 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column
-        v-if="auth.isAdmin"
+        v-if="auth.isAdmin || auth.myMemberId != null"
         label="操作"
         width="120"
         align="center"
       >
         <template #default="{ row }">
-          <el-tooltip content="編輯" placement="top">
+          <el-tooltip v-if="canEdit(row)" content="編輯" placement="top">
             <el-button
               size="small"
               plain
@@ -595,6 +631,7 @@ onMounted(() => {
             />
           </el-tooltip>
           <el-button
+            v-if="auth.isAdmin"
             size="small"
             type="danger"
             plain
@@ -618,6 +655,7 @@ onMounted(() => {
     <ResumeViewerDialog
       v-model="resumeOpen"
       :member="resumeMember"
+      :can-manage="canEdit(resumeMember)"
       @changed="reloadAndRebindResume"
     />
 

@@ -9,6 +9,7 @@ import {
   ElInput,
   ElInputNumber,
   ElMessage,
+  ElMessageBox,
   ElUpload,
 } from 'element-plus'
 import { Delete, Document, Loading, Upload } from '@element-plus/icons-vue'
@@ -16,6 +17,9 @@ import { Delete, Document, Loading, Upload } from '@element-plus/icons-vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 
 import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -129,9 +133,23 @@ function clearPdfChange() {
   pdfFile.value = null
 }
 
-function askDeletePdf() {
+async function askDeletePdf() {
   pdfDeleteError.value = ''
-  pdfDeleteDialogOpen.value = true
+  // Admins re-authenticate with a password; an owning member just confirms.
+  if (auth.isActuallyAdmin) {
+    pdfDeleteDialogOpen.value = true
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '將永久移除你的 PDF 履歷檔，此操作無法復原。',
+      '移除 PDF 履歷',
+      { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // user cancelled
+  }
+  await handleDeletePdf()
 }
 
 async function handleDeletePdf(password) {
@@ -276,7 +294,7 @@ defineExpose({ handlePdfChange, clearPdfChange })
           data-test="form-position"
         />
       </el-form-item>
-      <el-form-item label="入群時間">
+      <el-form-item v-if="auth.isActuallyAdmin" label="入群時間">
         <el-date-picker
           v-model="form.joined_at"
           type="date"

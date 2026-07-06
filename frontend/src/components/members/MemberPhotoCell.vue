@@ -10,7 +10,6 @@ import {
 import { Camera, Delete, Loading, UserFilled } from '@element-plus/icons-vue'
 
 import { membersApi } from '../../api/members'
-import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
   member: { type: Object, required: true },
@@ -24,11 +23,13 @@ const props = defineProps({
   // Set by the parent while this member's photo is mid-upload — drives
   // the dim veil + spinner overlay on top of the photo.
   uploading: { type: Boolean, default: false },
+  // Whether the viewer may change this member's photo: admins for any card,
+  // members for their own. Decided per-card by the parent (needs the member
+  // id), so it can't be read from the store here.
+  canManage: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['request-upload', 'request-delete'])
-
-const auth = useAuthStore()
 
 function photoSrc() {
   if (!props.member.has_photo) return null
@@ -92,7 +93,7 @@ function handleDeleteClick() {
       <span v-if="variant === 'card'" class="overlay-text">上傳中…</span>
     </div>
 
-    <div v-if="auth.isAdmin && !uploading" class="photo-actions">
+    <div v-if="canManage && !uploading" class="photo-actions">
       <el-upload
         :show-file-list="false"
         :auto-upload="false"

@@ -6,6 +6,7 @@ import {
   ElEmpty,
   ElIcon,
   ElMessage,
+  ElMessageBox,
   ElUpload,
 } from 'element-plus'
 import {
@@ -29,6 +30,10 @@ import { useAuthStore } from '../../stores/auth'
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
   member: { type: Object, default: null },
+  // Whether the viewer may upload/replace/delete this member's resume:
+  // admins for any card, members for their own. Per-card, so the parent
+  // decides it (can't be read from the store here).
+  canManage: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue', 'changed'])
@@ -137,9 +142,24 @@ const deletePdfDialogOpen = ref(false)
 const deletePdfSubmitting = ref(false)
 const deletePdfError = ref('')
 
-function askDeletePdf() {
+async function askDeletePdf() {
   deletePdfError.value = ''
-  deletePdfDialogOpen.value = true
+  // Admins re-authenticate with a password before this destructive action;
+  // an owning member just confirms (they have no password to type).
+  if (auth.isActuallyAdmin) {
+    deletePdfDialogOpen.value = true
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '將永久刪除你的 PDF 履歷檔，此操作無法復原。',
+      '刪除履歷 PDF',
+      { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // user cancelled
+  }
+  await handleDeletePdf()
 }
 
 async function handleDeletePdf(password) {
@@ -255,7 +275,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
     <template #footer>
       <div class="footer-row">
         <div class="footer-admin">
-          <template v-if="auth.isAdmin && member">
+          <template v-if="canManage && member">
             <el-upload
               :show-file-list="false"
               :auto-upload="false"

@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import MemberFormDialog from './MemberFormDialog.vue'
 
 vi.mock('element-plus', async (importOriginal) => {
@@ -286,6 +287,10 @@ describe('MemberFormDialog', () => {
   })
 
   it('handleDeletePdf on 422 keeps dialog open and surfaces 密碼錯誤', async () => {
+    // Admin path: askDeletePdf opens the password dialog, and a 422 leaves it
+    // open with the error message.
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
     vi.spyOn(membersApi, 'deleteResumePdf').mockRejectedValue(
       Object.assign(new Error('422'), { response: { status: 422 } }),
     )
@@ -309,6 +314,32 @@ describe('MemberFormDialog', () => {
     expect(wrapper.vm.pdfDeleteError).toBe('密碼錯誤')
     expect(wrapper.vm.pdfDeleteDialogOpen).toBe(true)
     expect(wrapper.vm.pdfDeletedThisSession).toBe(false)
+  })
+
+  it('member removing own PDF confirms then deletes without a password', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 5, username: null, role: 'member', member_id: 7 }
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
+
+    const wrapper = await mountDialog({
+      member: {
+        id: 7,
+        graduation_year: 2020,
+        real_name: 'Old',
+        institution: 'Old',
+        resume_md: null,
+        has_resume_pdf: true,
+      },
+    })
+    await wrapper.vm.askDeletePdf()
+    await flushPromises()
+
+    // No password dialog; deleted with a bodyless request.
+    expect(wrapper.vm.pdfDeleteDialogOpen).toBe(false)
+    expect(del).toHaveBeenCalledWith(7, undefined)
+    expect(wrapper.vm.pdfDeletedThisSession).toBe(true)
   })
 
   it('handlePdfChange rejects oversized files without setting state', async () => {
