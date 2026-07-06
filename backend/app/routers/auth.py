@@ -1,4 +1,5 @@
 import secrets
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -11,10 +12,11 @@ from app.core.rate_limit import limiter
 from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str
 from app.core.security import hash_password, verify_password
 from app.database import get_db
-from app.models import Member, PendingDiscordLink, User, UserRole
+from app.models import Member, PendingDiscordLink, RegistrationInvite, User, UserRole
 from app.schemas import (
     LoginRequest,
     PendingLinkResponse,
+    RegistrationInviteResponse,
     ResolvePendingLinkRequest,
     RoleUpdateRequest,
     UpdatePasswordRequest,
@@ -248,6 +250,45 @@ def update_user_role(
     db.commit()
     db.refresh(user)
     return user
+
+
+# One-time member-registration links. 48h, single-use. Shared to a new
+# member as /api/auth/discord/register?token=<token>.
+INVITE_TTL = timedelta(hours=48)
+
+
+@router.post(
+    "/registration-invites",
+    response_model=RegistrationInviteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_registration_invite(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> RegistrationInvite:
+    now = datetime.now(UTC)
+    invite = RegistrationInvite(
+        token=secrets.token_urlsafe(32),
+        created_by_user_id=admin.id,
+        created_at=now,
+        expires_at=now + INVITE_TTL,
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    return invite
+
+
+@router.get("/registration-invites", response_model=list[RegistrationInviteResponse])
+def list_registration_invites(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[RegistrationInvite]:
+    return (
+        db.query(RegistrationInvite)
+        .order_by(RegistrationInvite.created_at.desc())
+        .all()
+    )
 
 
 @router.patch("/users/{role}/username", response_model=UserResponse)

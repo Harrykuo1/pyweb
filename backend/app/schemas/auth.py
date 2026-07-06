@@ -33,6 +33,17 @@ class PendingLinkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RegistrationInviteResponse(BaseModel):
+    id: int
+    token: str
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None = None
+    used_by_user_id: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResolvePendingLinkRequest(BaseModel):
     member_id: int
 
