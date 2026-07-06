@@ -265,6 +265,59 @@ def test_create_member_provisions_linked_account_with_handle(client_factory, db_
     assert user.pending_discord_username == "Alice.H"
 
 
+def test_create_member_rejects_already_registered_discord_username(
+    client_factory, db_session
+):
+    client, login_as = client_factory
+    login_as("admin")
+    # A person already registered (linked account, discord_id set).
+    db_session.add(
+        User(
+            role=UserRole.MEMBER,
+            discord_id="123",
+            discord_username="Alice.H",
+        )
+    )
+    db_session.commit()
+
+    r = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Alice",
+            "institution": "NTU",
+            "discord_username": "alice.h",  # case-insensitive collision
+        },
+    )
+    assert r.status_code == 409, r.text
+    # No orphan member/account was created.
+    assert db_session.query(Member).count() == 0
+
+
+def test_create_member_allows_handle_matching_only_a_pending_account(
+    client_factory, db_session
+):
+    """A pending (not-yet-linked) account must NOT block creation — only a
+    fully registered account does."""
+    client, login_as = client_factory
+    login_as("admin")
+    db_session.add(
+        User(role=UserRole.MEMBER, pending_discord_username="alice.h")
+    )
+    db_session.commit()
+
+    r = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Alice",
+            "institution": "NTU",
+            "discord_username": "alice.h",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+
 def test_create_member_without_handle_still_provisions_account(client_factory, db_session):
     client, login_as = client_factory
     login_as("admin")

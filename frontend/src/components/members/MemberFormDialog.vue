@@ -226,6 +226,16 @@ async function handleSubmit() {
     if (isEdit.value) {
       const updated = await membersApi.update(props.member.id, payload)
       memberId = updated.id
+      // The navbar shows the member's real name from the auth session; if a
+      // member just renamed their own profile, refresh it so the chip updates
+      // without a page reload. Best-effort — never let it break the save flow.
+      if (auth.user && props.member.id === auth.user.member_id) {
+        try {
+          await auth.fetchMe()
+        } catch (err) {
+          // Navbar will catch up on the next natural reload.
+        }
+      }
     } else {
       const created = await membersApi.create(payload)
       memberId = created.id
@@ -249,6 +259,8 @@ async function handleSubmit() {
       else ElMessage.error('成員已儲存，但 PDF 處理失敗')
       emit('saved')
       close()
+    } else if (status === 409) {
+      ElMessage.error('此 Discord 使用者已註冊，不需重複建檔')
     } else if (status === 422) {
       ElMessage.error('輸入格式不正確')
     } else if (status === 403) {

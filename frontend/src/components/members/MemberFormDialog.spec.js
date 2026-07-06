@@ -185,6 +185,27 @@ describe('MemberFormDialog', () => {
     expect(create.mock.calls[0][0].discord_username).toBeUndefined()
   })
 
+  it('surfaces a specific message when create returns 409 (already registered)', async () => {
+    const { ElMessage } = await import('element-plus')
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'create').mockRejectedValue(
+      Object.assign(new Error('409'), { response: { status: 409 } }),
+    )
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'institution', 'SWE')
+    await wrapper.find('[data-test="form-discord-username"]').setValue('alice.h')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith(
+      '此 Discord 使用者已註冊，不需重複建檔',
+    )
+  })
+
   it('does not render the Discord username input in edit mode', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
@@ -202,6 +223,52 @@ describe('MemberFormDialog', () => {
     expect(
       wrapper.find('[data-test="form-discord-username"]').exists(),
     ).toBe(false)
+  })
+
+  it('refreshes the auth session after editing your own profile', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 7, username: null, role: 'member', member_id: 9 }
+    const fetchMe = vi.spyOn(auth, 'fetchMe').mockResolvedValue()
+    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+      },
+    })
+
+    setVmValue(wrapper, 'real_name', 'Eve Renamed')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMe).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not refresh the auth session when editing someone else', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin', member_id: 3 }
+    const fetchMe = vi.spyOn(auth, 'fetchMe').mockResolvedValue()
+    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+      },
+    })
+
+    setVmValue(wrapper, 'real_name', 'Eve Renamed')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMe).not.toHaveBeenCalled()
   })
 
   it('edit flow calls membersApi.update with the member id', async () => {

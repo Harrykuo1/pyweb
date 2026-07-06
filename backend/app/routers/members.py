@@ -12,6 +12,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -154,6 +155,24 @@ def create_member(
     db: Session = Depends(get_db),
     _: object = Depends(require_admin),
 ) -> Member:
+    handle = normalize_discord_handle(payload.discord_username)
+    # Guard against a duplicate record for someone already registered: if the
+    # handle already belongs to a linked account, the person is in the system
+    # (via login or invite) and shouldn't be pre-created again.
+    if handle is not None:
+        claimed = (
+            db.query(User.id)
+            .filter(
+                User.discord_id.isnot(None),
+                func.lower(User.discord_username) == handle.lower(),
+            )
+            .first()
+        )
+        if claimed is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A registered account already uses this Discord username",
+            )
     member = Member(
         graduation_year=payload.graduation_year,
         real_name=payload.real_name,
@@ -166,10 +185,7 @@ def create_member(
     # the admin-entered handle is parked in pending_discord_username, exactly
     # mirroring the migration backfill, so the first-login bridge auto-binds
     # (or queues) the account on the member's first Discord OAuth login.
-    account = User(
-        role=UserRole.MEMBER,
-        pending_discord_username=normalize_discord_handle(payload.discord_username),
-    )
+    account = User(role=UserRole.MEMBER, pending_discord_username=handle)
     db.add(account)
     db.flush()
     member.user_id = account.id
