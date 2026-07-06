@@ -20,7 +20,8 @@ const sample = {
   job_month: 4,
   company: 'Acme',
   kind: 'internship',
-  real_name: 'Alice',
+  display_name: 'Alice',
+  status: 'accepted',
   experience_md: '## interview content',
   timeline_md: '| date | event |\n|---|---|\n| 5/1 | apply |',
   created_at: '2025-05-01T00:00:00+00:00',
@@ -60,12 +61,29 @@ describe('JobDetailDialog — header', () => {
     expect(wrapper.text()).toContain('2025/04 求職')
   })
 
-  it('shows 匿名 styling when real_name is null', async () => {
+  it('shows 匿名 styling when display_name is null', async () => {
     const wrapper = await mountDialog({
-      job: { ...sample, real_name: null },
+      job: { ...sample, display_name: null },
     })
     expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
+  })
+
+  it('shows a status pill for non-accepted posts and the rejection reason', async () => {
+    const accepted = await mountDialog()
+    expect(accepted.find('[data-test="detail-status-pending"]').exists()).toBe(
+      false,
+    )
+
+    const rejected = await mountDialog({
+      job: { ...sample, status: 'rejected', review_reason: '內容不足' },
+    })
+    expect(
+      rejected.find('[data-test="detail-status-rejected"]').text(),
+    ).toContain('已退回')
+    expect(
+      rejected.find('[data-test="detail-reject-reason"]').text(),
+    ).toContain('內容不足')
   })
 
   it('themes header by kind', async () => {

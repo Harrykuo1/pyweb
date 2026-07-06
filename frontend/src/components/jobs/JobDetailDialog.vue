@@ -36,6 +36,14 @@ const KIND_META = {
   fulltime: { label: '正職', cls: 'kind-fulltime' },
 }
 
+// Only non-accepted posts show a status pill (accepted = normal public
+// state). The owner/admin are the only ones the backend ever sends a
+// non-accepted post to.
+const STATUS_META = {
+  pending: { label: '審核中', cls: 'is-pending' },
+  rejected: { label: '已退回', cls: 'is-rejected' },
+}
+
 const tab = ref('experience')
 
 // Bumped on every dialog open so the attachments viewer's :key
@@ -128,6 +136,14 @@ function formatJobYearMonth(j) {
           >
             {{ job.category }}
           </span>
+          <span
+            v-if="STATUS_META[job.status]"
+            class="status-pill"
+            :class="STATUS_META[job.status].cls"
+            :data-test="`detail-status-${job.status}`"
+          >
+            {{ STATUS_META[job.status].label }}
+          </span>
         </div>
         <h2 class="detail-company" data-test="detail-company">
           <el-icon class="company-icon" :size="18"><OfficeBuilding /></el-icon>
@@ -136,11 +152,13 @@ function formatJobYearMonth(j) {
         <div class="detail-meta">
           <span
             class="meta-name"
-            :class="{ 'is-anonymous': !job.real_name }"
-            :data-test="job.real_name ? 'detail-real-name' : 'detail-anonymous'"
+            :class="{ 'is-anonymous': !job.display_name }"
+            :data-test="
+              job.display_name ? 'detail-real-name' : 'detail-anonymous'
+            "
           >
             <el-icon :size="13"><User /></el-icon>
-            {{ job.real_name || '匿名' }}
+            {{ job.display_name || '匿名' }}
           </span>
           <span class="meta-year">
             <el-icon :size="13"><School /></el-icon>
@@ -158,7 +176,16 @@ function formatJobYearMonth(j) {
       <el-empty description="無資料" />
     </div>
 
-    <el-tabs v-else v-model="tab" class="detail-tabs">
+    <template v-else>
+      <p
+        v-if="job.status === 'rejected' && job.review_reason"
+        class="reject-banner"
+        data-test="detail-reject-reason"
+      >
+        退回原因：{{ job.review_reason }}
+      </p>
+
+      <el-tabs v-model="tab" class="detail-tabs">
       <el-tab-pane label="心得" name="experience">
         <div class="md-frame" data-test="detail-experience">
           <MdPreview
@@ -203,7 +230,8 @@ function formatJobYearMonth(j) {
           />
         </div>
       </el-tab-pane>
-    </el-tabs>
+      </el-tabs>
+    </template>
 
     <template #footer>
       <div class="footer-row">
@@ -282,6 +310,35 @@ function formatJobYearMonth(j) {
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.06);
   color: var(--ink-700);
+}
+
+.status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pill.is-pending {
+  background: var(--accent-warm-soft, #fef3c7);
+  color: var(--accent-warm-ink, #b45309);
+}
+
+.status-pill.is-rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.reject-banner {
+  margin: 4px 0 0;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #b91c1c;
 }
 
 .kind-dot {

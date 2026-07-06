@@ -9,7 +9,8 @@ const baseJob = {
   job_month: 5,
   company: 'Acme',
   kind: 'internship',
-  real_name: 'Alice',
+  display_name: 'Alice',
+  status: 'accepted',
   category: 'Backend',
   created_at: '2024-05-01T00:00:00+00:00',
 }
@@ -30,10 +31,24 @@ describe('JobRecordCard', () => {
     expect(wrapper.find('[data-test="card-category"]').text()).toBe('Backend')
   })
 
-  it('falls back to 匿名 and the anonymous data-test when real_name is null', () => {
-    const wrapper = mountCard({ ...baseJob, real_name: null })
+  it('falls back to 匿名 and the anonymous data-test when display_name is null', () => {
+    const wrapper = mountCard({ ...baseJob, display_name: null })
     expect(wrapper.find('[data-test="anonymous"]').text()).toContain('匿名')
     expect(wrapper.find('[data-test="real-name"]').exists()).toBe(false)
+  })
+
+  it('shows a status pill only for non-accepted posts', () => {
+    expect(mountCard().find('[data-test="status-pending"]').exists()).toBe(false)
+    expect(
+      mountCard({ ...baseJob, status: 'pending' })
+        .find('[data-test="status-pending"]')
+        .text(),
+    ).toContain('審核中')
+    expect(
+      mountCard({ ...baseJob, status: 'rejected' })
+        .find('[data-test="status-rejected"]')
+        .text(),
+    ).toContain('已退回')
   })
 
   it('shows only the year when job_month is missing', () => {
