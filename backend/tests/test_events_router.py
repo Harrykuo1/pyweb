@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import Event, EventPhoto, EventTag, User, UserRole
+from app.models import Event, EventPhoto, EventTag, PostStatus, User, UserRole
 
 
 @pytest.fixture
@@ -56,6 +56,7 @@ def _seed_event(
         title=title,
         event_date=event_date,
         location=location,
+        status=PostStatus.ACCEPTED,
         created_at=datetime(2025, 1, created_day, tzinfo=UTC),
     )
     for name in tags:
