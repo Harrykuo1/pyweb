@@ -1,4 +1,4 @@
-from app.core.discord_link import link_or_queue
+from app.core.discord_link import link_or_queue, normalize_discord_handle
 from app.core.discord_oauth import DiscordIdentity
 from app.models import Member, PendingDiscordLink, User, UserRole
 
@@ -72,3 +72,18 @@ def test_ambiguous_multiple_candidates_queues_instead_of_guessing(db_session):
     )
     assert result is None
     assert db_session.query(PendingDiscordLink).filter_by(discord_id="D5").count() == 1
+
+
+def test_normalize_strips_whitespace_and_at():
+    assert normalize_discord_handle("  @Cool.Name  ") == "Cool.Name"
+
+
+def test_normalize_plain_handle_unchanged():
+    assert normalize_discord_handle("somehandle") == "somehandle"
+
+
+def test_normalize_empty_becomes_none():
+    assert normalize_discord_handle("") is None
+    assert normalize_discord_handle("   ") is None
+    assert normalize_discord_handle("@") is None
+    assert normalize_discord_handle(None) is None

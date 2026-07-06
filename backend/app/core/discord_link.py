@@ -23,6 +23,16 @@ from app.core.discord_oauth import DiscordIdentity
 from app.models import PendingDiscordLink, User
 
 
+def normalize_discord_handle(raw: str | None) -> str | None:
+    """Clean an admin-entered Discord username for use as a pending link
+    target: trim, drop a leading '@', empty -> None. Case is preserved;
+    matching against the live username is case-insensitive."""
+    if raw is None:
+        return None
+    cleaned = raw.strip().lstrip("@").strip()
+    return cleaned or None
+
+
 def link_or_queue(db: Session, identity: DiscordIdentity) -> User | None:
     """Try to bind this Discord identity to a waiting pre-created account.
 
