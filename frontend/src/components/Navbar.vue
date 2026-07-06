@@ -17,6 +17,26 @@ import { useOutsideClick } from '../composables/useOutsideClick'
 const auth = useAuthStore()
 const router = useRouter()
 
+// Discord accounts have no username, so fall back to the Discord display
+// name / handle. Keeps the chip from crashing on a null username.
+const displayName = computed(() => {
+  const u = auth.user
+  if (!u) return ''
+  return u.discord_global_name || u.discord_username || u.username || '成員'
+})
+
+const avatarInitial = computed(() => {
+  const name = displayName.value
+  return name ? name.charAt(0).toUpperCase() : '?'
+})
+
+const roleLabel = computed(() => {
+  const role = auth.user?.role
+  if (role === 'admin') return '管理員'
+  if (role === 'member') return '成員'
+  return '檢視者'
+})
+
 // el-switch's v-model needs a writable ref-like — bridge the store action
 // through a computed setter.
 const previewAsViewer = computed({
@@ -123,14 +143,14 @@ useOutsideClick({
             @click="toggleUserMenu"
           >
             <span class="user-chip__avatar" aria-hidden="true">
-              {{ auth.user.username.charAt(0).toUpperCase() }}
+              {{ avatarInitial }}
             </span>
-            <span class="user-chip__name">{{ auth.user.username }}</span>
+            <span class="user-chip__name">{{ displayName }}</span>
             <span
               class="user-chip__role"
               :data-role="auth.isActuallyAdmin ? 'admin' : 'viewer'"
             >
-              {{ auth.isActuallyAdmin ? '管理員' : '檢視者' }}
+              {{ roleLabel }}
             </span>
             <el-icon class="user-chip__caret">
               <ArrowDown />
@@ -147,10 +167,10 @@ useOutsideClick({
             >
               <header class="user-menu__header">
                 <span class="user-menu__avatar" aria-hidden="true">
-                  {{ auth.user.username.charAt(0).toUpperCase() }}
+                  {{ avatarInitial }}
                 </span>
                 <div class="user-menu__profile">
-                  <div class="user-menu__name">{{ auth.user.username }}</div>
+                  <div class="user-menu__name">{{ displayName }}</div>
                   <div class="user-menu__role-row">
                     <el-tag
                       :type="auth.isActuallyAdmin ? 'danger' : 'info'"
@@ -158,7 +178,7 @@ useOutsideClick({
                       effect="light"
                       round
                     >
-                      {{ auth.isActuallyAdmin ? '管理員' : '檢視者' }}
+                      {{ roleLabel }}
                     </el-tag>
                   </div>
                 </div>

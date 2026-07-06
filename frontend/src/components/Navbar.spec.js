@@ -94,6 +94,44 @@ describe('Navbar.vue', () => {
     expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
   })
 
+  it('renders a Discord member (null username) without crashing', () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 3,
+      username: null,
+      role: 'member',
+      discord_global_name: 'Harry',
+      discord_username: 'harrykuo1',
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const trigger = wrapper.find('[data-test="user-menu-trigger"]')
+    expect(trigger.exists()).toBe(true)
+    expect(trigger.text()).toContain('Harry')
+    // Avatar initial comes from the display name, not a crash on null.
+    expect(trigger.find('.user-chip__avatar').text()).toBe('H')
+    expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('成員')
+    // Members get no admin-only affordances.
+    expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)
+  })
+
+  it('falls back to discord_username when global_name is absent', () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 4,
+      username: null,
+      role: 'member',
+      discord_global_name: null,
+      discord_username: 'handle_only',
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(wrapper.find('[data-test="user-menu-trigger"]').text()).toContain(
+      'handle_only',
+    )
+  })
+
   it('toggles the dropdown open and closed when the chip is clicked', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
