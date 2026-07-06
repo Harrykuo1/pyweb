@@ -225,8 +225,21 @@ def me(
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
-) -> list[User]:
-    return db.query(User).order_by(User.id).all()
+) -> list[UserResponse]:
+    # Left-join the member profile so backfilled accounts with no username or
+    # Discord handle still surface a human name in the admin list.
+    rows = (
+        db.query(User, Member.real_name)
+        .outerjoin(Member, Member.user_id == User.id)
+        .order_by(User.id)
+        .all()
+    )
+    result: list[UserResponse] = []
+    for user, real_name in rows:
+        resp = UserResponse.model_validate(user)
+        resp.member_name = real_name
+        result.append(resp)
+    return result
 
 
 @router.get("/pending-links", response_model=list[PendingLinkResponse])

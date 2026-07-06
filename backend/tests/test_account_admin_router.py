@@ -60,6 +60,26 @@ def _seed_pending(db, discord_id="P1"):
     return row
 
 
+# ---------- list users ----------
+
+
+def test_list_users_requires_admin(client):
+    assert client.get("/api/auth/users").status_code == 401
+
+
+def test_list_users_includes_linked_member_name(client, db_session):
+    _seed_member_account(db_session, real_name="王小明")
+    _login_admin(client)
+
+    r = client.get("/api/auth/users")
+    assert r.status_code == 200
+    by_role = {u["role"]: u for u in r.json()}
+    # The seeded admin has no member profile -> member_name is null.
+    assert by_role["admin"]["member_name"] is None
+    # The member account surfaces its profile's real name for the admin list.
+    assert by_role["member"]["member_name"] == "王小明"
+
+
 # ---------- list pending links ----------
 
 

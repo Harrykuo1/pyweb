@@ -25,6 +25,10 @@ class UserResponse(BaseModel):
     # The id of this account's own member profile, or null. Lets the frontend
     # tell which member card is "mine" so it can offer self-edit affordances.
     member_id: int | None = None
+    # The linked member's real name, when this account has a profile. Lets the
+    # admin user list identify backfilled accounts that have no username/handle
+    # yet ("#4") by who they actually are.
+    member_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
