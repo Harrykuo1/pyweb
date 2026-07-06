@@ -55,7 +55,22 @@ export function useUserRoles() {
     }
   }
 
+  async function setActive(user, isActive) {
+    savingId.value = user.id
+    try {
+      const updated = await authApi.setUserActive(user.id, isActive)
+      users.value = users.value.map((u) => (u.id === updated.id ? updated : u))
+      ElMessage.success(isActive ? '已復權' : '已停權')
+    } catch (err) {
+      // Backend answers 409 when suspending an admin; extractError surfaces
+      // that detail so the toast explains why it was rejected.
+      ElMessage.error(extractError(err, isActive ? '復權失敗' : '停權失敗'))
+    } finally {
+      savingId.value = null
+    }
+  }
+
   onMounted(load)
 
-  return { loading, users, savingId, displayName, load, changeRole }
+  return { loading, users, savingId, displayName, load, changeRole, setActive }
 }

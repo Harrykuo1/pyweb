@@ -157,4 +157,43 @@ describe('useUserRoles', () => {
     await a.changeRole(a.users.value[0], 'admin')
     expect(spy).not.toHaveBeenCalled()
   })
+
+  it('setActive patches the row and toasts', async () => {
+    vi.spyOn(authApi, 'listUsers').mockResolvedValue([
+      { id: 5, role: 'member', discord_username: 'm', is_active: true },
+    ])
+    const updated = {
+      id: 5,
+      role: 'member',
+      discord_username: 'm',
+      is_active: false,
+    }
+    const setUserActive = vi
+      .spyOn(authApi, 'setUserActive')
+      .mockResolvedValue(updated)
+    const { get } = mountUserRoles()
+    await flushPromises()
+    const a = get()
+
+    await a.setActive({ id: 5, role: 'member', is_active: true }, false)
+
+    expect(setUserActive).toHaveBeenCalledWith(5, false)
+    expect(a.users.value.find((u) => u.id === 5).is_active).toBe(false)
+    expect(ElMessage.success).toHaveBeenCalledWith('已停權')
+    expect(a.savingId.value).toBeNull()
+  })
+
+  it('setActive surfaces the backend detail on failure', async () => {
+    const { get } = mountUserRoles()
+    await flushPromises()
+    const a = get()
+    vi.spyOn(authApi, 'setUserActive').mockRejectedValue({
+      response: { status: 409, data: { detail: 'Cannot suspend an admin' } },
+    })
+
+    await a.setActive(a.users.value[0], false)
+
+    expect(ElMessage.error).toHaveBeenCalledWith('Cannot suspend an admin')
+    expect(a.savingId.value).toBeNull()
+  })
 })

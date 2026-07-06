@@ -26,6 +26,13 @@ export const authApi = {
     const { data } = await client.patch(`/auth/users/${userId}/role`, { role })
     return data
   },
+  // Admin: suspend/reactivate an account. Backend rejects suspending an admin.
+  async setUserActive(userId, isActive) {
+    const { data } = await client.patch(`/auth/users/${userId}/active`, {
+      is_active: isActive,
+    })
+    return data
+  },
   // Admin: one-time registration invite links (48h, single-use).
   async listRegistrationInvites() {
     const { data } = await client.get('/auth/registration-invites')

@@ -1,10 +1,18 @@
 <script setup>
-import { ElEmpty, ElOption, ElSelect, ElSkeleton, ElTag } from 'element-plus'
+import {
+  ElButton,
+  ElEmpty,
+  ElOption,
+  ElSelect,
+  ElSkeleton,
+  ElTag,
+} from 'element-plus'
 
 import { useUserRoles } from '../../composables/useUserRoles'
 
 // Logic lives in the composable; this component is the presentation surface.
-const { loading, users, savingId, displayName, changeRole } = useUserRoles()
+const { loading, users, savingId, displayName, changeRole, setActive } =
+  useUserRoles()
 
 // Every known role gets a tag — including viewer, which is display-only and
 // never offered as a settable option below.
@@ -32,6 +40,7 @@ defineExpose({ users })
         v-for="u in users"
         :key="u.id"
         class="role-card"
+        :class="{ 'is-suspended': !u.is_active }"
         data-test="user-role-row"
       >
         <div class="role-card__identity">
@@ -49,6 +58,17 @@ defineExpose({ users })
           round
         >
           {{ tagFor(u.role).label }}
+        </el-tag>
+
+        <el-tag
+          v-if="!u.is_active"
+          type="info"
+          size="small"
+          effect="plain"
+          round
+          :data-test="`suspended-tag-${u.id}`"
+        >
+          已停權
         </el-tag>
 
         <!-- The legacy shared viewer account predates the role model and is
@@ -72,6 +92,28 @@ defineExpose({ users })
           <el-option label="管理員" value="admin" />
           <el-option label="成員" value="member" />
         </el-select>
+
+        <el-button
+          v-if="!u.is_active"
+          size="small"
+          plain
+          :loading="savingId === u.id"
+          :data-test="`reactivate-${u.id}`"
+          @click="setActive(u, true)"
+        >
+          復權
+        </el-button>
+        <el-button
+          v-else-if="u.role !== 'admin'"
+          size="small"
+          type="warning"
+          plain
+          :loading="savingId === u.id"
+          :data-test="`suspend-${u.id}`"
+          @click="setActive(u, false)"
+        >
+          停權
+        </el-button>
       </li>
     </ul>
   </div>
@@ -111,6 +153,11 @@ defineExpose({ users })
 .role-card:hover {
   border-color: rgba(99, 102, 241, 0.22);
   box-shadow: var(--shadow-md);
+}
+
+/* Suspended accounts read as dimmed so an admin can scan the list at a glance. */
+.role-card.is-suspended {
+  opacity: 0.6;
 }
 
 .role-card__identity {
