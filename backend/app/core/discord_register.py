@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.discord_link import bind_identity, pending_account_candidates
 from app.core.discord_oauth import DiscordIdentity
 from app.models import RegistrationInvite, User, UserRole
 
@@ -39,6 +40,20 @@ def register_via_invite(
     already = db.query(User).filter_by(discord_id=identity.id).one_or_none()
     if already is not None:
         return None, "already_registered"
+
+    # If an admin already pre-created this member (a unique pending-handle
+    # match), claim that existing account instead of minting a duplicate.
+    # Guards against two member records for one person when both an invite
+    # and a pre-provisioned account exist.
+    candidates = pending_account_candidates(db, identity.username)
+    if len(candidates) == 1:
+        user = candidates[0]
+        bind_identity(user, identity)
+        invite.used_at = now
+        invite.used_by_user_id = user.id
+        db.commit()
+        db.refresh(user)
+        return user, None
 
     user = User(
         role=UserRole.MEMBER,

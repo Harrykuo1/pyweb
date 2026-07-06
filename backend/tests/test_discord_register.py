@@ -81,3 +81,46 @@ def test_register_rejects_already_registered_identity(db_session):
     user, err = register_via_invite(db_session, ident, "valid")
     assert user is None
     assert err == "already_registered"
+
+
+def test_register_claims_matching_pre_provisioned_account(db_session):
+    """Invite + a pre-created account for the same handle -> claim it,
+    don't mint a duplicate."""
+    _seed_invite(db_session)
+    pre = User(role=UserRole.MEMBER, pending_discord_username="alice")
+    db_session.add(pre)
+    db_session.commit()
+    pre_id = pre.id
+    ident = DiscordIdentity(id="NEW", username="Alice", global_name="Alice")
+
+    user, err = register_via_invite(db_session, ident, "valid")
+
+    assert err is None
+    assert user is not None
+    assert user.id == pre_id  # same account, no duplicate minted
+    assert user.discord_id == "NEW"
+    assert user.pending_discord_username is None
+    assert db_session.query(User).count() == 1
+    invite = db_session.query(RegistrationInvite).filter_by(token="valid").one()
+    assert invite.used_at is not None
+    assert invite.used_by_user_id == pre_id
+
+
+def test_register_mints_new_account_when_pending_match_is_ambiguous(db_session):
+    _seed_invite(db_session)
+    db_session.add_all(
+        [
+            User(role=UserRole.MEMBER, pending_discord_username="alice"),
+            User(role=UserRole.MEMBER, pending_discord_username="alice"),
+        ]
+    )
+    db_session.commit()
+    ident = DiscordIdentity(id="NEW", username="alice", global_name=None)
+
+    user, err = register_via_invite(db_session, ident, "valid")
+
+    # Ambiguous -> can't safely claim; a fresh account is created instead.
+    assert err is None
+    assert user.discord_id == "NEW"
+    assert user.pending_discord_username is None
+    assert db_session.query(User).count() == 3

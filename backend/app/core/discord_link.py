@@ -33,27 +33,40 @@ def normalize_discord_handle(raw: str | None) -> str | None:
     return cleaned or None
 
 
+def pending_account_candidates(db: Session, username: str) -> list[User]:
+    """Pre-created, not-yet-linked accounts whose pending handle matches
+    `username` case-insensitively. A unique hit is safe to bind; more than
+    one is ambiguous."""
+    return (
+        db.query(User)
+        .filter(
+            User.discord_id.is_(None),
+            func.lower(User.pending_discord_username) == username.lower(),
+        )
+        .all()
+    )
+
+
+def bind_identity(user: User, identity: DiscordIdentity) -> None:
+    """Permanently attach a verified Discord identity to a waiting account
+    and clear the one-time pending handle. Does not commit."""
+    user.discord_id = identity.id
+    user.discord_username = identity.username
+    user.discord_global_name = identity.global_name
+    user.pending_discord_username = None
+
+
 def link_or_queue(db: Session, identity: DiscordIdentity) -> User | None:
     """Try to bind this Discord identity to a waiting pre-created account.
 
     Returns the now-linked User (caller logs them in) on a unique handle
     match; returns None after queueing a PendingDiscordLink otherwise.
     """
-    candidates = (
-        db.query(User)
-        .filter(
-            User.discord_id.is_(None),
-            func.lower(User.pending_discord_username) == identity.username.lower(),
-        )
-        .all()
-    )
+    candidates = pending_account_candidates(db, identity.username)
 
     if len(candidates) == 1:
         user = candidates[0]
-        user.discord_id = identity.id
-        user.discord_username = identity.username
-        user.discord_global_name = identity.global_name
-        user.pending_discord_username = None
+        bind_identity(user, identity)
         db.commit()
         db.refresh(user)
         return user
