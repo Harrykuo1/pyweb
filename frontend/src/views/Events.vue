@@ -6,6 +6,7 @@ import {
   ElIcon,
   ElInput,
   ElMessage,
+  ElMessageBox,
   ElOption,
   ElSelect,
 } from 'element-plus'
@@ -19,6 +20,7 @@ import {
   Plus,
   Refresh,
   Search,
+  User,
 } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
@@ -44,6 +46,13 @@ import { useUrlQuerySync } from '../composables/useUrlQuerySync'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
+// Only non-accepted events show a status pill; owners / admins are the only
+// ones the backend sends a non-accepted event to.
+const STATUS_META = {
+  pending: { label: '審核中', cls: 'is-pending' },
+  rejected: { label: '已退回', cls: 'is-rejected' },
+}
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -260,6 +269,41 @@ const {
   },
 })
 
+// Admins and members can post (viewers can't). Based on the real role so an
+// admin previewing as a member still sees the affordance a member has.
+const canPost = computed(() =>
+  ['admin', 'member'].includes(auth.actualRole),
+)
+
+// Admins re-authenticate with a password (backend requires it); an owning
+// member deletes their own event after a plain confirm, with no password body.
+async function requestDeleteEvent(ev) {
+  if (!ev) return
+  if (auth.isActuallyAdmin) {
+    askDelete(ev)
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '將永久刪除這個活動，包含所有照片與記錄，此操作無法復原。',
+      '刪除活動',
+      { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // user cancelled
+  }
+  try {
+    await eventsApi.remove(ev.id)
+    ElMessage.success(`已刪除「${ev.title}」`)
+    if (detailOpen.value && detailEvent.value?.id === ev.id) {
+      detailOpen.value = false
+    }
+    reloadFresh()
+  } catch {
+    ElMessage.error('刪除失敗，請稍後再試')
+  }
+}
+
 function onSaved() {
   reloadFresh()
 }
@@ -298,7 +342,7 @@ onMounted(loadItems)
               重新整理
             </el-button>
             <el-button
-              v-if="auth.isAdmin"
+              v-if="canPost"
               class="hero-btn hero-btn--solid"
               :icon="Plus"
               data-test="add-event-button"
@@ -502,11 +546,21 @@ onMounted(loadItems)
 
               <!-- Zone 2: editorial body -->
               <div class="tl-body">
-                <span
-                  v-if="gi === 0 && ei === 0 && sortOrder === 'desc'"
-                  class="tl-lead-kicker"
-                  >最新</span
-                >
+                <div class="tl-kicker-row">
+                  <span
+                    v-if="gi === 0 && ei === 0 && sortOrder === 'desc'"
+                    class="tl-lead-kicker"
+                    >最新</span
+                  >
+                  <span
+                    v-if="STATUS_META[ev.status]"
+                    class="tl-status"
+                    :class="STATUS_META[ev.status].cls"
+                    :data-test="`card-status-${ev.status}`"
+                  >
+                    {{ STATUS_META[ev.status].label }}
+                  </span>
+                </div>
                 <div v-if="ev.tags?.length" class="tl-meta-row">
                   <div class="tl-tags">
                     <span
@@ -519,6 +573,14 @@ onMounted(loadItems)
                   </div>
                 </div>
                 <h3 class="tl-title">{{ ev.title }}</h3>
+                <p
+                  v-if="ev.author_display_name"
+                  class="tl-author"
+                  data-test="card-author"
+                >
+                  <el-icon :size="12"><User /></el-icon>
+                  {{ ev.author_display_name }}
+                </p>
                 <p v-if="excerpt(ev.description_md)" class="tl-excerpt">
                   {{ excerpt(ev.description_md) }}
                 </p>
@@ -558,7 +620,7 @@ onMounted(loadItems)
       </div>
       <p class="empty-text">還沒有任何活動紀錄</p>
       <el-button
-        v-if="auth.isAdmin && total === 0"
+        v-if="canPost && total === 0"
         type="primary"
         :icon="Plus"
         @click="openCreate"
@@ -574,12 +636,12 @@ onMounted(loadItems)
     >
       <template #footer-extra>
         <el-button
-          v-if="auth.isAdmin && detailEvent"
+          v-if="detailEvent?.can_edit"
           type="danger"
           plain
           :icon="Delete"
           data-test="detail-delete-button"
-          @click="askDelete(detailEvent)"
+          @click="requestDeleteEvent(detailEvent)"
         >
           刪除整場活動
         </el-button>
@@ -1441,11 +1503,47 @@ onMounted(loadItems)
   box-shadow: 0 2px 6px -1px rgba(244, 63, 94, 0.4);
 }
 
+.tl-kicker-row {
+  order: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tl-status {
+  align-self: flex-start;
+  margin-bottom: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.tl-status.is-pending {
+  background: var(--accent-warm-soft, #fef3c7);
+  color: var(--accent-warm-ink, #b45309);
+}
+.tl-status.is-rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .tl-title {
   order: 1;
 }
-.tl-meta-row {
+.tl-author {
   order: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.tl-meta-row {
+  order: 3;
   margin-top: 8px;
 }
 .tl-loc {

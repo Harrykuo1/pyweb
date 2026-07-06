@@ -77,6 +77,12 @@ const sample = [
   },
 ]
 
+// The same rows as the backend returns them to someone allowed to edit
+// (admin, or the owning member): can_edit drives the edit/delete affordances.
+const ownedSample = sample.map((e) => ({ ...e, can_edit: true }))
+
+let pendingTeardowns = []
+
 beforeEach(() => {
   setActivePinia(createPinia())
   routeQuery.value = {}
@@ -85,6 +91,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  for (const w of pendingTeardowns) w.unmount()
+  pendingTeardowns = []
   vi.restoreAllMocks()
 })
 
@@ -97,6 +105,7 @@ async function mountPage(
   auth.user = { id: 1, username: 'a', role }
   vi.spyOn(eventsApi, 'list').mockResolvedValue({ items, total })
   const wrapper = mount(Events)
+  pendingTeardowns.push(wrapper)
   await flushPromises()
   return wrapper
 }
@@ -143,9 +152,12 @@ describe('Events — filters', () => {
 })
 
 describe('Events — admin', () => {
-  it('shows the add button only for admins', async () => {
+  it('hides the add button for viewers but shows it for members and admins', async () => {
     const viewer = await mountPage(sample, 2, 'viewer')
     expect(viewer.find('[data-test="add-event-button"]').exists()).toBe(false)
+
+    const member = await mountPage(sample, 2, 'member')
+    expect(member.find('[data-test="add-event-button"]').exists()).toBe(true)
 
     const admin = await mountPage(sample, 2, 'admin')
     expect(admin.find('[data-test="add-event-button"]').exists()).toBe(true)
@@ -197,9 +209,9 @@ describe('Events — delete', () => {
 })
 
 describe('Events — detail delete permission', () => {
-  it('shows the detail delete button only for admins', async () => {
-    const admin = await mountPage(sample, 2, 'admin')
-    admin.vm.detailEvent = sample[0]
+  it('shows the detail delete button only when the event is editable', async () => {
+    const admin = await mountPage(ownedSample, 2, 'admin')
+    admin.vm.detailEvent = ownedSample[0]
     await flushPromises()
     expect(admin.find('[data-test="detail-delete-button"]').exists()).toBe(true)
 
@@ -209,6 +221,21 @@ describe('Events — detail delete permission', () => {
     expect(viewer.find('[data-test="detail-delete-button"]').exists()).toBe(
       false,
     )
+  })
+
+  it('member owner delete confirms then removes without a password', async () => {
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const remove = vi.spyOn(eventsApi, 'remove').mockResolvedValue()
+    const wrapper = await mountPage(ownedSample, 2, 'member')
+
+    await wrapper.vm.requestDeleteEvent(ownedSample[0])
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledWith(ownedSample[0].id)
+    expect(
+      wrapper.findComponent(DeleteWithPasswordDialog).props('modelValue'),
+    ).toBe(false)
   })
 })
 

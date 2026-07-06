@@ -31,8 +31,11 @@ export const eventsApi = {
     const { data } = await client.put(`/events/${id}`, payload)
     return data
   },
+  // password is admin-only re-auth; an owning member deletes their own event
+  // with no body at all (a bodyless DELETE is "no password" for the owner).
   async remove(id, password) {
-    await client.delete(`/events/${id}`, { data: { password } })
+    const config = password === undefined ? undefined : { data: { password } }
+    await client.delete(`/events/${id}`, config)
   },
   async listTags(prefix) {
     const params = {}
