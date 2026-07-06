@@ -40,6 +40,7 @@ const form = reactive({
   position: '',
   resume_md: '',
   joined_at: null,
+  discord_username: '',
 })
 
 // PDF state lives outside the el-form because the upload is a separate
@@ -93,6 +94,7 @@ function resetForm(member) {
     position: member?.position ?? '',
     resume_md: member?.resume_md ?? '',
     joined_at: member?.joined_at ?? null,
+    discord_username: member?.discord_username ?? '',
   })
   pdfFile.value = null
   pdfDeletedThisSession.value = false
@@ -188,6 +190,10 @@ function buildPayload() {
     const d =
       form.joined_at instanceof Date ? form.joined_at : new Date(form.joined_at)
     payload.joined_at = d.toISOString()
+  }
+  if (!isEdit.value) {
+    const dh = form.discord_username.trim()
+    if (dh) payload.discord_username = dh
   }
   return payload
 }
@@ -308,6 +314,18 @@ defineExpose({ handlePdfChange, clearPdfChange })
           type="textarea"
           :rows="6"
           placeholder="可留空。Phase 7 將升級為 Markdown 編輯器"
+        />
+      </el-form-item>
+      <el-form-item
+        v-if="!isEdit && auth.isActuallyAdmin"
+        label="Discord 使用者名稱（選填，成員登入後自動綁定）"
+      >
+        <el-input
+          v-model="form.discord_username"
+          maxlength="64"
+          show-word-limit
+          placeholder="例如 alice.h"
+          data-test="form-discord-username"
         />
       </el-form-item>
       <el-form-item label="履歷 PDF">

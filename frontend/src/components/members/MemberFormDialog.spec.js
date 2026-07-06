@@ -150,6 +150,60 @@ describe('MemberFormDialog', () => {
     expect(create.mock.calls[0][0].position).toBe('Backend Engineer')
   })
 
+  it('create as admin sends discord_username when filled', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const create = vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'institution', 'SWE')
+    await wrapper.find('[data-test="form-discord-username"]').setValue('alice.h')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ discord_username: 'alice.h' }),
+    )
+  })
+
+  it('create as admin omits discord_username when blank', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const create = vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'institution', 'SWE')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0].discord_username).toBeUndefined()
+  })
+
+  it('does not render the Discord username input in edit mode', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+      },
+    })
+
+    expect(
+      wrapper.find('[data-test="form-discord-username"]').exists(),
+    ).toBe(false)
+  })
+
   it('edit flow calls membersApi.update with the member id', async () => {
     const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
     const wrapper = await mountDialog({
