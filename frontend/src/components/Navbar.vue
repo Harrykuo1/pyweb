@@ -96,6 +96,13 @@ useOutsideClick({
         <router-link to="/members" class="nav-link">成員</router-link>
         <router-link to="/jobs" class="nav-link">求職</router-link>
         <router-link to="/events" class="nav-link">活動</router-link>
+        <router-link
+          v-if="auth.isAdmin"
+          to="/review"
+          class="nav-link"
+          data-test="nav-review"
+          >審核</router-link
+        >
       </nav>
 
       <el-button

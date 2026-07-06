@@ -63,6 +63,17 @@ describe('Navbar.vue', () => {
     expect(targets).toContain('/events')
   })
 
+  it('shows the 審核 link for admins but hides it for viewers', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const admin = mount(Navbar, { global: { stubs } })
+    expect(admin.find('[data-test="nav-review"]').exists()).toBe(true)
+
+    auth.user = { id: 2, username: 'bob', role: 'viewer' }
+    const viewer = mount(Navbar, { global: { stubs } })
+    expect(viewer.find('[data-test="nav-review"]').exists()).toBe(false)
+  })
+
   it('shows the username in the chip trigger for admin', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }

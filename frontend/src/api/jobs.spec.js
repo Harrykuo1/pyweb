@@ -120,6 +120,32 @@ describe('jobsApi.remove', () => {
       data: { password: 'pw' },
     })
   })
+
+  it('DELETEs with no body when no password is given (owner)', async () => {
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+    await jobsApi.remove(9)
+    expect(del).toHaveBeenCalledWith('/jobs/9', undefined)
+  })
+})
+
+describe('jobsApi review actions', () => {
+  it('forwards a status filter on list', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: {} })
+    await jobsApi.list({ status: 'pending' })
+    expect(get.mock.calls[0][0]).toContain('status=pending')
+  })
+
+  it('POSTs to /jobs/:id/accept', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 9 } })
+    await jobsApi.accept(9)
+    expect(post).toHaveBeenCalledWith('/jobs/9/accept')
+  })
+
+  it('POSTs the reason to /jobs/:id/reject', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 9 } })
+    await jobsApi.reject(9, '內容不足')
+    expect(post).toHaveBeenCalledWith('/jobs/9/reject', { reason: '內容不足' })
+  })
 })
 
 describe('jobsApi.listCompanies', () => {

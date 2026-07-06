@@ -42,6 +42,12 @@ const routes = [
         component: () => import('../views/Events.vue'),
       },
       {
+        path: 'review',
+        name: 'review',
+        component: () => import('../views/Review.vue'),
+        meta: { requiresAdmin: true },
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/Settings.vue'),

@@ -9,6 +9,7 @@ export const jobsApi = {
     category,
     kind,
     q,
+    status,
   } = {}) {
     // Build the query string by hand so company=[A,B] serializes as
     // ?company=A&company=B (FastAPI repeated-param style) instead of
@@ -32,6 +33,7 @@ export const jobsApi = {
     }
     if (kind) search.set('kind', kind)
     if (q) search.set('q', q)
+    if (status) search.set('status', status)
     const { data } = await client.get(`/jobs?${search.toString()}`)
     return data
   },
@@ -50,6 +52,15 @@ export const jobsApi = {
   // password is admin-only re-auth; an owning member deletes their own post
   // with no body at all. Sending {password: undefined} would serialize to an
   // empty object and 422, so omit the body entirely.
+  // Admin review actions.
+  async accept(id) {
+    const { data } = await client.post(`/jobs/${id}/accept`)
+    return data
+  },
+  async reject(id, reason) {
+    const { data } = await client.post(`/jobs/${id}/reject`, { reason })
+    return data
+  },
   async remove(id, password) {
     const config = password === undefined ? undefined : { data: { password } }
     await client.delete(`/jobs/${id}`, config)

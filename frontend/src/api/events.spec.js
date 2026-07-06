@@ -66,6 +66,32 @@ describe('eventsApi CRUD', () => {
     await eventsApi.remove(9, 'pw')
     expect(del).toHaveBeenCalledWith('/events/9', { data: { password: 'pw' } })
   })
+
+  it('DELETEs with no body when no password is given (owner)', async () => {
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+    await eventsApi.remove(9)
+    expect(del).toHaveBeenCalledWith('/events/9', undefined)
+  })
+})
+
+describe('eventsApi review actions', () => {
+  it('forwards a status filter on list', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: {} })
+    await eventsApi.list({ status: 'pending' })
+    expect(get.mock.calls[0][0]).toContain('status=pending')
+  })
+
+  it('POSTs to /events/:id/accept', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 9 } })
+    await eventsApi.accept(9)
+    expect(post).toHaveBeenCalledWith('/events/9/accept')
+  })
+
+  it('POSTs the reason to /events/:id/reject', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 9 } })
+    await eventsApi.reject(9, '照片不足')
+    expect(post).toHaveBeenCalledWith('/events/9/reject', { reason: '照片不足' })
+  })
 })
 
 describe('eventsApi.listTags', () => {
