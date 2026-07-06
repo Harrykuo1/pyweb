@@ -106,6 +106,28 @@ describe('useRegistrationInvites', () => {
     expect(a.invites.value).toHaveLength(3)
     expect(a.invites.value[0].token).toBe('tok-new')
     expect(a.creating.value).toBe(false)
+    expect(globalThis.navigator.clipboard.writeText).toHaveBeenCalledWith(
+      a.inviteUrl(created),
+    )
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      '已產生邀請連結，並已複製到剪貼簿',
+    )
+  })
+
+  it('create() still succeeds (plain toast) when the auto-copy fails', async () => {
+    const created = { ...ACTIVE, id: 99, token: 'tok-new' }
+    vi.spyOn(authApi, 'createRegistrationInvite').mockResolvedValue(created)
+    globalThis.navigator.clipboard.writeText.mockRejectedValueOnce(
+      new Error('denied'),
+    )
+    document.execCommand = vi.fn(() => false)
+    const { get } = mountInvites()
+    await flushPromises()
+    const a = get()
+
+    await a.create()
+
+    expect(a.invites.value).toHaveLength(3)
     expect(ElMessage.success).toHaveBeenCalledWith('已產生邀請連結')
   })
 
@@ -159,10 +181,30 @@ describe('useRegistrationInvites', () => {
     expect(ElMessage.success).toHaveBeenCalledWith('已複製連結')
   })
 
-  it('copy() toasts an error when the clipboard write rejects', async () => {
+  it('copy() falls back to execCommand when navigator.clipboard is absent', async () => {
+    // Simulate an insecure context (plain-http LAN): no clipboard API.
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
+    const exec = vi.fn(() => true)
+    document.execCommand = exec
+    const { get } = mountInvites()
+    await flushPromises()
+    const a = get()
+
+    await a.copy(ACTIVE)
+
+    expect(exec).toHaveBeenCalledWith('copy')
+    expect(ElMessage.success).toHaveBeenCalledWith('已複製連結')
+  })
+
+  it('copy() toasts an error only when both clipboard and fallback fail', async () => {
     globalThis.navigator.clipboard.writeText.mockRejectedValueOnce(
       new Error('denied'),
     )
+    document.execCommand = vi.fn(() => false)
     const { get } = mountInvites()
     await flushPromises()
     const a = get()

@@ -29,7 +29,13 @@ export function useRegistrationInvites() {
     try {
       const inv = await authApi.createRegistrationInvite()
       invites.value = [inv, ...invites.value]
-      ElMessage.success('已產生邀請連結')
+      try {
+        await writeClipboard(inviteUrl(inv))
+        ElMessage.success('已產生邀請連結，並已複製到剪貼簿')
+      } catch (err) {
+        // Creation still succeeded even if the clipboard write didn't.
+        ElMessage.success('已產生邀請連結')
+      }
     } catch (err) {
       ElMessage.error('產生失敗，請稍後再試')
     } finally {
@@ -56,13 +62,36 @@ export function useRegistrationInvites() {
     return '可使用'
   }
 
-  async function copy(inv) {
-    if (!navigator.clipboard) {
-      ElMessage.error('瀏覽器不支援複製')
-      return
+  // navigator.clipboard only exists in a secure context (https or
+  // localhost). When the site is reached over plain http on a LAN IP it is
+  // undefined, so fall back to a transient off-screen textarea + execCommand
+  // which works everywhere. Throws if neither path copies.
+  async function writeClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return
+      } catch (err) {
+        // API present but blocked — fall through to the legacy path.
+      }
     }
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.top = '-9999px'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
     try {
-      await navigator.clipboard.writeText(inviteUrl(inv))
+      if (!document.execCommand('copy')) throw new Error('copy command rejected')
+    } finally {
+      document.body.removeChild(ta)
+    }
+  }
+
+  async function copy(inv) {
+    try {
+      await writeClipboard(inviteUrl(inv))
       ElMessage.success('已複製連結')
     } catch (err) {
       ElMessage.error('複製失敗')
