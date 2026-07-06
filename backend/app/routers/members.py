@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import require_admin, require_completed_member, require_member
+from app.core.discord_link import normalize_discord_handle
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Member, User, UserRole
@@ -161,6 +162,17 @@ def create_member(
         resume_md=payload.resume_md,
         joined_at=payload.joined_at or datetime.now(UTC),
     )
+    # Provision a role=MEMBER login account so the record isn't an orphan:
+    # the admin-entered handle is parked in pending_discord_username, exactly
+    # mirroring the migration backfill, so the first-login bridge auto-binds
+    # (or queues) the account on the member's first Discord OAuth login.
+    account = User(
+        role=UserRole.MEMBER,
+        pending_discord_username=normalize_discord_handle(payload.discord_username),
+    )
+    db.add(account)
+    db.flush()
+    member.user_id = account.id
     db.add(member)
     db.commit()
     db.refresh(member)

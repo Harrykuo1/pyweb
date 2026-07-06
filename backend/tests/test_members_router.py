@@ -241,6 +241,68 @@ def test_create_member_without_position_returns_null(client_factory):
     assert r.json()["position"] is None
 
 
+def test_create_member_provisions_linked_account_with_handle(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Alice",
+            "institution": "NTU",
+            "discord_username": "  @Alice.H ",
+        },
+    )
+    assert r.status_code == 201, r.text
+    member_id = r.json()["id"]
+
+    member = db_session.query(Member).filter_by(id=member_id).one()
+    assert member.user_id is not None
+    user = db_session.query(User).filter_by(id=member.user_id).one()
+    assert user.role is UserRole.MEMBER
+    assert user.discord_id is None
+    assert user.password_hash is None
+    assert user.pending_discord_username == "Alice.H"
+
+
+def test_create_member_without_handle_still_provisions_account(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/members",
+        json={"graduation_year": 2024, "real_name": "Bob", "institution": "NCU"},
+    )
+    assert r.status_code == 201, r.text
+    member = db_session.query(Member).filter_by(id=r.json()["id"]).one()
+    assert member.user_id is not None
+    user = db_session.query(User).filter_by(id=member.user_id).one()
+    assert user.role is UserRole.MEMBER
+    assert user.pending_discord_username is None
+
+
+def test_admin_provisioned_account_auto_links_on_first_login(client_factory, db_session):
+    from app.core.discord_link import link_or_queue
+    from app.core.discord_oauth import DiscordIdentity
+
+    client, login_as = client_factory
+    login_as("admin")
+    client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "Cara",
+            "institution": "NTHU",
+            "discord_username": "cara.dev",
+        },
+    )
+
+    identity = DiscordIdentity(id="42", username="Cara.Dev", global_name="Cara")
+    linked = link_or_queue(db_session, identity)
+    assert linked is not None
+    assert linked.discord_id == "42"
+    assert linked.pending_discord_username is None
+
+
 # ---------- update ----------
 
 
