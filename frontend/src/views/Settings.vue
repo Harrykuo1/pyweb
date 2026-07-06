@@ -2,12 +2,24 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { Picture, SetUp, User } from '@element-plus/icons-vue'
+import {
+  Avatar,
+  ChatDotRound,
+  Connection,
+  Link,
+  Picture,
+  SetUp,
+  User,
+} from '@element-plus/icons-vue'
 
 import AccountSection from '../components/settings/AccountSection.vue'
 import AppearanceSection from '../components/settings/AppearanceSection.vue'
+import GuildConfigSection from '../components/settings/GuildConfigSection.vue'
+import InvitesSection from '../components/settings/InvitesSection.vue'
+import PendingLinksSection from '../components/settings/PendingLinksSection.vue'
 import SettingsSidebar from '../components/settings/SettingsSidebar.vue'
 import SystemLimitsSection from '../components/settings/SystemLimitsSection.vue'
+import UserRolesSection from '../components/settings/UserRolesSection.vue'
 
 // Section registry — order here is the order shown in the sidebar.
 // Each entry advertises its key (used for URL hash + active state),
@@ -18,6 +30,30 @@ const SECTIONS = [
     label: '帳號管理',
     description: '管理員與檢視者帳號',
     icon: User,
+  },
+  {
+    key: 'roles',
+    label: '成員角色',
+    description: '指派管理員 / 成員',
+    icon: Avatar,
+  },
+  {
+    key: 'invites',
+    label: '註冊邀請',
+    description: '產生一次性註冊連結',
+    icon: Link,
+  },
+  {
+    key: 'pending-links',
+    label: '待連結帳號',
+    description: '解析 Discord 登入',
+    icon: Connection,
+  },
+  {
+    key: 'discord',
+    label: 'Discord 群組',
+    description: '驗證用群組 ID',
+    icon: ChatDotRound,
   },
   {
     key: 'appearance',
@@ -106,6 +142,10 @@ const activeSection = computed(
 
         <div class="settings-section__body">
           <AccountSection v-if="active === 'account'" />
+          <UserRolesSection v-else-if="active === 'roles'" />
+          <InvitesSection v-else-if="active === 'invites'" />
+          <PendingLinksSection v-else-if="active === 'pending-links'" />
+          <GuildConfigSection v-else-if="active === 'discord'" />
           <AppearanceSection v-else-if="active === 'appearance'" />
           <SystemLimitsSection v-else-if="active === 'system'" />
         </div>
