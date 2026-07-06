@@ -45,7 +45,13 @@ def test_user_response_excludes_password_hash():
     u = User(id=1, username="x", password_hash="secret-hash", role=UserRole.VIEWER)
     dumped = UserResponse.model_validate(u).model_dump()
     assert "password_hash" not in dumped
-    assert dumped == {"id": 1, "username": "x", "role": UserRole.VIEWER}
+    assert dumped == {
+        "id": 1,
+        "username": "x",
+        "role": UserRole.VIEWER,
+        "discord_username": None,
+        "discord_global_name": None,
+    }
 
 
 def test_update_username_request_accepts_valid_name():

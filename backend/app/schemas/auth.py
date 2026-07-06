@@ -15,6 +15,10 @@ class UserResponse(BaseModel):
     # still set for the legacy password accounts during the transition.
     username: str | None = None
     role: UserRole
+    # Discord display fields, so the frontend has a name/handle to show for
+    # accounts that have no username. Null for legacy password accounts.
+    discord_username: str | None = None
+    discord_global_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
