@@ -51,6 +51,7 @@ def test_user_response_excludes_password_hash():
         "role": UserRole.VIEWER,
         "discord_username": None,
         "discord_global_name": None,
+        "has_profile": False,
     }
 
 
