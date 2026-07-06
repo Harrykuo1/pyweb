@@ -1,5 +1,5 @@
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi } from '../api/auth'
 import { membersApi } from '../api/members'
@@ -60,6 +60,28 @@ export function usePendingLinks() {
     }
   }
 
+  async function dismiss(link) {
+    try {
+      await ElMessageBox.confirm(
+        `確定要忽略「${displayName(link)}」的連結請求嗎？對方重新登入後會再次出現。`,
+        '忽略連結請求',
+        { type: 'warning', confirmButtonText: '忽略', cancelButtonText: '取消' },
+      )
+    } catch {
+      return // user cancelled
+    }
+    resolvingId.value = link.discord_id
+    try {
+      await authApi.deletePendingLink(link.discord_id)
+      links.value = links.value.filter((l) => l.discord_id !== link.discord_id)
+      ElMessage.success('已忽略')
+    } catch (err) {
+      ElMessage.error(extractError(err, '操作失敗，請稍後再試'))
+    } finally {
+      resolvingId.value = null
+    }
+  }
+
   onMounted(load)
 
   return {
@@ -72,5 +94,6 @@ export function usePendingLinks() {
     memberLabel,
     load,
     resolve,
+    dismiss,
   }
 }

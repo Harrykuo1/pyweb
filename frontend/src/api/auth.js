@@ -35,6 +35,9 @@ export const authApi = {
     const { data } = await client.post('/auth/registration-invites')
     return data
   },
+  async deleteRegistrationInvite(inviteId) {
+    await client.delete(`/auth/registration-invites/${inviteId}`)
+  },
   // Admin: Discord logins that matched no pre-created account, awaiting a
   // manual link to an existing member.
   async listPendingLinks() {
@@ -47,6 +50,9 @@ export const authApi = {
       { member_id: memberId },
     )
     return data
+  },
+  async deletePendingLink(discordId) {
+    await client.delete(`/auth/pending-links/${discordId}`)
   },
   // Admin: the target Discord guild used for OAuth membership checks.
   async getGuildConfig() {

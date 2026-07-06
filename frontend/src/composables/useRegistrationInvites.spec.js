@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { useRegistrationInvites } from './useRegistrationInvites'
 import { authApi } from '../api/auth'
@@ -16,6 +16,7 @@ vi.mock('element-plus', () => ({
       info: vi.fn(),
     },
   ),
+  ElMessageBox: { confirm: vi.fn() },
 }))
 
 // Fixed ISO strings so status() is deterministic without mocking Date.now —
@@ -169,5 +170,32 @@ describe('useRegistrationInvites', () => {
     await a.copy(ACTIVE)
 
     expect(ElMessage.error).toHaveBeenCalledWith('複製失敗')
+  })
+
+  it('remove() deletes the invite after confirm and drops it from the list', async () => {
+    const { get } = mountInvites()
+    await flushPromises()
+    const a = get()
+    ElMessageBox.confirm.mockResolvedValue('confirm')
+    const spy = vi.spyOn(authApi, 'deleteRegistrationInvite').mockResolvedValue()
+
+    await a.remove(ACTIVE)
+
+    expect(spy).toHaveBeenCalledWith(ACTIVE.id)
+    expect(a.invites.value.find((i) => i.id === ACTIVE.id)).toBeUndefined()
+    expect(ElMessage.success).toHaveBeenCalledWith('已刪除邀請連結')
+  })
+
+  it('remove() does nothing when the confirm is cancelled', async () => {
+    const { get } = mountInvites()
+    await flushPromises()
+    const a = get()
+    ElMessageBox.confirm.mockRejectedValue('cancel')
+    const spy = vi.spyOn(authApi, 'deleteRegistrationInvite').mockResolvedValue()
+
+    await a.remove(ACTIVE)
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(a.invites.value).toHaveLength(2)
   })
 })

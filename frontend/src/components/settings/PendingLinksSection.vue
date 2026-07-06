@@ -1,5 +1,6 @@
 <script setup>
 import { ElButton, ElEmpty, ElOption, ElSelect, ElSkeleton } from 'element-plus'
+import { Close } from '@element-plus/icons-vue'
 
 import { usePendingLinks } from '../../composables/usePendingLinks'
 
@@ -14,6 +15,7 @@ const {
   displayName,
   memberLabel,
   resolve,
+  dismiss,
 } = usePendingLinks()
 </script>
 
@@ -67,6 +69,17 @@ const {
           >
             連結
           </el-button>
+
+          <el-button
+            :icon="Close"
+            circle
+            plain
+            :data-test="`pending-dismiss-${link.discord_id}`"
+            :disabled="resolvingId === link.discord_id"
+            title="忽略此請求"
+            aria-label="忽略此請求"
+            @click="dismiss(link)"
+          />
         </div>
       </li>
     </ul>

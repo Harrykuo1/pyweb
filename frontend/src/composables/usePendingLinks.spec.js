@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { usePendingLinks } from './usePendingLinks'
 import { authApi } from '../api/auth'
@@ -17,6 +17,7 @@ vi.mock('element-plus', () => ({
       warning: vi.fn(),
     },
   ),
+  ElMessageBox: { confirm: vi.fn() },
 }))
 
 const LINKS = [
@@ -121,5 +122,32 @@ describe('usePendingLinks', () => {
     expect(a.links.value.find((l) => l.discord_id === '111')).toBeTruthy()
     expect(a.links.value).toHaveLength(2)
     expect(a.resolvingId.value).toBe(null)
+  })
+
+  it('dismiss deletes the pending link after confirm and removes the row', async () => {
+    const { get } = mountPendingLinks()
+    await flushPromises()
+    const a = get()
+    ElMessageBox.confirm.mockResolvedValue('confirm')
+    const spy = vi.spyOn(authApi, 'deletePendingLink').mockResolvedValue()
+
+    await a.dismiss(a.links.value[0])
+
+    expect(spy).toHaveBeenCalledWith('111')
+    expect(a.links.value.find((l) => l.discord_id === '111')).toBeUndefined()
+    expect(ElMessage.success).toHaveBeenCalledWith('已忽略')
+  })
+
+  it('dismiss does nothing when the confirm is cancelled', async () => {
+    const { get } = mountPendingLinks()
+    await flushPromises()
+    const a = get()
+    ElMessageBox.confirm.mockRejectedValue('cancel')
+    const spy = vi.spyOn(authApi, 'deletePendingLink').mockResolvedValue()
+
+    await a.dismiss(a.links.value[0])
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(a.links.value).toHaveLength(2)
   })
 })

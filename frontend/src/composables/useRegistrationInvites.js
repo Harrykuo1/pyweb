@@ -1,5 +1,5 @@
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi } from '../api/auth'
 
@@ -69,6 +69,25 @@ export function useRegistrationInvites() {
     }
   }
 
+  async function remove(inv) {
+    try {
+      await ElMessageBox.confirm(
+        '確定要刪除這個邀請連結嗎？已分享出去的連結將立即失效。',
+        '刪除邀請連結',
+        { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消' },
+      )
+    } catch {
+      return // user cancelled
+    }
+    try {
+      await authApi.deleteRegistrationInvite(inv.id)
+      invites.value = invites.value.filter((i) => i.id !== inv.id)
+      ElMessage.success('已刪除邀請連結')
+    } catch (err) {
+      ElMessage.error('刪除失敗，請稍後再試')
+    }
+  }
+
   onMounted(load)
 
   return {
@@ -81,5 +100,6 @@ export function useRegistrationInvites() {
     status,
     statusLabel,
     copy,
+    remove,
   }
 }

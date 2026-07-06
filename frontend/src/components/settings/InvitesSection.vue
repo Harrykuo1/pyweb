@@ -1,5 +1,6 @@
 <script setup>
 import { ElButton, ElSkeleton, ElTag } from 'element-plus'
+import { Close } from '@element-plus/icons-vue'
 
 import { useRegistrationInvites } from '../../composables/useRegistrationInvites'
 
@@ -14,6 +15,7 @@ const {
   status,
   statusLabel,
   copy,
+  remove,
 } = useRegistrationInvites()
 
 // Element Plus tag variant per invite status — presentation only, so it
@@ -83,14 +85,25 @@ defineExpose({ invites })
             </span>
           </div>
         </div>
-        <el-button
-          class="invite-row__copy"
-          :disabled="status(inv) !== 'active'"
-          :data-test="`invite-copy-${inv.id}`"
-          @click="copy(inv)"
-        >
-          複製
-        </el-button>
+        <div class="invite-row__actions">
+          <el-button
+            class="invite-row__copy"
+            :disabled="status(inv) !== 'active'"
+            :data-test="`invite-copy-${inv.id}`"
+            @click="copy(inv)"
+          >
+            複製
+          </el-button>
+          <el-button
+            :icon="Close"
+            circle
+            plain
+            :data-test="`invite-delete-${inv.id}`"
+            title="刪除邀請連結"
+            aria-label="刪除邀請連結"
+            @click="remove(inv)"
+          />
+        </div>
       </li>
     </ul>
   </div>
@@ -200,8 +213,16 @@ defineExpose({ invites })
   color: var(--ink-500);
 }
 
-.invite-row__copy {
+.invite-row__actions {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Row uses flex `gap`; neutralize EP's default sibling-button margin. */
+.invite-row__actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 @media (max-width: 640px) {
@@ -210,7 +231,7 @@ defineExpose({ invites })
     flex-direction: column;
   }
 
-  .invite-row__copy {
+  .invite-row__actions {
     align-self: flex-end;
   }
 }
