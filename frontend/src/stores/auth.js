@@ -8,15 +8,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Admin-only UI affordance: while true, isAdmin pretends to be false so
   // every v-if="auth.isAdmin" hides itself, letting an admin preview the
-  // viewer experience without losing real backend permissions.
-  const viewAsViewer = ref(false)
+  // member experience (all data visible, only your own card editable)
+  // without losing real backend permissions. Member is the going-forward
+  // non-admin role; the legacy viewer role is retired in a later phase.
+  const previewAsMember = ref(false)
 
   const isAuthenticated = computed(() => user.value !== null)
   const actualRole = computed(() => user.value?.role ?? null)
   const isActuallyAdmin = computed(() => actualRole.value === 'admin')
-  const isAdmin = computed(() => isActuallyAdmin.value && !viewAsViewer.value)
-  const isViewingAsViewer = computed(
-    () => isActuallyAdmin.value && viewAsViewer.value,
+  const isAdmin = computed(() => isActuallyAdmin.value && !previewAsMember.value)
+  const isPreviewingAsMember = computed(
+    () => isActuallyAdmin.value && previewAsMember.value,
   )
 
   // A member who hasn't completed their profile is gated out of the app
@@ -32,13 +34,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(password) {
     user.value = await authApi.login(password)
-    viewAsViewer.value = false
+    previewAsMember.value = false
   }
 
   async function logout() {
     await authApi.logout()
     user.value = null
-    viewAsViewer.value = false
+    previewAsMember.value = false
   }
 
   // Reset client-side auth state without touching the server. Used by the
@@ -46,7 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
   // calling /auth/logout would just produce another 401.
   function clearLocal() {
     user.value = null
-    viewAsViewer.value = false
+    previewAsMember.value = false
   }
 
   // Used by router guard on first navigation to restore session from cookie.
@@ -63,9 +65,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function setViewAsViewer(flag) {
+  function setPreviewAsMember(flag) {
     if (!isActuallyAdmin.value) return
-    viewAsViewer.value = !!flag
+    previewAsMember.value = !!flag
   }
 
   async function updateUsername(role, username) {
@@ -84,11 +86,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user,
-    viewAsViewer,
+    previewAsMember,
     isAuthenticated,
     isAdmin,
     isActuallyAdmin,
-    isViewingAsViewer,
+    isPreviewingAsMember,
     needsProfile,
     myMemberId,
     actualRole,
@@ -96,7 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     clearLocal,
     fetchMe,
-    setViewAsViewer,
+    setPreviewAsMember,
     updateUsername,
     updatePassword,
   }

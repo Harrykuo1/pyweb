@@ -39,9 +39,9 @@ const roleLabel = computed(() => {
 
 // el-switch's v-model needs a writable ref-like — bridge the store action
 // through a computed setter.
-const previewAsViewer = computed({
-  get: () => auth.viewAsViewer,
-  set: (v) => auth.setViewAsViewer(v),
+const previewAsMember = computed({
+  get: () => auth.previewAsMember,
+  set: (v) => auth.setPreviewAsMember(v),
 })
 
 const mobileMenuOpen = ref(false)
@@ -117,7 +117,7 @@ useOutsideClick({
              previewing. Sits to the left of the chip so the "you're not
              really a viewer" cue is impossible to miss. -->
         <span
-          v-if="auth.isViewingAsViewer"
+          v-if="auth.isPreviewingAsMember"
           class="preview-badge"
           data-test="preview-badge"
         >
@@ -135,7 +135,7 @@ useOutsideClick({
             class="user-chip"
             :class="{
               'is-open': userMenuOpen,
-              'is-previewing': auth.isViewingAsViewer,
+              'is-previewing': auth.isPreviewingAsMember,
             }"
             :aria-expanded="userMenuOpen"
             aria-haspopup="menu"
@@ -192,8 +192,8 @@ useOutsideClick({
                 data-test="preview-toggle"
               >
                 <el-icon class="user-menu__icon"><View /></el-icon>
-                <span class="user-menu__label">預覽為檢視者</span>
-                <el-switch v-model="previewAsViewer" size="small" />
+                <span class="user-menu__label">預覽為成員</span>
+                <el-switch v-model="previewAsMember" size="small" />
               </label>
 
               <button

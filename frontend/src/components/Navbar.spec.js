@@ -217,14 +217,14 @@ describe('Navbar.vue', () => {
     )
   })
 
-  it('preview-as-viewer toggle is shown for admin only', () => {
+  it('preview-as-member toggle is shown for admin only', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
     expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(true)
   })
 
-  it('preview-as-viewer toggle is hidden for viewer', () => {
+  it('preview-as-member toggle is hidden for viewer', () => {
     const auth = useAuthStore()
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
@@ -242,7 +242,7 @@ describe('Navbar.vue', () => {
   it('admin in preview mode shows the 預覽中 badge and a previewing chip', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
-    auth.setViewAsViewer(true)
+    auth.setPreviewAsMember(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(true)
@@ -275,10 +275,10 @@ describe('Navbar.vue', () => {
     expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)
   })
 
-  it('admin previewing as viewer does not see the 設定 row', () => {
+  it('admin previewing as member does not see the 設定 row', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
-    auth.setViewAsViewer(true)
+    auth.setPreviewAsMember(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)

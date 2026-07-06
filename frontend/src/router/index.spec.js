@@ -147,10 +147,10 @@ describe('auth guard', () => {
     expect(result).toEqual({ path: '/' })
   })
 
-  it('treats admin previewing as viewer as not-admin for requiresAdmin routes', async () => {
+  it('treats admin previewing as member as not-admin for requiresAdmin routes', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
-    auth.setViewAsViewer(true)
+    auth.setPreviewAsMember(true)
 
     const guard = createAuthGuard()
     const result = await guard(settingsRoute)

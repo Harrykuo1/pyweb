@@ -96,7 +96,7 @@ export function createAuthGuard() {
     }
 
     // Admin-only routes use isAdmin (not isActuallyAdmin) so the
-    // preview-as-viewer toggle also hides them, matching how other
+    // preview-as-member toggle also hides them, matching how other
     // admin affordances (CRUD buttons) behave.
     if (to.meta.requiresAdmin && !auth.isAdmin) {
       return { path: '/' }
