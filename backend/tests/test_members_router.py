@@ -500,3 +500,23 @@ def test_delete_orphan_member_without_account_still_works(client_factory, db_ses
     )
     assert resp.status_code == 204, resp.text
     assert db_session.query(Member).filter_by(id=mid).one_or_none() is None
+
+
+def test_delete_claimed_member_is_blocked_with_409(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/members",
+        json={"graduation_year": 2024, "real_name": "Dana", "institution": "X"},
+    )
+    member = db_session.query(Member).filter_by(id=r.json()["id"]).one()
+    account = db_session.query(User).filter_by(id=member.user_id).one()
+    account.discord_id = "claimed-1"  # simulate the person having claimed it
+    db_session.commit()
+
+    resp = client.request(
+        "DELETE", f"/api/members/{member.id}", json={"password": "admin-pw"}
+    )
+    assert resp.status_code == 409, resp.text
+    assert db_session.query(Member).filter_by(id=member.id).one_or_none() is not None
+    assert db_session.query(User).filter_by(id=account.id).one_or_none() is not None

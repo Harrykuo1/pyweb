@@ -227,8 +227,17 @@ def delete_member(
         if member.user_id is not None
         else None
     )
-    # delete the member first: it holds the FK to users, so the linked user
-    # can only be removed once nothing references it.
+    # A claimed account (person has logged in via Discord) owns content through
+    # author FKs and is their identity anchor for rejoining — never hard delete
+    # it. Admin should suspend it instead (Settings -> 成員角色).
+    if linked_user is not None and linked_user.discord_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This member has an active account; suspend it instead",
+        )
+    # Unclaimed (pre-provisioned, never logged in) or legacy row: safe to remove
+    # outright — no content, no other FK references. Delete the member first
+    # (it holds the FK to users), then its unclaimed account if present.
     db.delete(member)
     if linked_user is not None:
         db.delete(linked_user)
