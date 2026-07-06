@@ -143,6 +143,23 @@ describe('Navbar.vue', () => {
     )
   })
 
+  it('prefers the member real name over the Discord display name', () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 5,
+      username: null,
+      role: 'member',
+      member_name: '王小明',
+      discord_global_name: 'David',
+      discord_username: 'david123',
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const trigger = wrapper.find('[data-test="user-menu-trigger"]')
+    expect(trigger.text()).toContain('王小明')
+    expect(trigger.text()).not.toContain('David')
+  })
+
   it('toggles the dropdown open and closed when the chip is clicked', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }

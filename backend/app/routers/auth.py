@@ -217,11 +217,15 @@ def me(
     db: Session = Depends(get_db),
 ) -> UserResponse:
     resp = UserResponse.model_validate(current_user)
-    member_id = (
-        db.query(Member.id).filter_by(user_id=current_user.id).scalar()
+    row = (
+        db.query(Member.id, Member.real_name)
+        .filter_by(user_id=current_user.id)
+        .one_or_none()
     )
-    resp.member_id = member_id
-    resp.has_profile = member_id is not None
+    if row is not None:
+        resp.member_id = row.id
+        resp.member_name = row.real_name
+        resp.has_profile = True
     return resp
 
 

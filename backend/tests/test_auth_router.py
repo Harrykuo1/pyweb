@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import User, UserRole
+from app.models import Member, User, UserRole
 
 
 @pytest.fixture
@@ -203,6 +203,27 @@ def test_me_reports_has_profile_false_for_account_without_member(client):
     r = client.get("/api/auth/me")
     assert r.status_code == 200
     assert r.json()["has_profile"] is False
+
+
+def test_me_returns_member_real_name_when_linked(client, db_session):
+    admin = db_session.query(User).filter_by(username="admin").one()
+    db_session.add(
+        Member(
+            user_id=admin.id,
+            graduation_year=2024,
+            real_name="王小明",
+            institution="NTU",
+        )
+    )
+    db_session.commit()
+
+    client.post("/api/auth/login", json={"password": "admin-pw"})
+    r = client.get("/api/auth/me")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["has_profile"] is True
+    assert body["member_name"] == "王小明"
 
 
 def test_logout_clears_session(client):

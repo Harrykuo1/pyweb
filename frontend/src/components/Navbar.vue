@@ -17,12 +17,19 @@ import { useOutsideClick } from '../composables/useOutsideClick'
 const auth = useAuthStore()
 const router = useRouter()
 
-// Discord accounts have no username, so fall back to the Discord display
-// name / handle. Keeps the chip from crashing on a null username.
+// Prefer the member's real name; fall back to the Discord display name /
+// handle (accounts without a completed profile), then the legacy username.
+// Keeps the chip from crashing on a null username.
 const displayName = computed(() => {
   const u = auth.user
   if (!u) return ''
-  return u.discord_global_name || u.discord_username || u.username || '成員'
+  return (
+    u.member_name ||
+    u.discord_global_name ||
+    u.discord_username ||
+    u.username ||
+    '成員'
+  )
 })
 
 const avatarInitial = computed(() => {
