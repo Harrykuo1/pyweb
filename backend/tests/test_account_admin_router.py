@@ -77,3 +77,58 @@ def test_list_pending_links_returns_rows(client, db_session):
     assert len(body) == 1
     assert body[0]["discord_id"] == "P1"
     assert body[0]["discord_username"] == "ghost"
+
+
+# ---------- resolve pending link ----------
+
+
+def test_resolve_pending_link_attaches_identity_to_member(client, db_session):
+    u, m = _seed_member_account(db_session)
+    _seed_pending(db_session, "P1")
+    _login_admin(client)
+
+    r = client.post(
+        "/api/auth/pending-links/P1/resolve",
+        json={"member_id": m.id},
+    )
+    assert r.status_code == 200
+    assert r.json()["role"] == "member"
+
+    db_session.expire_all()
+    linked = db_session.query(User).filter_by(id=u.id).one()
+    assert linked.discord_id == "P1"
+    assert linked.discord_username == "ghost"
+    assert linked.pending_discord_username is None
+    assert db_session.query(PendingDiscordLink).filter_by(discord_id="P1").count() == 0
+
+
+def test_resolve_pending_link_404_when_pending_missing(client, db_session):
+    _, m = _seed_member_account(db_session)
+    _login_admin(client)
+    r = client.post("/api/auth/pending-links/NOPE/resolve", json={"member_id": m.id})
+    assert r.status_code == 404
+
+
+def test_resolve_pending_link_404_when_member_missing(client, db_session):
+    _seed_pending(db_session, "P1")
+    _login_admin(client)
+    r = client.post("/api/auth/pending-links/P1/resolve", json={"member_id": 9999})
+    assert r.status_code == 404
+
+
+def test_resolve_pending_link_409_when_member_already_linked(client, db_session):
+    u, m = _seed_member_account(db_session)
+    u.discord_id = "ALREADY"
+    db_session.commit()
+    _seed_pending(db_session, "P1")
+    _login_admin(client)
+
+    r = client.post("/api/auth/pending-links/P1/resolve", json={"member_id": m.id})
+    assert r.status_code == 409
+
+
+def test_resolve_pending_link_requires_admin(client, db_session):
+    _, m = _seed_member_account(db_session)
+    _seed_pending(db_session, "P1")
+    r = client.post("/api/auth/pending-links/P1/resolve", json={"member_id": m.id})
+    assert r.status_code == 401

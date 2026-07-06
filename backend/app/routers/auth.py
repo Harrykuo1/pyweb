@@ -11,10 +11,11 @@ from app.core.rate_limit import limiter
 from app.core.runtime_config import DISCORD_GUILD_ID_KEY, get_str
 from app.core.security import hash_password, verify_password
 from app.database import get_db
-from app.models import PendingDiscordLink, User, UserRole
+from app.models import Member, PendingDiscordLink, User, UserRole
 from app.schemas import (
     LoginRequest,
     PendingLinkResponse,
+    ResolvePendingLinkRequest,
     UpdatePasswordRequest,
     UpdateUsernameRequest,
     UserResponse,
@@ -178,6 +179,41 @@ def list_pending_links(
     return (
         db.query(PendingDiscordLink).order_by(PendingDiscordLink.first_seen_at).all()
     )
+
+
+@router.post("/pending-links/{discord_id}/resolve", response_model=UserResponse)
+def resolve_pending_link(
+    discord_id: str,
+    payload: ResolvePendingLinkRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> User:
+    pending = (
+        db.query(PendingDiscordLink).filter_by(discord_id=discord_id).one_or_none()
+    )
+    if pending is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Pending link not found"
+        )
+    member = db.query(Member).filter_by(id=payload.member_id).one_or_none()
+    if member is None or member.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member account not found"
+        )
+    user = db.query(User).filter_by(id=member.user_id).one()
+    if user.discord_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Member already linked"
+        )
+
+    user.discord_id = pending.discord_id
+    user.discord_username = pending.discord_username
+    user.discord_global_name = pending.discord_global_name
+    user.pending_discord_username = None
+    db.delete(pending)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.patch("/users/{role}/username", response_model=UserResponse)
