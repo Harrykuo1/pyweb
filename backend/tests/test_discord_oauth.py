@@ -21,9 +21,10 @@ def configured(monkeypatch):
 
 
 class FakeResponse:
-    def __init__(self, status_code, *, json_body=None):
+    def __init__(self, status_code, *, json_body=None, text=""):
         self.status_code = status_code
         self._json = json_body
+        self.text = text
 
     def json(self):
         if self._json is None:
@@ -136,20 +137,26 @@ def test_fetch_identity_tolerates_missing_global_name(monkeypatch):
     assert ident.global_name is None
 
 
-# ---------- is_guild_member ----------
+# ---------- check_guild_membership ----------
 
 
-def test_is_guild_member_true_on_200(monkeypatch):
+def test_check_guild_membership_member_on_200(monkeypatch):
     _patch_client(monkeypatch, FakeResponse(200, json_body={"roles": []}))
-    assert discord_oauth.is_guild_member("tok", "G1") is True
+    assert discord_oauth.check_guild_membership("tok", "G1") == "member"
 
 
-def test_is_guild_member_false_on_404(monkeypatch):
+def test_check_guild_membership_not_member_on_404(monkeypatch):
     _patch_client(monkeypatch, FakeResponse(404))
-    assert discord_oauth.is_guild_member("tok", "G1") is False
+    assert discord_oauth.check_guild_membership("tok", "G1") == "not_member"
 
 
-def test_is_guild_member_false_on_empty_guild_id(monkeypatch):
+def test_check_guild_membership_error_on_rate_limit(monkeypatch):
+    # 429 (or any non-200/404) is transient, NOT "not a member".
+    _patch_client(monkeypatch, FakeResponse(429, text="rate limited"))
+    assert discord_oauth.check_guild_membership("tok", "G1") == "error"
+
+
+def test_check_guild_membership_error_on_empty_guild_id(monkeypatch):
     called = {"n": 0}
 
     class Counting:
@@ -164,11 +171,11 @@ def test_is_guild_member_false_on_empty_guild_id(monkeypatch):
             return FakeResponse(200)
 
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: Counting())
-    assert discord_oauth.is_guild_member("tok", "") is False
+    assert discord_oauth.check_guild_membership("tok", "") == "error"
     assert called["n"] == 0
 
 
-def test_is_guild_member_false_on_network_error(monkeypatch):
+def test_check_guild_membership_error_on_network_error(monkeypatch):
     class Boom:
         def __enter__(self):
             return self
@@ -180,4 +187,4 @@ def test_is_guild_member_false_on_network_error(monkeypatch):
             raise httpx.ConnectError("down")
 
     monkeypatch.setattr(httpx, "Client", lambda *a, **k: Boom())
-    assert discord_oauth.is_guild_member("tok", "G1") is False
+    assert discord_oauth.check_guild_membership("tok", "G1") == "error"

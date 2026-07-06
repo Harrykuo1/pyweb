@@ -59,7 +59,11 @@ def _patch_flow(monkeypatch, *, identity_id="D123", is_member=True):
             id=identity_id, username="harry", global_name="Harry"
         ),
     )
-    monkeypatch.setattr(discord_oauth, "is_guild_member", lambda tok, gid: is_member)
+    monkeypatch.setattr(
+        discord_oauth,
+        "check_guild_membership",
+        lambda tok, gid: "member" if is_member else "not_member",
+    )
 
 
 def test_login_redirects_to_discord_with_client_id_and_state(client):
@@ -255,7 +259,9 @@ def test_failed_registration_does_not_hijack_a_later_login(
     )
 
     # 1) Start registration, then fail the guild check on the callback.
-    monkeypatch.setattr(discord_oauth, "is_guild_member", lambda tok, gid: False)
+    monkeypatch.setattr(
+        discord_oauth, "check_guild_membership", lambda tok, gid: "not_member"
+    )
     r0 = client.get(
         "/api/auth/discord/register?token=inv2", follow_redirects=False
     )
@@ -272,7 +278,9 @@ def test_failed_registration_does_not_hijack_a_later_login(
 
     # 2) The same (already-linked) account now logs in normally. The stale
     #    invite token must not turn this into a registration attempt.
-    monkeypatch.setattr(discord_oauth, "is_guild_member", lambda tok, gid: True)
+    monkeypatch.setattr(
+        discord_oauth, "check_guild_membership", lambda tok, gid: "member"
+    )
     r2 = client.get("/api/auth/discord/login", follow_redirects=False)
     state2 = parse_qs(urlparse(r2.headers["location"]).query)["state"][0]
     r3 = client.get(

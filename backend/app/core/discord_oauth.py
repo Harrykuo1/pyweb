@@ -9,7 +9,7 @@ Flow (driven by the auth router):
   1. build_authorize_url() -> redirect the browser to Discord.
   2. Discord redirects back with ?code=...; exchange_code() -> access token.
   3. fetch_identity() -> the user's snowflake id, username, global_name.
-  4. is_guild_member() -> confirm they're still in our guild. Re-checked on
+  4. check_guild_membership() -> confirm they're still in our guild. Re-checked on
      every login, so leaving the guild revokes access immediately.
 
 Scopes: identify (who they are) + guilds.members.read (membership of a
@@ -18,12 +18,15 @@ specific guild via the user's own token -- no bot needed in the guild).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
 import httpx
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize"
 TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -105,15 +108,33 @@ def fetch_identity(access_token: str) -> DiscordIdentity | None:
     return DiscordIdentity(id=discord_id, username=username, global_name=global_name)
 
 
-def is_guild_member(access_token: str, guild_id: str) -> bool:
+def check_guild_membership(access_token: str, guild_id: str) -> str:
+    """Return 'member', 'not_member', or 'error'.
+
+    Distinguishing a genuine 404 (the user is not in the guild) from a
+    transient failure (429 rate-limit, 5xx, network) matters: an errored
+    check must not masquerade as "not a member" and lock a real member out.
+    The unexpected status is logged so operators can see the real cause.
+    """
     if not guild_id:
-        return False
+        return "error"
     try:
         with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client:
             resp = client.get(
                 f"{API_BASE}/users/@me/guilds/{guild_id}/member",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
-    except httpx.HTTPError:
-        return False
-    return resp.status_code == 200
+    except httpx.HTTPError as exc:
+        logger.warning("guild membership check transport error: %s", exc)
+        return "error"
+    if resp.status_code == 200:
+        return "member"
+    if resp.status_code == 404:
+        return "not_member"
+    body = getattr(resp, "text", "")
+    logger.warning(
+        "guild membership check unexpected status %s: %s",
+        resp.status_code,
+        body[:200],
+    )
+    return "error"

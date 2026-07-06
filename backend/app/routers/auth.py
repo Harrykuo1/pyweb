@@ -166,7 +166,12 @@ def discord_callback(
     guild_id = get_str(db, DISCORD_GUILD_ID_KEY)
     if not guild_id:
         return _oauth_error("guild_not_configured")
-    if not discord_oauth.is_guild_member(token, guild_id):
+    membership = discord_oauth.check_guild_membership(token, guild_id)
+    if membership == "error":
+        # Transient failure (rate limit / Discord hiccup) — not the same as
+        # "not a member", so don't wrongly turn away a real member.
+        return _oauth_error("guild_check_failed")
+    if membership != "member":
         return _oauth_error("not_member")
 
     # Registration (invite consumed above) takes priority over login: a
