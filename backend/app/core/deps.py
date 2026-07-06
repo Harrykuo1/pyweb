@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User, UserRole
+from app.models import Member, User, UserRole
 
 
 def get_current_user(
@@ -57,4 +57,23 @@ def require_member(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Member role required",
         )
+    return current_user
+
+
+def require_completed_member(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    # New members must finish their profile before they can see any data.
+    # Admins and the legacy viewer account have no profile and are exempt.
+    if current_user.role is UserRole.MEMBER:
+        has_profile = (
+            db.query(Member.id).filter_by(user_id=current_user.id).first()
+            is not None
+        )
+        if not has_profile:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="profile_incomplete",
+            )
     return current_user
