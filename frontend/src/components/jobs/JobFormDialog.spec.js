@@ -3,6 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { jobsApi } from '../../api/jobs'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import JobFormDialog from './JobFormDialog.vue'
 
 // MdEditor is heavy and brings in CSS / DOM measurement; stub it to a
@@ -42,6 +44,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(jobsApi, 'listCompanies').mockResolvedValue([])
   vi.spyOn(jobsApi, 'listCategories').mockResolvedValue([])
+  vi.spyOn(membersApi, 'list').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -49,7 +52,9 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-async function mountDialog(props = {}) {
+async function mountDialog(props = {}, role = 'admin') {
+  const auth = useAuthStore()
+  auth.user = { id: 1, username: 'a', role }
   const wrapper = mount(JobFormDialog, {
     props: { modelValue: true, job: null, ...props },
   })
@@ -107,7 +112,7 @@ describe('JobFormDialog — edit mode', () => {
         job_year: 2023,
         job_month: 8,
         company: 'Acme',
-        real_name: 'Alice',
+        display_name: 'Alice',
         experience_md: '## interview',
         timeline_md: '| d | e |',
       },
@@ -142,6 +147,8 @@ describe('JobFormDialog — submit', () => {
       kind: 'internship',
       company: 'Acme',
       experience_md: '## interview',
+      is_anonymous: false,
+      subject_member_id: null,
       real_name: null,
       // The structured editor is the only timeline surface now; saving
       // always nulls out the legacy markdown column so it can't shadow
@@ -164,7 +171,7 @@ describe('JobFormDialog — submit', () => {
         job_year: 2024,
         job_month: 5,
         company: 'Acme',
-        real_name: 'Alice',
+        display_name: 'Alice',
         experience_md: '## interview',
         timeline_md: null,
       },
@@ -185,7 +192,10 @@ describe('JobFormDialog — submit', () => {
         kind: 'internship',
         company: 'Acme',
         experience_md: '## updated',
+        // display_name recovered into the free-text real_name (no subject).
         real_name: 'Alice',
+        is_anonymous: false,
+        subject_member_id: null,
       }),
     )
   })
@@ -321,6 +331,42 @@ describe('JobFormDialog — submit', () => {
     expect(payload.real_name).toBeNull()
     expect(payload.timeline_md).toBeNull()
     expect(payload.timeline_events).toEqual([])
+  })
+
+  it('sends is_anonymous true when the toggle is on', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    wrapper
+      .findComponent({ name: 'ElSwitch' })
+      .vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+    expect(create.mock.calls[0][0].is_anonymous).toBe(true)
+  })
+
+  it('member context hides admin attribution and omits subject/real_name', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog({}, 'member')
+
+    expect(findInputByDataTest(wrapper, 'form-real-name')).toBeNull()
+    expect(wrapper.find('[data-test="form-subject-member"]').exists()).toBe(
+      false,
+    )
+
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = create.mock.calls[0][0]
+    expect(payload.is_anonymous).toBe(false)
+    expect(payload).not.toHaveProperty('subject_member_id')
+    expect(payload).not.toHaveProperty('real_name')
   })
 
   it('round-trips timeline_events through edit mode unchanged when not modified', async () => {

@@ -18,6 +18,9 @@ import {
   ElFormItem,
   ElInput,
   ElMessage,
+  ElOption,
+  ElSelect,
+  ElSwitch,
   ElTabPane,
   ElTabs,
   ElTooltip,
@@ -27,8 +30,12 @@ import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
 import { jobsApi } from '../../api/jobs'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import JobAttachmentsManager from './JobAttachmentsManager.vue'
 import TimelineEditor from '../TimelineEditor.vue'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -212,10 +219,29 @@ const form = reactive({
   job_month: CURRENT_MONTH,
   company: '',
   category: '',
+  is_anonymous: false,
+  // Admin-only attribution: pick a member (subject_member_id) or type a
+  // free-text real_name for a non-member. Ignored by the backend for members.
+  subject_member_id: null,
   real_name: '',
   experience_md: '',
   timeline_events: [],
 })
+
+// Member options for the admin's "post on behalf of" selector. Loaded once
+// per dialog open, and only for admins (members can't attribute to others).
+const members = ref([])
+async function loadMembers() {
+  if (!auth.isActuallyAdmin || members.value.length) return
+  try {
+    members.value = await membersApi.list()
+  } catch {
+    members.value = []
+  }
+}
+function memberLabel(m) {
+  return `${m.real_name}（${m.graduation_year}）`
+}
 
 // Two-way bridge between the el-date-picker (Date) and the form's
 // integer (year, month) pair. Using a writable computed keeps the form
@@ -260,7 +286,12 @@ function resetForm(job) {
     job_month: job?.job_month ?? CURRENT_MONTH,
     company: job?.company ?? '',
     category: job?.category ?? '',
-    real_name: job?.real_name ?? '',
+    is_anonymous: job?.is_anonymous ?? false,
+    subject_member_id: job?.subject_member_id ?? null,
+    // For an admin, display_name == the free-text real_name when no subject
+    // member is attached (the response drops real_name itself), so recover it
+    // from there; a post attributed to a member leaves this blank.
+    real_name: job?.subject_member_id ? '' : (job?.display_name ?? ''),
     experience_md: job?.experience_md ?? '',
     // Structured editor bound to a copy so the user's edits don't
     // mutate the parent's job object until they actually save.
@@ -290,6 +321,7 @@ watch(
       // record doesn't inherit the previous session's createdJob.
       createdJob.value = null
       resetForm(props.job)
+      loadMembers()
       wireAllPreviewSync()
       openCounter.value += 1
     }
@@ -340,20 +372,31 @@ function buildPayload() {
     }))
     .filter((e) => e.date !== null && e.event.length > 0)
     .sort((a, b) => a.date.localeCompare(b.date))
-  return {
+  const payload = {
     kind: form.kind,
     job_year: form.job_year,
     job_month: form.job_month,
     company: form.company.trim(),
     category: trimmedCategory === '' ? null : trimmedCategory,
     experience_md: form.experience_md.trim(),
-    real_name: trimmedRealName === '' ? null : trimmedRealName,
+    is_anonymous: form.is_anonymous,
     timeline_events: cleanedEvents,
     // Always null out the legacy markdown column when saving via the
     // structured editor — otherwise an old job's markdown would shadow
     // the freshly-entered structured timeline in the viewer fallback.
     timeline_md: null,
   }
+  // Attribution is admin-only; the backend ignores it for members (their
+  // subject is always themselves). A picked member wins over free-text.
+  if (auth.isActuallyAdmin) {
+    payload.subject_member_id = form.subject_member_id ?? null
+    payload.real_name = form.subject_member_id
+      ? null
+      : trimmedRealName === ''
+        ? null
+        : trimmedRealName
+  }
+  return payload
 }
 
 async function handleSubmit() {
@@ -463,19 +506,43 @@ async function handleSubmit() {
           </div>
         </el-form-item>
 
-        <el-form-item
-          label="本名（留空為匿名）"
-          prop="real_name"
-          class="form-real-name-item"
-        >
-          <el-input
-            v-model="form.real_name"
-            placeholder="可留空"
-            maxlength="64"
-            show-word-limit
-            data-test="form-real-name"
-          />
+        <el-form-item label="匿名發表" class="form-real-name-item">
+          <div class="anon-row">
+            <el-switch v-model="form.is_anonymous" data-test="form-anonymous" />
+            <span class="anon-hint">開啟後，非管理員看不到發表者姓名</span>
+          </div>
         </el-form-item>
+
+        <template v-if="auth.isActuallyAdmin">
+          <el-form-item label="代表成員（選填）">
+            <el-select
+              v-model="form.subject_member_id"
+              filterable
+              clearable
+              placeholder="選擇成員，或留空並自訂本名"
+              class="form-subject-select"
+              data-test="form-subject-member"
+            >
+              <el-option
+                v-for="m in members"
+                :key="m.id"
+                :value="m.id"
+                :label="memberLabel(m)"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="本名（非成員時填寫）" prop="real_name">
+            <el-input
+              v-model="form.real_name"
+              :disabled="form.subject_member_id != null"
+              placeholder="未選成員時，可自訂發表者姓名"
+              maxlength="64"
+              show-word-limit
+              data-test="form-real-name"
+            />
+          </el-form-item>
+        </template>
 
         <el-form-item label="求職年月" prop="job_year">
           <el-date-picker
@@ -665,6 +732,22 @@ async function handleSubmit() {
 .form-real-name-item {
   flex: 1;
   min-width: 200px;
+}
+
+.anon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.anon-hint {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.form-subject-select {
+  width: 100%;
 }
 
 /* Equal-width 1:1 split for the company / category pair on desktop.
