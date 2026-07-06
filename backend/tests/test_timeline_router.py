@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import Job, JobKind, Member, User, UserRole
+from app.models import Job, JobKind, Member, PostStatus, User, UserRole
 
 
 @pytest.fixture
@@ -83,6 +83,7 @@ def _add_job(
             kind=kind,
             experience_md="x",
             real_name=real_name,
+            status=PostStatus.ACCEPTED,
             created_at=created_at,
         )
     )

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MIN_JOB_YEAR = 2000
 
 JobKindLiteral = Literal["internship", "fulltime"]
+PostStatusLiteral = Literal["pending", "accepted", "rejected"]
 
 # Cap timeline length to keep the JSON payload sane and to avoid the
 # editor UI degrading on absurd inputs. 50 entries comfortably covers
@@ -85,16 +86,25 @@ class JobResponse(BaseModel):
     category: str | None
     kind: JobKindLiteral
     experience_md: str
-    real_name: str | None
     timeline_md: str | None
     timeline_events: list[TimelineEvent] | None
     created_at: datetime
     # Populated by the jobs router via a per-call COUNT query, not an
     # ORM relationship — keeps the Job model decoupled from the
-    # attachments subsystem. Defaults to 0 so endpoints that don't
-    # need it (or paths where attachments are guaranteed empty, like
-    # immediately after create_job) don't have to pass it explicitly.
+    # attachments subsystem.
     attachment_count: int = 0
+    # --- author / visibility, role-filtered by app.core.job_serialize ---
+    # Public-safe display name. None => anonymous to this viewer (§8).
+    display_name: str | None = None
+    is_anonymous: bool = False
+    status: PostStatusLiteral = "accepted"
+    # Present only when the viewer may see identity (non-anonymous, or admin).
+    subject_member_id: int | None = None
+    # Admin-only: the real poster; None for everyone else.
+    author_user_id: int | None = None
+    # Admin or the post's owner only.
+    review_reason: str | None = None
+    can_edit: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

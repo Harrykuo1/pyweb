@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from app.models import Job, JobKind
+from app.core.job_serialize import serialize_job
+from app.models import Job, JobKind, PostStatus
 from app.schemas import (
     JobCreate,
     JobResponse,
@@ -175,43 +176,36 @@ def test_job_update_rejects_invalid_kind_when_provided():
         JobUpdate(kind="freelance")
 
 
-def test_job_response_from_orm_object():
+# JobResponse is now built by app.core.job_serialize.serialize_job (the
+# role-aware §8 choke point), not model_validate — the anonymity rules live
+# in test_job_serialize.py. These cover scalar field pass-through.
+def test_serialize_job_exposes_scalar_fields():
     now = datetime.now(UTC)
     j = Job(
         id=1,
         job_year=2025,
         job_month=6,
         company="Acme",
+        category="Frontend",
         kind=JobKind.INTERNSHIP,
         experience_md="# hi",
         real_name=None,
         timeline_md=None,
+        status=PostStatus.ACCEPTED,
+        is_anonymous=False,
         created_at=now,
     )
-    resp = JobResponse.model_validate(j)
+    resp = serialize_job(
+        j, is_admin=True, viewer_member_id=None, attachment_count=0, subject_name=None
+    )
     assert resp.id == 1
     assert resp.job_month == 6
     assert resp.kind == "internship"
-    assert resp.real_name is None
-    assert resp.category is None
+    assert resp.category == "Frontend"
+    assert resp.status == "accepted"
 
 
-def test_job_response_exposes_category_when_set():
-    now = datetime.now(UTC)
-    j = Job(
-        id=3,
-        job_year=2025,
-        job_month=1,
-        company="Acme",
-        category="Frontend",
-        kind=JobKind.INTERNSHIP,
-        experience_md="x",
-        created_at=now,
-    )
-    assert JobResponse.model_validate(j).category == "Frontend"
-
-
-def test_job_response_from_fulltime_orm_object():
+def test_serialize_job_maps_fulltime_kind():
     now = datetime.now(UTC)
     j = Job(
         id=2,
@@ -220,9 +214,13 @@ def test_job_response_from_fulltime_orm_object():
         company="Globex",
         kind=JobKind.FULLTIME,
         experience_md="x",
+        status=PostStatus.ACCEPTED,
+        is_anonymous=False,
         created_at=now,
     )
-    resp = JobResponse.model_validate(j)
+    resp = serialize_job(
+        j, is_admin=True, viewer_member_id=None, attachment_count=0, subject_name=None
+    )
     assert resp.kind == "fulltime"
 
 

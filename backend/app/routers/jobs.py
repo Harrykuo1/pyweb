@@ -7,11 +7,12 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_admin, require_completed_member
+from app.core.job_serialize import serialize_job
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Job, JobAttachment, JobKind, User
+from app.models import Job, JobAttachment, JobKind, Member, PostStatus, User, UserRole
 from app.routers.job_attachments import get_uploads_root, job_uploads_dir
 from app.schemas import (
     JobCreate,
@@ -20,7 +21,7 @@ from app.schemas import (
     ListResponse,
     PasswordConfirmRequest,
 )
-from app.schemas.job import JobKindLiteral
+from app.schemas.job import JobKindLiteral, PostStatusLiteral
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -70,13 +71,43 @@ def _attachment_counts(db: Session, job_ids: list[int]) -> dict[int, int]:
     return dict(rows)
 
 
-def _to_response(job: Job, attachment_count: int = 0) -> JobResponse:
-    """Build a JobResponse and stamp the (separately-queried) count.
-    Avoids defining a SQLAlchemy column_property on Job that would
-    forcibly subquery on every Job load app-wide."""
-    resp = JobResponse.model_validate(job)
-    resp.attachment_count = attachment_count
-    return resp
+def _viewer_member_id(db: Session, user: User) -> int | None:
+    row = db.query(Member.id).filter_by(user_id=user.id).first()
+    return row[0] if row is not None else None
+
+
+def _subject_names(db: Session, member_ids: list[int | None]) -> dict[int, str]:
+    ids = [m for m in member_ids if m is not None]
+    if not ids:
+        return {}
+    rows = db.query(Member.id, Member.real_name).filter(Member.id.in_(ids)).all()
+    return dict(rows)
+
+
+def _order_by(sort: str, order: str, is_admin: bool) -> list:
+    if sort == "kind":
+        primary = _KIND_PRIORITY.asc() if order == "asc" else _KIND_PRIORITY.desc()
+        return [primary, Job.created_at.desc()]
+    if sort == "real_name":
+        # Public-safe name sort: anonymous rows expose no name to non-admins,
+        # so they collapse to null (and sink) — never ordered by a hidden name.
+        name_col = (
+            Job.real_name
+            if is_admin
+            else case((Job.is_anonymous, None), else_=Job.real_name)
+        )
+        primary = name_col.asc() if order == "asc" else name_col.desc()
+        return [name_col.is_(None), primary, Job.created_at.desc()]
+    if sort == "created_at":
+        col = Job.created_at
+        return [col.asc() if order == "asc" else col.desc()]
+    if sort == "job_year":
+        year_col = Job.job_year.asc() if order == "asc" else Job.job_year.desc()
+        month_col = Job.job_month.asc() if order == "asc" else Job.job_month.desc()
+        return [year_col, month_col, Job.created_at.desc()]
+    col = _SORT_COLUMNS[sort]
+    primary = col.asc() if order == "asc" else col.desc()
+    return [primary, Job.created_at.desc()]
 
 
 def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
@@ -103,11 +134,26 @@ def list_jobs(
     company: list[str] = Query(default_factory=list, max_length=10),
     category: list[str] = Query(default_factory=list, max_length=10),
     kind: JobKindLiteral | None = None,
+    status_filter: PostStatusLiteral | None = Query(default=None, alias="status"),
     q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
-    _: object = Depends(require_completed_member),
+    current_user: User = Depends(require_completed_member),
 ) -> ListResponse[JobResponse]:
+    is_admin = current_user.role is UserRole.ADMIN
+    viewer_member_id = _viewer_member_id(db, current_user)
+
     query = db.query(Job)
+
+    # Visibility: non-admins see accepted posts plus their own (by subject).
+    if not is_admin:
+        own = (
+            Job.subject_member_id == viewer_member_id
+            if viewer_member_id is not None
+            else False
+        )
+        query = query.filter((Job.status == PostStatus.ACCEPTED) | own)
+    if status_filter is not None:
+        query = query.filter(Job.status == PostStatus(status_filter))
 
     if year is not None:
         query = query.filter(Job.job_year == year)
@@ -118,43 +164,30 @@ def list_jobs(
     if kind is not None:
         query = query.filter(Job.kind == kind)
     if q:
-        # Company is filtered separately via the multi-select tag picker,
-        # so keep q focused on free-form text fields. Supports boolean
-        # syntax (AND / OR / NOT / -prefix / "phrase") via search_query.
-        expr = build_ilike_filter(
-            parse_search_query(q),
-            [Job.real_name, Job.experience_md],
-        )
+        # Non-admins must not be able to reverse-lookup an anonymous author
+        # by searching a real name: restrict their text search to the
+        # experience body. Admins may search real_name too.
+        fields = [Job.experience_md]
+        if is_admin:
+            fields.append(Job.real_name)
+        expr = build_ilike_filter(parse_search_query(q), fields)
         if expr is not None:
             query = query.filter(expr)
 
-    if sort == "kind":
-        primary = _KIND_PRIORITY.asc() if order == "asc" else _KIND_PRIORITY.desc()
-        # Group same-kind rows together and order within by recency.
-        order_by = [primary, Job.created_at.desc()]
-    elif sort == "real_name":
-        column = _SORT_COLUMNS[sort]
-        primary = column.asc() if order == "asc" else column.desc()
-        # Anonymous rows always sink to the bottom regardless of asc/desc.
-        order_by = [Job.real_name.is_(None), primary, Job.created_at.desc()]
-    elif sort == "created_at":
-        column = _SORT_COLUMNS[sort]
-        order_by = [column.asc() if order == "asc" else column.desc()]
-    elif sort == "job_year":
-        # Year+month chronological — month is the secondary key so a
-        # 2024-12 record sits ahead of 2024-01 in descending order.
-        year_col = Job.job_year.asc() if order == "asc" else Job.job_year.desc()
-        month_col = Job.job_month.asc() if order == "asc" else Job.job_month.desc()
-        order_by = [year_col, month_col, Job.created_at.desc()]
-    else:
-        column = _SORT_COLUMNS[sort]
-        primary = column.asc() if order == "asc" else column.desc()
-        order_by = [primary, Job.created_at.desc()]
-
-    items = query.order_by(*order_by).all()
+    items = query.order_by(*_order_by(sort, order, is_admin)).all()
     counts = _attachment_counts(db, [i.id for i in items])
+    names = _subject_names(db, [i.subject_member_id for i in items])
     return ListResponse[JobResponse](
-        items=[_to_response(i, counts.get(i.id, 0)) for i in items],
+        items=[
+            serialize_job(
+                i,
+                is_admin=is_admin,
+                viewer_member_id=viewer_member_id,
+                attachment_count=counts.get(i.id, 0),
+                subject_name=names.get(i.subject_member_id),
+            )
+            for i in items
+        ],
         total=len(items),
     )
 
@@ -190,11 +223,30 @@ def list_categories(
 def get_job(
     job_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(require_completed_member),
+    current_user: User = Depends(require_completed_member),
 ) -> JobResponse:
     obj = _get_or_404(db, job_id)
+    is_admin = current_user.role is UserRole.ADMIN
+    viewer_member_id = _viewer_member_id(db, current_user)
+    is_owner = (
+        obj.subject_member_id is not None
+        and obj.subject_member_id == viewer_member_id
+    )
+    # Don't let a non-admin fetch someone else's pending/rejected post by id —
+    # 404 hides its very existence.
+    if not is_admin and obj.status is not PostStatus.ACCEPTED and not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
     counts = _attachment_counts(db, [obj.id])
-    return _to_response(obj, counts.get(obj.id, 0))
+    names = _subject_names(db, [obj.subject_member_id])
+    return serialize_job(
+        obj,
+        is_admin=is_admin,
+        viewer_member_id=viewer_member_id,
+        attachment_count=counts.get(obj.id, 0),
+        subject_name=names.get(obj.subject_member_id),
+    )
 
 
 @router.post(
@@ -215,6 +267,9 @@ def create_job(
         kind=JobKind(payload.kind),
         experience_md=payload.experience_md,
         real_name=payload.real_name,
+        # Admin-created posts are auto-published (§7.4). The member-facing
+        # author/anonymity/approval model lands in phase 5b.
+        status=PostStatus.ACCEPTED,
         timeline_md=payload.timeline_md,
         # Pydantic gives us TimelineEvent instances containing date
         # objects; SQLAlchemy's JSON column needs plain dicts with
@@ -231,7 +286,14 @@ def create_job(
     db.refresh(obj)
     # Freshly created — no attachments could exist yet, so the default 0
     # is exact. Skip the COUNT query for this path.
-    return _to_response(obj, 0)
+    names = _subject_names(db, [obj.subject_member_id])
+    return serialize_job(
+        obj,
+        is_admin=True,
+        viewer_member_id=None,
+        attachment_count=0,
+        subject_name=names.get(obj.subject_member_id),
+    )
 
 
 @router.put("/{job_id}", response_model=JobResponse)
@@ -252,7 +314,14 @@ def update_job(
     db.commit()
     db.refresh(obj)
     counts = _attachment_counts(db, [obj.id])
-    return _to_response(obj, counts.get(obj.id, 0))
+    names = _subject_names(db, [obj.subject_member_id])
+    return serialize_job(
+        obj,
+        is_admin=True,
+        viewer_member_id=None,
+        attachment_count=counts.get(obj.id, 0),
+        subject_name=names.get(obj.subject_member_id),
+    )
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
