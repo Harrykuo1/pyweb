@@ -15,13 +15,14 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import get_current_user, require_admin, require_member
 from app.core.security import verify_password
 from app.database import get_db
 from app.models import Member, User
 from app.schemas import (
     MemberCreate,
     MemberResponse,
+    MemberSelfCreate,
     MemberUpdate,
     PasswordConfirmRequest,
 )
@@ -105,6 +106,33 @@ def get_member(
     _: object = Depends(get_current_user),
 ) -> Member:
     return _get_member_or_404(db, member_id)
+
+
+@router.post("/me", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
+def create_my_member_profile(
+    payload: MemberSelfCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_member),
+) -> Member:
+    existing = db.query(Member).filter_by(user_id=current_user.id).one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This account already has a member profile",
+        )
+    member = Member(
+        user_id=current_user.id,
+        graduation_year=payload.graduation_year,
+        real_name=payload.real_name,
+        institution=payload.institution,
+        position=payload.position,
+        resume_md=payload.resume_md,
+        joined_at=datetime.now(UTC),
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return member
 
 
 @router.post("", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)

@@ -12,6 +12,14 @@ class MemberCreate(BaseModel):
     joined_at: datetime | None = None
 
 
+class MemberSelfCreate(BaseModel):
+    graduation_year: int = Field(ge=1900, le=2100)
+    real_name: str = Field(min_length=1, max_length=64)
+    institution: str = Field(min_length=1, max_length=128)
+    position: str | None = Field(default=None, min_length=1, max_length=128)
+    resume_md: str | None = None
+
+
 class MemberUpdate(BaseModel):
     graduation_year: int | None = Field(default=None, ge=1900, le=2100)
     real_name: str | None = Field(default=None, min_length=1, max_length=64)

@@ -28,7 +28,12 @@ from app.schemas.job_attachment import (
     BulkDownloadRequest,
     JobAttachmentResponse,
 )
-from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
+from app.schemas.member import (
+    MemberCreate,
+    MemberResponse,
+    MemberSelfCreate,
+    MemberUpdate,
+)
 from app.schemas.setting import (
     ConfigFieldResponse,
     ConfigResponse,
@@ -64,6 +69,7 @@ __all__ = [
     "MemberCreate",
     "MemberJoinedItem",
     "MemberResponse",
+    "MemberSelfCreate",
     "MemberUpdate",
     "PasswordConfirmRequest",
     "PendingLinkResponse",
