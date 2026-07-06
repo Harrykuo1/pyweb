@@ -45,7 +45,12 @@ class JobCreate(BaseModel):
     category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral
     experience_md: str = Field(min_length=1)
+    # Admin free-text author fallback (when not picking a member subject).
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
+    # Admin-only: the member this post is about. Ignored for members (their
+    # subject is always themselves).
+    subject_member_id: int | None = None
+    is_anonymous: bool = False
     timeline_md: str | None = None
     timeline_events: list[TimelineEvent] | None = Field(
         default=None, max_length=TIMELINE_EVENTS_MAX
@@ -65,6 +70,9 @@ class JobUpdate(BaseModel):
     kind: JobKindLiteral | None = None
     experience_md: str | None = Field(default=None, min_length=1)
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
+    # Admin-only on update; the router pops these for non-admin editors.
+    subject_member_id: int | None = None
+    is_anonymous: bool | None = None
     timeline_md: str | None = None
     timeline_events: list[TimelineEvent] | None = Field(
         default=None, max_length=TIMELINE_EVENTS_MAX
@@ -76,6 +84,10 @@ class JobUpdate(BaseModel):
         if v is None:
             return v
         return _validate_job_year(v)
+
+
+class RejectRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class JobResponse(BaseModel):

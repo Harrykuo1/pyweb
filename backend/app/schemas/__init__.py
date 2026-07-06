@@ -21,6 +21,7 @@ from app.schemas.job import (
     JobResponse,
     JobUpdate,
     ListResponse,
+    RejectRequest,
 )
 from app.schemas.job_attachment import (
     BulkDeleteRequest,
@@ -73,6 +74,7 @@ __all__ = [
     "MemberUpdate",
     "PasswordConfirmRequest",
     "PendingLinkResponse",
+    "RejectRequest",
     "RegistrationInviteResponse",
     "ResolvePendingLinkRequest",
     "RoleUpdateRequest",

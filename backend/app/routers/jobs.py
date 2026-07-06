@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_admin, require_completed_member
+from app.core.deps import require_admin, require_completed_member, require_member
 from app.core.job_serialize import serialize_job
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
@@ -257,8 +257,35 @@ def get_job(
 def create_job(
     payload: JobCreate,
     db: Session = Depends(get_db),
-    _: object = Depends(require_admin),
+    current_user: User = Depends(require_member),
 ) -> JobResponse:
+    is_admin = current_user.role is UserRole.ADMIN
+    viewer_member_id = _viewer_member_id(db, current_user)
+
+    if is_admin:
+        # Admin may attribute the post to any member (or free-text real_name),
+        # and it publishes immediately.
+        subject_member_id = payload.subject_member_id
+        if subject_member_id is not None and (
+            db.query(Member.id).filter_by(id=subject_member_id).first() is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Subject member not found"
+            )
+        real_name = payload.real_name
+        post_status = PostStatus.ACCEPTED
+    else:
+        # Members post about themselves and need admin approval. Their
+        # subject is always their own member — payload subject/real_name
+        # are ignored so they can't attribute a post to someone else.
+        if viewer_member_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="profile_incomplete"
+            )
+        subject_member_id = viewer_member_id
+        real_name = None
+        post_status = PostStatus.PENDING
+
     obj = Job(
         job_year=payload.job_year,
         job_month=payload.job_month,
@@ -266,15 +293,15 @@ def create_job(
         category=payload.category,
         kind=JobKind(payload.kind),
         experience_md=payload.experience_md,
-        real_name=payload.real_name,
-        # Admin-created posts are auto-published (§7.4). The member-facing
-        # author/anonymity/approval model lands in phase 5b.
-        status=PostStatus.ACCEPTED,
+        real_name=real_name,
+        subject_member_id=subject_member_id,
+        author_user_id=current_user.id,
+        is_anonymous=payload.is_anonymous,
+        status=post_status,
         timeline_md=payload.timeline_md,
-        # Pydantic gives us TimelineEvent instances containing date
-        # objects; SQLAlchemy's JSON column needs plain dicts with
-        # JSON-serialisable scalars, so use mode="json" to force the
-        # date -> ISO string conversion at the boundary.
+        # Pydantic gives us TimelineEvent instances containing date objects;
+        # SQLAlchemy's JSON column needs plain JSON-serialisable dicts, so
+        # mode="json" forces the date -> ISO string conversion.
         timeline_events=(
             [e.model_dump(mode="json") for e in payload.timeline_events]
             if payload.timeline_events is not None
@@ -284,13 +311,11 @@ def create_job(
     db.add(obj)
     db.commit()
     db.refresh(obj)
-    # Freshly created — no attachments could exist yet, so the default 0
-    # is exact. Skip the COUNT query for this path.
     names = _subject_names(db, [obj.subject_member_id])
     return serialize_job(
         obj,
-        is_admin=True,
-        viewer_member_id=None,
+        is_admin=is_admin,
+        viewer_member_id=viewer_member_id,
         attachment_count=0,
         subject_name=names.get(obj.subject_member_id),
     )
