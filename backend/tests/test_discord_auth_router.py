@@ -186,3 +186,43 @@ def test_callback_unmatched_first_login_queues_pending(client, db_session, monke
     from app.models import PendingDiscordLink
 
     assert db_session.query(PendingDiscordLink).filter_by(discord_id="Z9").count() == 1
+
+
+def test_callback_registers_new_member_via_invite(client, db_session, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+    from urllib.parse import parse_qs, urlparse
+
+    from app.models import RegistrationInvite
+
+    now = datetime.now(UTC)
+    db_session.add(
+        RegistrationInvite(
+            token="inv1", created_at=now, expires_at=now + timedelta(hours=1)
+        )
+    )
+    db_session.commit()
+
+    _patch_flow(monkeypatch, identity_id="FRESH", is_member=True)
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="FRESH", username="fresh", global_name="Fresh"
+        ),
+    )
+    # Start via the register endpoint so the invite token lands in session.
+    r0 = client.get(
+        "/api/auth/discord/register?token=inv1", follow_redirects=False
+    )
+    state = parse_qs(urlparse(r0.headers["location"]).query)["state"][0]
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert r.headers["location"] == "/register/profile"
+
+    created = db_session.query(User).filter_by(discord_id="FRESH").one()
+    assert created.role.value == "member"
+    assert client.get("/api/auth/me").status_code == 200

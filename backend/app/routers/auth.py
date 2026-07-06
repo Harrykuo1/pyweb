@@ -74,6 +74,8 @@ def login(
 # reads ?error=<reason> to show a message. "/" on success.
 _LOGIN_PATH = "/login"
 _HOME_PATH = "/"
+# New registrants land here to fill in their member profile.
+_REGISTER_PROFILE_PATH = "/register/profile"
 
 
 def _oauth_error(reason: str) -> RedirectResponse:
@@ -163,20 +165,30 @@ def discord_callback(
     if not discord_oauth.is_guild_member(token, guild_id):
         return _oauth_error("not_member")
 
-    user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
-    if user is None:
-        # First login of a pre-created account: bridge by the resume handle.
-        # On a unique match we get the now-linked user; otherwise the
-        # identity is queued for an admin and we turn them away.
-        user = discord_link.link_or_queue(db, identity)
+    # Registration (invite in session) takes priority over login: a fresh
+    # Discord identity coming through an invite becomes a new member here.
+    invite_token = request.session.pop("registration_invite_token", None)
+    if invite_token is not None:
+        user, err = discord_register.register_via_invite(db, identity, invite_token)
+        if err is not None:
+            return _oauth_error(err)
+        redirect_target = _REGISTER_PROFILE_PATH
+    else:
+        user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
         if user is None:
-            return _oauth_error("not_linked")
+            # First login of a pre-created account: bridge by the resume
+            # handle. On a unique match we get the now-linked user;
+            # otherwise the identity is queued for an admin and turned away.
+            user = discord_link.link_or_queue(db, identity)
+            if user is None:
+                return _oauth_error("not_linked")
+        redirect_target = _HOME_PATH
 
     request.session["user_id"] = user.id
     request.session["role"] = user.role.value
     request.session["password_version"] = user.password_version
     audit_log.record_success(audit_log.client_ip(request), role=user.role.value)
-    return RedirectResponse(url=_HOME_PATH, status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
