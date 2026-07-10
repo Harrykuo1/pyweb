@@ -502,6 +502,59 @@ def test_delete_orphan_member_without_account_still_works(client_factory, db_ses
     assert db_session.query(Member).filter_by(id=mid).one_or_none() is None
 
 
+def test_delete_member_referenced_by_job_is_blocked_409(client_factory, db_session):
+    from app.models import Job
+    from app.models.job import JobKind
+
+    client, login_as = client_factory
+    login_as("admin")
+    mid = client.post(
+        "/api/members",
+        json={"graduation_year": 2024, "real_name": "Ref", "institution": "X"},
+    ).json()["id"]
+    db_session.add(
+        Job(
+            subject_member_id=mid,
+            job_year=2024,
+            job_month=6,
+            company="Acme",
+            kind=JobKind.INTERNSHIP,
+            experience_md="# exp",
+        )
+    )
+    db_session.commit()
+
+    resp = client.request(
+        "DELETE", f"/api/members/{mid}", json={"password": "admin-pw"}
+    )
+    assert resp.status_code == 409, resp.text
+    assert db_session.query(Member).filter_by(id=mid).one_or_none() is not None
+
+
+def test_delete_member_reaps_upload_dir(client_factory, db_session, tmp_path):
+    from app.routers.members import get_uploads_root
+
+    uploads_dir = tmp_path / "uploads"
+    app.dependency_overrides[get_uploads_root] = lambda: uploads_dir
+
+    client, login_as = client_factory
+    login_as("admin")
+    m = Member(graduation_year=2020, real_name="Legacy", institution="Old", user_id=None)
+    db_session.add(m)
+    db_session.commit()
+    mid = m.id
+
+    member_dir = uploads_dir / "members" / str(mid)
+    member_dir.mkdir(parents=True)
+    (member_dir / "photo.png").write_bytes(b"x")
+
+    resp = client.request(
+        "DELETE", f"/api/members/{mid}", json={"password": "admin-pw"}
+    )
+    assert resp.status_code == 204, resp.text
+    assert not member_dir.exists()
+
+
 def test_delete_claimed_member_is_blocked_with_409(client_factory, db_session):
     client, login_as = client_factory
     login_as("admin")

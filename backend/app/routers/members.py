@@ -1,3 +1,4 @@
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -20,7 +21,7 @@ from app.core.deps import require_admin, require_completed_member, require_membe
 from app.core.discord_link import normalize_discord_handle
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Member, User, UserRole
+from app.models import Job, Member, User, UserRole
 from app.schemas import (
     MemberCreate,
     MemberResponse,
@@ -219,6 +220,7 @@ def delete_member(
     payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
+    uploads_root: Path = Depends(get_uploads_root),
 ) -> None:
     _require_admin_password(payload, admin)
     member = _get_member_or_404(db, member_id)
@@ -235,6 +237,15 @@ def delete_member(
             status_code=status.HTTP_409_CONFLICT,
             detail="This member has an active account; suspend it instead",
         )
+    # A member still referenced by job records is content-bearing history —
+    # deleting it would orphan those posts (or 500 on the FK). Preserve it,
+    # same philosophy as the claimed-account guard above.
+    referenced = db.query(Job.id).filter_by(subject_member_id=member_id).first()
+    if referenced is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This member is referenced by job records and cannot be deleted",
+        )
     # Unclaimed (pre-provisioned, never logged in) or legacy row: safe to remove
     # outright — no content, no other FK references. Delete the member first
     # (it holds the FK to users), then its unclaimed account if present.
@@ -242,6 +253,7 @@ def delete_member(
     if linked_user is not None:
         db.delete(linked_user)
     db.commit()
+    shutil.rmtree(uploads_root / "members" / str(member_id), ignore_errors=True)
 
 
 # ---------- photo ----------
