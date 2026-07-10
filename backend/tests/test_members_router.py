@@ -573,3 +573,67 @@ def test_delete_claimed_member_is_blocked_with_409(client_factory, db_session):
     assert resp.status_code == 409, resp.text
     assert db_session.query(Member).filter_by(id=member.id).one_or_none() is not None
     assert db_session.query(User).filter_by(id=account.id).one_or_none() is not None
+
+
+def test_member_response_reports_account_status(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    # pending: admin-created (provisions account, discord_id None)
+    pid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "P",
+            "institution": "X",
+            "discord_username": "p",
+        },
+    ).json()["id"]
+    # claimed
+    cid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "C",
+            "institution": "X",
+            "discord_username": "c",
+        },
+    ).json()["id"]
+    cacc = db_session.query(User).filter_by(
+        id=db_session.query(Member).filter_by(id=cid).one().user_id
+    ).one()
+    cacc.discord_id = "d-c"
+    cacc.is_active = True
+    # suspended
+    sid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "S",
+            "institution": "X",
+            "discord_username": "s",
+        },
+    ).json()["id"]
+    sacc = db_session.query(User).filter_by(
+        id=db_session.query(Member).filter_by(id=sid).one().user_id
+    ).one()
+    sacc.discord_id = "d-s"
+    sacc.is_active = False
+    # legacy: seed a member with no account
+    from app.models import Member as M
+
+    legacy = M(graduation_year=2020, real_name="L", institution="Old", user_id=None)
+    db_session.add(legacy)
+    db_session.commit()
+    lid = legacy.id
+
+    def status_of(mid):
+        return client.get(f"/api/members/{mid}").json()["account_status"]
+
+    assert status_of(pid) == "pending"
+    assert status_of(cid) == "claimed"
+    assert status_of(sid) == "suspended"
+    assert status_of(lid) == "legacy"
+    # claimed carries account_id + discord username
+    body = client.get(f"/api/members/{cid}").json()
+    assert body["account_id"] == cacc.id
+    assert body["is_active"] is True

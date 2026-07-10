@@ -104,14 +104,42 @@ def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> Non
         )
 
 
+def _member_response(member: Member, user: User | None) -> MemberResponse:
+    """Fold the linked account's claim/suspend state into the member payload.
+
+    Kept as a plain builder (not an ORM property) so the list endpoint can
+    feed it rows from a single LEFT JOIN and avoid an N+1 on the account.
+    """
+    resp = MemberResponse.model_validate(member)
+    if user is None:
+        resp.account_status = "legacy"
+        return resp
+    resp.account_id = user.id
+    resp.is_active = user.is_active
+    resp.account_discord_username = user.discord_username
+    if user.discord_id is None:
+        resp.account_status = "pending"
+    elif not user.is_active:
+        resp.account_status = "suspended"
+    else:
+        resp.account_status = "claimed"
+    return resp
+
+
 @router.get("", response_model=list[MemberResponse])
 def list_members(
     order: Literal["asc", "desc"] = "asc",
     db: Session = Depends(get_db),
     _: object = Depends(require_completed_member),
-) -> list[Member]:
+) -> list[MemberResponse]:
     column = Member.joined_at.asc() if order == "asc" else Member.joined_at.desc()
-    return db.query(Member).order_by(column).all()
+    rows = (
+        db.query(Member, User)
+        .outerjoin(User, User.id == Member.user_id)
+        .order_by(column)
+        .all()
+    )
+    return [_member_response(m, u) for (m, u) in rows]
 
 
 @router.get("/{member_id}", response_model=MemberResponse)
@@ -119,8 +147,14 @@ def get_member(
     member_id: int,
     db: Session = Depends(get_db),
     _: object = Depends(require_completed_member),
-) -> Member:
-    return _get_member_or_404(db, member_id)
+) -> MemberResponse:
+    member = _get_member_or_404(db, member_id)
+    user = (
+        db.query(User).filter_by(id=member.user_id).one_or_none()
+        if member.user_id is not None
+        else None
+    )
+    return _member_response(member, user)
 
 
 @router.post("/me", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)

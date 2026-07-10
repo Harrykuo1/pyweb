@@ -43,5 +43,9 @@ class MemberResponse(BaseModel):
     has_resume_pdf: bool
     photo_updated_at: datetime | None
     resume_pdf_updated_at: datetime | None
+    account_status: str = "legacy"
+    is_active: bool = True
+    account_id: int | None = None
+    account_discord_username: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
