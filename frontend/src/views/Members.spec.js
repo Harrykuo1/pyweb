@@ -106,9 +106,10 @@ const booleanSearchMembers = [
   },
 ]
 
-// Members across the four account states, for the state-driven action /
-// badge tests. is_active mirrors the backend derivation: a plain pending
-// account is still active; only a suspended account is is_active=false.
+// Members across the four account states. Since P3 the public directory only
+// reads `account_status` (to hide suspended); `is_active`/`account_id` are
+// kept here only to mirror the real API shape — they no longer drive any
+// directory behavior.
 const stateMembers = [
   {
     id: 1,
@@ -433,8 +434,10 @@ describe('Members.vue', () => {
     // Lifecycle management (delete / suspend / reactivate / status badge / add)
     // now lives in the Settings hub, not the public directory.
     expect(wrapper.find('[data-test="delete-button"]').exists()).toBe(false)
+    // Suspend is asserted on a VISIBLE row (id 1 = claimed) so it proves the
+    // affordance is gone, not just that the row is filtered. (Reactivate can't
+    // be asserted here — suspended rows never render on the public directory.)
     expect(wrapper.find('[data-test="member-suspend-1"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="member-reactivate-3"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-test^="member-status-"]').length).toBe(0)
     expect(wrapper.find('[data-test="add-member-button"]').exists()).toBe(false)
   })
