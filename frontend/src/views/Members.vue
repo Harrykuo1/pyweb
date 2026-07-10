@@ -471,11 +471,11 @@ onMounted(() => {
               </el-button>
 
               <span
-                v-if="canEdit(m) || auth.isActuallyAdmin"
+                v-if="canEdit(m) || auth.isAdmin"
                 class="card-admin-actions"
               >
                 <span
-                  v-if="auth.isActuallyAdmin && statusBadge(m)"
+                  v-if="auth.isAdmin && statusBadge(m)"
                   :class="['status-badge', `status-badge--${m.account_status}`]"
                   :data-test="`member-status-${m.id}`"
                 >
@@ -490,7 +490,7 @@ onMounted(() => {
                 >
                   編輯
                 </el-button>
-                <template v-if="auth.isActuallyAdmin">
+                <template v-if="auth.isAdmin">
                   <el-button
                     v-if="m.account_status === 'claimed'"
                     size="small"
@@ -686,14 +686,14 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column
-        v-if="auth.isActuallyAdmin || auth.myMemberId != null"
+        v-if="auth.isAdmin || auth.myMemberId != null"
         label="操作"
         width="160"
         align="center"
       >
         <template #default="{ row }">
           <span
-            v-if="auth.isActuallyAdmin && statusBadge(row)"
+            v-if="auth.isAdmin && statusBadge(row)"
             :class="['status-badge', `status-badge--${row.account_status}`]"
             :data-test="`member-status-${row.id}`"
           >
@@ -710,7 +710,7 @@ onMounted(() => {
               @click="openEdit(row)"
             />
           </el-tooltip>
-          <template v-if="auth.isActuallyAdmin">
+          <template v-if="auth.isAdmin">
             <el-button
               v-if="row.account_status === 'claimed'"
               size="small"

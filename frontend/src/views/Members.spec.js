@@ -832,6 +832,9 @@ describe('Members.vue — account state actions & badges', () => {
     expect(wrapper.find('.member-anchor-1').exists()).toBe(true)
     expect(wrapper.find('.member-anchor-2').exists()).toBe(true)
     expect(wrapper.find('.member-anchor-4').exists()).toBe(true)
+    // Management affordances hide during preview (isAdmin is false), so the
+    // claimed member's suspend button is gone — the admin sees the member view.
+    expect(wrapper.find('[data-test="member-suspend-1"]').exists()).toBe(false)
   })
 })
 
