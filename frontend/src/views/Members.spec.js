@@ -3,9 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { membersApi } from '../api/members'
-import { authApi } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
-import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import Members from './Members.vue'
 
 vi.mock('element-plus', async (importOriginal) => {
@@ -416,28 +414,6 @@ describe('Members.vue', () => {
     expect(wrapper.findAll('[data-test="member-card"]').length).toBe(2)
   })
 
-  it('shows the add-member button for admin', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'a', role: 'admin' }
-    vi.spyOn(membersApi, 'list').mockResolvedValue([])
-
-    const wrapper = mount(Members)
-    await flushPromises()
-
-    expect(wrapper.find('[data-test="add-member-button"]').exists()).toBe(true)
-  })
-
-  it('hides the add-member button for viewer', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 2, username: 'v', role: 'viewer' }
-    vi.spyOn(membersApi, 'list').mockResolvedValue([])
-
-    const wrapper = mount(Members)
-    await flushPromises()
-
-    expect(wrapper.find('[data-test="add-member-button"]').exists()).toBe(false)
-  })
-
   it('refresh button re-fetches the list', async () => {
     const list = vi.spyOn(membersApi, 'list').mockResolvedValue([])
     const wrapper = mount(Members)
@@ -450,10 +426,17 @@ describe('Members.vue', () => {
     expect(list).toHaveBeenCalled()
   })
 
-  it('admin sees edit and delete buttons on each row', async () => {
-    const wrapper = await mountAsAdmin()
-    expect(wrapper.findAll('[data-test="edit-button"]').length).toBe(2)
-    expect(wrapper.findAll('[data-test="delete-button"]').length).toBe(2)
+  it('admin sees an edit button per visible row and no lifecycle actions', async () => {
+    const wrapper = await mountAsAdmin(stateMembers)
+    // Suspended (id 3) is hidden; the other three render, each editable by admin.
+    expect(wrapper.findAll('[data-test="edit-button"]').length).toBe(3)
+    // Lifecycle management (delete / suspend / reactivate / status badge / add)
+    // now lives in the Settings hub, not the public directory.
+    expect(wrapper.find('[data-test="delete-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="member-suspend-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="member-reactivate-3"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test^="member-status-"]').length).toBe(0)
+    expect(wrapper.find('[data-test="add-member-button"]').exists()).toBe(false)
   })
 
   it('viewer does not see edit/delete buttons', async () => {
@@ -578,68 +561,6 @@ describe('Members.vue', () => {
     expect(localStorage.getItem('pyweb.members.viewMode')).toBe('list')
   })
 
-  // The new delete flow: clicking delete-button opens
-  // DeleteWithPasswordDialog with the target member's name; the dialog's
-  // confirm event carries the typed password. We assert against parent
-  // state (the same refs the dialog binds to) because VTU's snapshot of
-  // the boolean modelValue prop reads stale once the parent updates the
-  // ref. The dialog's own UI behavior is covered in
-  // DeleteWithPasswordDialog.spec.js.
-  function findDeleteDialog(wrapper) {
-    return wrapper.findComponent(DeleteWithPasswordDialog)
-  }
-
-  it('clicking delete-button opens the password dialog targeting that row', async () => {
-    const wrapper = await mountAsAdmin()
-    expect(wrapper.vm.deleteDialogOpen).toBe(false)
-
-    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
-    await flushPromises()
-
-    expect(wrapper.vm.deleteDialogOpen).toBe(true)
-    expect(wrapper.vm.deleteTarget?.real_name).toBe('Alice')
-    expect(findDeleteDialog(wrapper).exists()).toBe(true)
-  })
-
-  it('handleDeleteConfirm sends the typed password to the API and re-fetches', async () => {
-    const wrapper = await mountAsAdmin()
-    const remove = vi.spyOn(membersApi, 'remove').mockResolvedValue()
-    const list = vi
-      .spyOn(membersApi, 'list')
-      .mockResolvedValue(sampleMembers.filter((m) => m.id !== 1))
-
-    // Open via the row's delete-button so deleteTarget is bound to Alice.
-    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
-    await flushPromises()
-
-    // The dialog's confirm event reaches the parent through the template
-    // listener; under VTU we exercise the same parent function directly,
-    // since the dialog's own emit is covered in its component spec.
-    await wrapper.vm.handleDeleteConfirm('admin-pw')
-    await flushPromises()
-
-    expect(remove).toHaveBeenCalledWith(1, 'admin-pw')
-    expect(list).toHaveBeenCalled()
-    expect(wrapper.vm.deleteDialogOpen).toBe(false)
-    expect(wrapper.vm.deleteTarget).toBeNull()
-  })
-
-  it('wrong password keeps the dialog open and sets deleteError to 密碼錯誤', async () => {
-    const wrapper = await mountAsAdmin()
-    vi.spyOn(membersApi, 'remove').mockRejectedValue(
-      Object.assign(new Error('422'), { response: { status: 422 } }),
-    )
-
-    await wrapper.findAll('[data-test="delete-button"]')[0].trigger('click')
-    await flushPromises()
-
-    await wrapper.vm.handleDeleteConfirm('wrong-pw')
-    await flushPromises()
-
-    expect(wrapper.vm.deleteDialogOpen).toBe(true)
-    expect(wrapper.vm.deleteError).toBe('密碼錯誤')
-  })
-
   // ---------- Photo upload + delete flow (hoisted to page level) ----------
 
   it('onPhotoUploadRequest opens the crop dialog targeting the member', async () => {
@@ -756,86 +677,25 @@ describe('Members.vue', () => {
   })
 })
 
-describe('Members.vue — account state actions & badges', () => {
-  it('admin sees a 停權 button on a claimed member; click suspends the account', async () => {
-    const wrapper = await mountAsAdmin(stateMembers)
-    const setActive = vi.spyOn(authApi, 'setUserActive').mockResolvedValue({})
-
-    const btn = wrapper.find('[data-test="member-suspend-1"]')
-    expect(btn.exists()).toBe(true)
-
-    await btn.trigger('click')
-    await flushPromises()
-
-    expect(setActive).toHaveBeenCalledWith(101, false)
-  })
-
-  it('admin sees a 復權 button and 已停權 badge on a suspended member', async () => {
+describe('Members.vue — directory visibility & no badges', () => {
+  it('renders no account-status badge anywhere in the directory', async () => {
     const wrapper = await mountAsAdmin(stateMembers)
 
-    const btn = wrapper.find('[data-test="member-reactivate-3"]')
-    expect(btn.exists()).toBe(true)
-
-    const badge = wrapper.find('[data-test="member-status-3"]')
-    expect(badge.exists()).toBe(true)
-    expect(badge.text()).toContain('已停權')
-  })
-
-  it('clicking 復權 reactivates the suspended account', async () => {
-    const wrapper = await mountAsAdmin(stateMembers)
-    const setActive = vi.spyOn(authApi, 'setUserActive').mockResolvedValue({})
-
-    await wrapper.find('[data-test="member-reactivate-3"]').trigger('click')
-    await flushPromises()
-
-    expect(setActive).toHaveBeenCalledWith(103, true)
-  })
-
-  it('does not show a 尚未加入 badge on a pending member (that belongs in Settings)', async () => {
-    const wrapper = await mountAsAdmin(stateMembers)
-
-    // The pending member still renders in the directory...
+    // Pending (2) still renders in the directory (no badge); account-status
+    // badges belong to the Settings hub, not the public page.
     expect(wrapper.find('.member-anchor-2').exists()).toBe(true)
-    // ...but carries no account-status badge here.
-    expect(wrapper.find('[data-test="member-status-2"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test^="member-status-"]').length).toBe(0)
   })
 
-  it('pending / legacy members keep the delete button; claimed / suspended do not', async () => {
+  it('hides suspended members from a real (non-previewing) admin too', async () => {
     const wrapper = await mountAsAdmin(stateMembers)
 
-    // Pending (2) and legacy (4) still delete; claimed (1) and suspended (3)
-    // are managed via suspend/reactivate instead.
-    expect(
-      wrapper.find('.member-anchor-2 [data-test="delete-button"]').exists(),
-    ).toBe(true)
-    expect(
-      wrapper.find('.member-anchor-4 [data-test="delete-button"]').exists(),
-    ).toBe(true)
-    expect(
-      wrapper.find('.member-anchor-1 [data-test="delete-button"]').exists(),
-    ).toBe(false)
-    expect(
-      wrapper.find('.member-anchor-3 [data-test="delete-button"]').exists(),
-    ).toBe(false)
-  })
-
-  it('a previewing admin does not see suspended members', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'a', role: 'admin' }
-    auth.previewAsMember = true
-    vi.spyOn(membersApi, 'list').mockResolvedValue(stateMembers)
-    const wrapper = mount(Members, { attachTo: document.body })
-    pendingTeardowns.push(wrapper)
-    await flushPromises()
-
+    // Suspended (id 3) is hidden from EVERYONE on this page — admins included.
     expect(wrapper.find('.member-anchor-3').exists()).toBe(false)
     // The non-suspended members are still rendered.
     expect(wrapper.find('.member-anchor-1').exists()).toBe(true)
     expect(wrapper.find('.member-anchor-2').exists()).toBe(true)
     expect(wrapper.find('.member-anchor-4').exists()).toBe(true)
-    // Management affordances hide during preview (isAdmin is false), so the
-    // claimed member's suspend button is gone — the admin sees the member view.
-    expect(wrapper.find('[data-test="member-suspend-1"]').exists()).toBe(false)
   })
 })
 
