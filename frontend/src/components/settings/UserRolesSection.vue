@@ -2,17 +2,57 @@
 import {
   ElButton,
   ElEmpty,
+  ElMessageBox,
   ElOption,
   ElSelect,
   ElSkeleton,
   ElTag,
 } from 'element-plus'
+import { ref } from 'vue'
 
 import { useUserRoles } from '../../composables/useUserRoles'
 
 // Logic lives in the composable; this component is the presentation surface.
 const { loading, users, savingId, displayName, changeRole, setActive } =
   useUserRoles()
+
+// Bumped on a cancelled promote to force the role select to remount and snap
+// its displayed value back to the row's unchanged role (it binds :model-value
+// one-way, so a remount re-reads u.role).
+const selectResetKey = ref(0)
+
+// Promoting to admin is escalating — confirm first. Demote-to-member proceeds
+// directly. On cancel we leave the row untouched and remount the select.
+async function onRoleChange(u, value) {
+  if (value === u.role) return
+  if (value === 'admin') {
+    try {
+      await ElMessageBox.confirm(
+        `確定要將「${displayName(u)}」設為管理員嗎？管理員擁有完整權限。`,
+        '設為管理員',
+        { type: 'warning', confirmButtonText: '設為管理員', cancelButtonText: '取消' },
+      )
+    } catch {
+      selectResetKey.value += 1
+      return
+    }
+  }
+  changeRole(u, value)
+}
+
+// Suspension logs the account out immediately — confirm before it fires.
+async function onSuspend(u) {
+  try {
+    await ElMessageBox.confirm(
+      `確定要停權「${displayName(u)}」嗎？停權後對方將立即被登出且無法再登入，直到你復權。`,
+      '停權帳號',
+      { type: 'warning', confirmButtonText: '停權', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  setActive(u, false)
+}
 
 // Every known role gets a tag — including viewer, which is display-only and
 // never offered as a settable option below.
@@ -82,12 +122,13 @@ defineExpose({ users })
         </span>
         <el-select
           v-else
+          :key="selectResetKey"
           :model-value="u.role"
           class="role-card__select"
           placeholder="變更角色"
           :disabled="savingId === u.id"
           :data-test="`role-select-${u.id}`"
-          @change="(value) => changeRole(u, value)"
+          @change="(value) => onRoleChange(u, value)"
         >
           <el-option label="管理員" value="admin" />
           <el-option label="成員" value="member" />
@@ -110,7 +151,7 @@ defineExpose({ users })
           plain
           :loading="savingId === u.id"
           :data-test="`suspend-${u.id}`"
-          @click="setActive(u, false)"
+          @click="onSuspend(u)"
         >
           停權
         </el-button>
