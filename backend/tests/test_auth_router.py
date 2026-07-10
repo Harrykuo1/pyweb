@@ -615,3 +615,34 @@ def test_can_still_promote_active_member_to_admin(client, db_session):
     r = client.patch(f"/api/auth/users/{active.id}/role", json={"role": "admin"})
     assert r.status_code == 200, r.text
     assert r.json()["role"] == "admin"
+
+
+def test_resolve_pending_link_rejects_already_bound_discord_id(client, db_session):
+    from datetime import UTC, datetime
+
+    from app.models import PendingDiscordLink
+
+    # An account already bound to discord_id "7".
+    bound = User(role=UserRole.MEMBER, discord_id="7", discord_username="ghost")
+    db_session.add(bound)
+    # A stale pending row for the same identity.
+    db_session.add(
+        PendingDiscordLink(
+            discord_id="7", discord_username="ghost", first_seen_at=datetime.now(UTC)
+        )
+    )
+    # A different unclaimed member to try to resolve onto.
+    other = User(role=UserRole.MEMBER)
+    db_session.add(other)
+    db_session.flush()
+    member = Member(
+        graduation_year=2024, real_name="王小明", institution="X", user_id=other.id
+    )
+    db_session.add(member)
+    db_session.commit()
+
+    _login_admin(client)
+    r = client.post(
+        "/api/auth/pending-links/7/resolve", json={"member_id": member.id}
+    )
+    assert r.status_code == 409, r.text

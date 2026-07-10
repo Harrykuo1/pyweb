@@ -299,6 +299,13 @@ def resolve_pending_link(
             status_code=status.HTTP_409_CONFLICT, detail="Member already linked"
         )
 
+    taken = db.query(User.id).filter_by(discord_id=pending.discord_id).first()
+    if taken is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Discord identity is already linked to an account",
+        )
+
     user.discord_id = pending.discord_id
     user.discord_username = pending.discord_username
     user.discord_global_name = pending.discord_global_name

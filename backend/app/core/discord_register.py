@@ -12,7 +12,11 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.core.discord_link import bind_identity, pending_account_candidates
+from app.core.discord_link import (
+    bind_identity,
+    clear_pending_link,
+    pending_account_candidates,
+)
 from app.core.discord_oauth import DiscordIdentity
 from app.models import RegistrationInvite, User, UserRole
 
@@ -53,6 +57,7 @@ def register_via_invite(
             # burning the single-use invite.
             return None, "account_suspended"
         bind_identity(user, identity)
+        clear_pending_link(db, identity.id)
         invite.used_at = now
         invite.used_by_user_id = user.id
         db.commit()
@@ -67,6 +72,7 @@ def register_via_invite(
     )
     db.add(user)
     db.flush()
+    clear_pending_link(db, identity.id)
     invite.used_at = now
     invite.used_by_user_id = user.id
     db.commit()

@@ -47,6 +47,12 @@ def pending_account_candidates(db: Session, username: str) -> list[User]:
     )
 
 
+def clear_pending_link(db: Session, discord_id: str) -> None:
+    """Remove any queued pending-link row for this identity once it has been
+    bound to an account, so it can't later be re-resolved onto a taken id."""
+    db.query(PendingDiscordLink).filter_by(discord_id=discord_id).delete()
+
+
 def bind_identity(user: User, identity: DiscordIdentity) -> None:
     """Permanently attach a verified Discord identity to a waiting account
     and clear the one-time pending handle. Does not commit."""
@@ -73,6 +79,7 @@ def link_or_queue(db: Session, identity: DiscordIdentity) -> User | str | None:
             # turns the login away without mutating anything.
             return "suspended"
         bind_identity(user, identity)
+        clear_pending_link(db, identity.id)
         db.commit()
         db.refresh(user)
         return user

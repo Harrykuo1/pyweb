@@ -105,3 +105,29 @@ def test_normalize_empty_becomes_none():
     assert normalize_discord_handle("   ") is None
     assert normalize_discord_handle("@") is None
     assert normalize_discord_handle(None) is None
+
+
+def test_link_or_queue_clears_stale_pending_link_on_bind(db_session):
+    from datetime import UTC, datetime
+
+    from app.core.discord_link import link_or_queue
+    from app.core.discord_oauth import DiscordIdentity
+    from app.models import PendingDiscordLink, User, UserRole
+
+    db_session.add(
+        PendingDiscordLink(
+            discord_id="7", discord_username="x", first_seen_at=datetime.now(UTC)
+        )
+    )
+    db_session.add(
+        User(role=UserRole.MEMBER, pending_discord_username="ally", is_active=True)
+    )
+    db_session.commit()
+
+    result = link_or_queue(
+        db_session, DiscordIdentity(id="7", username="ally", global_name="A")
+    )
+    assert result is not None and not isinstance(result, str)  # bound User
+    assert (
+        db_session.query(PendingDiscordLink).filter_by(discord_id="7").count() == 0
+    )
