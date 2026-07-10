@@ -13,7 +13,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import FileResponse
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -126,19 +126,29 @@ def _member_response(member: Member, user: User | None) -> MemberResponse:
     return resp
 
 
+def _is_member_visible(db: Session, member: Member, viewer: User) -> bool:
+    """Suspended members (linked account is_active=False) are hidden from
+    everyone except a real admin."""
+    if viewer.role is UserRole.ADMIN:
+        return True
+    if member.user_id is None:
+        return True
+    active = db.query(User.is_active).filter_by(id=member.user_id).scalar()
+    return active is not False  # None (no account) or active -> visible
+
+
 @router.get("", response_model=list[MemberResponse])
 def list_members(
     order: Literal["asc", "desc"] = "asc",
     db: Session = Depends(get_db),
-    _: object = Depends(require_completed_member),
+    viewer: User = Depends(require_completed_member),
 ) -> list[MemberResponse]:
     column = Member.joined_at.asc() if order == "asc" else Member.joined_at.desc()
-    rows = (
-        db.query(Member, User)
-        .outerjoin(User, User.id == Member.user_id)
-        .order_by(column)
-        .all()
-    )
+    query = db.query(Member, User).outerjoin(User, User.id == Member.user_id)
+    if viewer.role is not UserRole.ADMIN:
+        # Hide suspended members: keep legacy rows (no account) and active accounts.
+        query = query.filter(or_(Member.user_id.is_(None), User.is_active.is_(True)))
+    rows = query.order_by(column).all()
     return [_member_response(m, u) for (m, u) in rows]
 
 
@@ -146,9 +156,13 @@ def list_members(
 def get_member(
     member_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(require_completed_member),
+    viewer: User = Depends(require_completed_member),
 ) -> MemberResponse:
     member = _get_member_or_404(db, member_id)
+    if not _is_member_visible(db, member, viewer):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
     user = (
         db.query(User).filter_by(id=member.user_id).one_or_none()
         if member.user_id is not None
@@ -298,9 +312,13 @@ async def get_member_photo(
     member_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(require_completed_member),
+    viewer: User = Depends(require_completed_member),
 ) -> Response:
     member = _get_member_or_404(db, member_id)
+    if not _is_member_visible(db, member, viewer):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
     if not member.photo_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No photo")
     file_path = uploads_root / member.photo_path
@@ -407,9 +425,13 @@ async def get_member_resume_pdf(
     member_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: object = Depends(require_completed_member),
+    viewer: User = Depends(require_completed_member),
 ) -> Response:
     member = _get_member_or_404(db, member_id)
+    if not _is_member_visible(db, member, viewer):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
     if not member.resume_pdf_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No resume pdf"

@@ -575,6 +575,36 @@ def test_delete_claimed_member_is_blocked_with_409(client_factory, db_session):
     assert db_session.query(User).filter_by(id=account.id).one_or_none() is not None
 
 
+def _make_suspended_member(client, db_session):
+    sid = client.post("/api/members", json={"graduation_year":2024,"real_name":"S","institution":"X","discord_username":"s"}).json()["id"]
+    sacc = db_session.query(User).filter_by(id=db_session.query(Member).filter_by(id=sid).one().user_id).one()
+    sacc.discord_id = "d-s"; sacc.is_active = False
+    db_session.commit()
+    return sid
+
+
+def test_suspended_member_visible_to_admin_hidden_from_non_admin(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    sid = _make_suspended_member(client, db_session)
+    # admin: visible in list + detail
+    assert any(m["id"] == sid for m in client.get("/api/members").json())
+    assert client.get(f"/api/members/{sid}").status_code == 200
+    # viewer (non-admin): hidden
+    login_as("viewer")
+    assert all(m["id"] != sid for m in client.get("/api/members").json())
+    assert client.get(f"/api/members/{sid}").status_code == 404
+
+
+def test_suspended_member_photo_and_pdf_hidden_from_non_admin(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    sid = _make_suspended_member(client, db_session)
+    login_as("viewer")
+    assert client.get(f"/api/members/{sid}/photo").status_code == 404
+    assert client.get(f"/api/members/{sid}/resume.pdf").status_code == 404
+
+
 def test_member_response_reports_account_status(client_factory, db_session):
     client, login_as = client_factory
     login_as("admin")
