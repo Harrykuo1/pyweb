@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     session_secret: str
     session_max_age_seconds: int = 86400
+    # Mark the session cookie Secure so browsers only send it over HTTPS.
+    # Defaults False for local HTTP dev; set true in HTTPS production.
+    session_secure: bool = False
     database_url: str = "sqlite:///./pyweb.db"
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

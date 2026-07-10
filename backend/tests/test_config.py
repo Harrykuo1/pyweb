@@ -1,4 +1,15 @@
-from app.core.config import settings
+from app.core.config import Settings, settings
+
+
+def test_settings_session_secure_defaults_false():
+    s = Settings(
+        session_secret="x",
+        seed_admin_username="a",
+        seed_admin_password="a",
+        seed_viewer_username="v",
+        seed_viewer_password="v",
+    )
+    assert s.session_secure is False
 
 
 def test_discord_oauth_disabled_by_default(monkeypatch):
