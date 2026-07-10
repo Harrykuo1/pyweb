@@ -267,6 +267,43 @@ describe('MemberFormDialog', () => {
     ).toBe(false)
   })
 
+  it('editing an unrelated field on a pending member keeps the prefilled handle (no wipe)', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'pending',
+        account_discord_username: 'coolhandle',
+      },
+    })
+
+    // Prefilled from the pending handle, not empty.
+    expect(
+      wrapper.find('[data-test="form-discord-username"]').element.value,
+    ).toBe('coolhandle')
+
+    // Touch only real_name and save: the discord field must round-trip the
+    // prefilled value, never an empty string that would wipe the pending handle.
+    setVmValue(wrapper, 'real_name', 'Eve Renamed')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({
+        real_name: 'Eve Renamed',
+        discord_username: 'coolhandle',
+      }),
+    )
+  })
+
   it('editing a pending member includes discord_username in the update payload', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }

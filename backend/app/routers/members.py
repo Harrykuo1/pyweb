@@ -116,7 +116,12 @@ def _member_response(member: Member, user: User | None) -> MemberResponse:
         return resp
     resp.account_id = user.id
     resp.is_active = user.is_active
-    resp.account_discord_username = user.discord_username
+    # A pending account has no discord_username yet (only claimed accounts do);
+    # surface pending_discord_username so the edit dialog can prefill and edits
+    # of unrelated fields don't round-trip an empty handle that wipes it.
+    resp.account_discord_username = (
+        user.discord_username or user.pending_discord_username
+    )
     if user.discord_id is None:
         resp.account_status = "pending"
     elif not user.is_active:

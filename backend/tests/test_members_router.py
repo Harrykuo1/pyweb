@@ -410,6 +410,47 @@ def test_edit_unclaimed_member_updates_pending_handle(client_factory, db_session
     assert acc.pending_discord_username == "New"
 
 
+def test_edit_pending_member_without_handle_key_keeps_it(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    mid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "U",
+            "institution": "X",
+            "discord_username": "keepme",
+        },
+    ).json()["id"]
+    # Editing an unrelated field with no discord_username key must not touch the
+    # pending handle (the router keys on discord_username in model_fields_set).
+    r = client.put(f"/api/members/{mid}", json={"real_name": "X2"})
+    assert r.status_code == 200, r.text
+    acc = (
+        db_session.query(User)
+        .filter_by(id=db_session.query(Member).filter_by(id=mid).one().user_id)
+        .one()
+    )
+    assert acc.pending_discord_username == "keepme"
+
+
+def test_pending_member_response_exposes_pending_handle(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    mid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "P",
+            "institution": "X",
+            "discord_username": "coolhandle",
+        },
+    ).json()["id"]
+    body = client.get(f"/api/members/{mid}").json()
+    assert body["account_status"] == "pending"
+    assert body["account_discord_username"] == "coolhandle"
+
+
 def test_edit_claimed_member_ignores_pending_handle(client_factory, db_session):
     client, login_as = client_factory
     login_as("admin")
