@@ -51,6 +51,15 @@ def db_engine():
     # Import all model modules so their tables register on Base.metadata.
     from app import models  # noqa: F401
 
+    # Match production (app/database.py) which enables FK enforcement on
+    # every connection, so tests catch FK violations instead of silently
+    # ignoring them.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fk(dbapi_conn, _rec):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
     Base.metadata.create_all(bind=engine)
     try:
         yield engine
