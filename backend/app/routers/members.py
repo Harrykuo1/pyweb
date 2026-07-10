@@ -253,10 +253,21 @@ def update_member(
 ) -> Member:
     member = _owned_member_or_403(db, member_id, current_user)
     data = payload.model_dump(exclude_unset=True)
+    handle = data.pop("discord_username", None)  # not a Member column
     if current_user.role is not UserRole.ADMIN:
         data.pop("joined_at", None)  # members can't backdate their own join
     for field, value in data.items():
         setattr(member, field, value)
+    # Admin may fix the pending handle of an UNCLAIMED linked account. A claimed
+    # account (discord_id set) is left untouched — its identity is already bound.
+    if (
+        "discord_username" in payload.model_fields_set
+        and current_user.role is UserRole.ADMIN
+        and member.user_id is not None
+    ):
+        account = db.query(User).filter_by(id=member.user_id).one()
+        if account.discord_id is None:
+            account.pending_discord_username = normalize_discord_handle(handle)
     db.commit()
     db.refresh(member)
     return member

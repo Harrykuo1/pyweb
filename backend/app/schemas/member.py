@@ -28,6 +28,7 @@ class MemberUpdate(BaseModel):
     position: str | None = Field(default=None, min_length=1, max_length=128)
     resume_md: str | None = None
     joined_at: datetime | None = None
+    discord_username: str | None = Field(default=None, max_length=64)
 
 
 class MemberResponse(BaseModel):

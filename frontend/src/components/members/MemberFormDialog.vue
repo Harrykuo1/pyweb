@@ -31,6 +31,19 @@ const emit = defineEmits(['update:modelValue', 'saved'])
 const isEdit = computed(() => props.member !== null)
 const title = computed(() => (isEdit.value ? '編輯成員' : '新增成員'))
 
+// Admin can set the Discord handle when creating, or fix the pending handle of
+// an unclaimed member (linked account not yet bound). A claimed account's
+// handle is authoritative and left alone.
+const canEditPendingHandle = computed(
+  () =>
+    isEdit.value &&
+    auth.isActuallyAdmin &&
+    props.member?.account_status === 'pending',
+)
+const showDiscordField = computed(
+  () => (!isEdit.value && auth.isActuallyAdmin) || canEditPendingHandle.value,
+)
+
 const formRef = ref(null)
 const submitting = ref(false)
 const form = reactive({
@@ -94,7 +107,8 @@ function resetForm(member) {
     position: member?.position ?? '',
     resume_md: member?.resume_md ?? '',
     joined_at: member?.joined_at ?? null,
-    discord_username: member?.discord_username ?? '',
+    discord_username:
+      member?.account_discord_username ?? member?.discord_username ?? '',
   })
   pdfFile.value = null
   pdfDeletedThisSession.value = false
@@ -194,6 +208,8 @@ function buildPayload() {
   if (!isEdit.value) {
     const dh = form.discord_username.trim()
     if (dh) payload.discord_username = dh
+  } else if (canEditPendingHandle.value) {
+    payload.discord_username = form.discord_username.trim()
   }
   return payload
 }
@@ -329,7 +345,7 @@ defineExpose({ handlePdfChange, clearPdfChange })
         />
       </el-form-item>
       <el-form-item
-        v-if="!isEdit && auth.isActuallyAdmin"
+        v-if="showDiscordField"
         label="Discord 使用者名稱（選填，成員登入後自動綁定）"
       >
         <el-input

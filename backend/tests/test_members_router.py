@@ -388,6 +388,56 @@ def test_update_member_404(client_factory):
     assert r.status_code == 404
 
 
+def test_edit_unclaimed_member_updates_pending_handle(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    mid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "U",
+            "institution": "X",
+            "discord_username": "old",
+        },
+    ).json()["id"]
+    r = client.put(f"/api/members/{mid}", json={"discord_username": " @New "})
+    assert r.status_code == 200, r.text
+    acc = (
+        db_session.query(User)
+        .filter_by(id=db_session.query(Member).filter_by(id=mid).one().user_id)
+        .one()
+    )
+    assert acc.pending_discord_username == "New"
+
+
+def test_edit_claimed_member_ignores_pending_handle(client_factory, db_session):
+    client, login_as = client_factory
+    login_as("admin")
+    mid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "C",
+            "institution": "X",
+            "discord_username": "c",
+        },
+    ).json()["id"]
+    acc = (
+        db_session.query(User)
+        .filter_by(id=db_session.query(Member).filter_by(id=mid).one().user_id)
+        .one()
+    )
+    # Simulate a real Discord bind: the first-login bridge sets discord_id and
+    # clears the now-consumed pending handle (see discord_link.py).
+    acc.discord_id = "d-c"
+    acc.pending_discord_username = None
+    db_session.commit()
+    r = client.put(f"/api/members/{mid}", json={"discord_username": "hacker"})
+    assert r.status_code == 200
+    db_session.refresh(acc)
+    assert acc.pending_discord_username is None  # unchanged; claimed accounts ignore it
+
+
 # ---------- delete ----------
 
 

@@ -225,6 +225,77 @@ describe('MemberFormDialog', () => {
     ).toBe(false)
   })
 
+  it('admin editing a pending member sees the Discord input prefilled', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'pending',
+        account_discord_username: 'eve.pending',
+      },
+    })
+
+    const input = wrapper.find('[data-test="form-discord-username"]')
+    expect(input.exists()).toBe(true)
+    expect(input.element.value).toBe('eve.pending')
+  })
+
+  it('admin editing a claimed member does not see the Discord input', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'claimed',
+        account_discord_username: 'eve',
+      },
+    })
+
+    expect(
+      wrapper.find('[data-test="form-discord-username"]').exists(),
+    ).toBe(false)
+  })
+
+  it('editing a pending member includes discord_username in the update payload', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'pending',
+        account_discord_username: 'old',
+      },
+    })
+
+    await wrapper
+      .find('[data-test="form-discord-username"]')
+      .setValue('corrected.handle')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ discord_username: 'corrected.handle' }),
+    )
+  })
+
   it('refreshes the auth session after editing your own profile', async () => {
     const auth = useAuthStore()
     auth.user = { id: 7, username: null, role: 'member', member_id: 9 }
