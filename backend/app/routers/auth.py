@@ -198,11 +198,15 @@ def discord_callback(
         user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
         if user is None:
             # First login of a pre-created account: bridge by the resume
-            # handle. On a unique match we get the now-linked user;
+            # handle. On a unique match we get the now-linked user; a
+            # suspended sole match is turned away without mutating anything;
             # otherwise the identity is queued for an admin and turned away.
-            user = discord_link.link_or_queue(db, identity)
-            if user is None:
+            linked = discord_link.link_or_queue(db, identity)
+            if linked == "suspended":
+                return _oauth_error("account_suspended")
+            if linked is None:
                 return _oauth_error("not_linked")
+            user = linked
         redirect_target = _HOME_PATH
 
     if not user.is_active:

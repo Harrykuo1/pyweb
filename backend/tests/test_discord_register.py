@@ -106,6 +106,28 @@ def test_register_claims_matching_pre_provisioned_account(db_session):
     assert invite.used_by_user_id == pre_id
 
 
+def test_register_does_not_claim_or_burn_for_suspended_pending_match(db_session):
+    # A suspended pre-created account must not be claimed and the single-use
+    # invite must not be consumed: reject without mutating anything.
+    _seed_invite(db_session)
+    pre = User(
+        role=UserRole.MEMBER, pending_discord_username="alice", is_active=False
+    )
+    db_session.add(pre)
+    db_session.commit()
+
+    ident = DiscordIdentity(id="NEW", username="Alice", global_name="Alice")
+    user, err = register_via_invite(db_session, ident, "valid")
+
+    assert user is None
+    assert err == "account_suspended"
+    db_session.refresh(pre)
+    assert pre.discord_id is None
+    assert pre.pending_discord_username == "alice"
+    invite = db_session.query(RegistrationInvite).filter_by(token="valid").one()
+    assert invite.used_at is None
+
+
 def test_register_mints_new_account_when_pending_match_is_ambiguous(db_session):
     _seed_invite(db_session)
     db_session.add_all(

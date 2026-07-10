@@ -187,6 +187,47 @@ def test_callback_first_login_links_precreated_account(client, db_session, monke
     assert linked.pending_discord_username is None
 
 
+def test_callback_suspended_precreated_account_mutates_nothing(
+    client, db_session, monkeypatch
+):
+    # A suspended pre-created account (pending handle, no discord_id) must be
+    # turned away before binding: no session, discord_id stays null.
+    from app.models import Member
+
+    u = User(
+        role=UserRole.MEMBER, pending_discord_username="harry", is_active=False
+    )
+    db_session.add(u)
+    db_session.flush()
+    db_session.add(
+        Member(graduation_year=2024, real_name="H", institution="X", user_id=u.id)
+    )
+    db_session.commit()
+
+    _patch_flow(monkeypatch, identity_id="NEWID", is_member=True)
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="NEWID", username="harry", global_name="H"
+        ),
+    )
+    state = _start_and_get_state(client)
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert "error=account_suspended" in r.headers["location"]
+
+    db_session.expire_all()
+    account = db_session.query(User).filter_by(id=u.id).one()
+    assert account.discord_id is None
+    assert account.pending_discord_username == "harry"
+    assert client.get("/api/auth/me").status_code == 401
+
+
 def test_callback_unmatched_first_login_queues_pending(client, db_session, monkeypatch):
     _patch_flow(monkeypatch, identity_id="Z9", is_member=True)
     monkeypatch.setattr(

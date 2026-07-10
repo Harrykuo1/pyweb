@@ -74,6 +74,24 @@ def test_ambiguous_multiple_candidates_queues_instead_of_guessing(db_session):
     assert db_session.query(PendingDiscordLink).filter_by(discord_id="D5").count() == 1
 
 
+def test_link_or_queue_does_not_bind_suspended_candidate(db_session):
+    # A suspended pre-created account must not be bound or queued: the login
+    # is turned away without mutating anything.
+    u = User(role=UserRole.MEMBER, pending_discord_username="ally", is_active=False)
+    db_session.add(u)
+    db_session.commit()
+
+    result = link_or_queue(
+        db_session, DiscordIdentity(id="99", username="ally", global_name="A")
+    )
+
+    db_session.refresh(u)
+    assert u.discord_id is None
+    assert u.pending_discord_username == "ally"
+    assert result == "suspended"
+    assert db_session.query(PendingDiscordLink).count() == 0
+
+
 def test_normalize_strips_whitespace_and_at():
     assert normalize_discord_handle("  @Cool.Name  ") == "Cool.Name"
 

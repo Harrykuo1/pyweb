@@ -48,6 +48,10 @@ def register_via_invite(
     candidates = pending_account_candidates(db, identity.username)
     if len(candidates) == 1:
         user = candidates[0]
+        if not user.is_active:
+            # Suspended pre-created account: reject without claiming it or
+            # burning the single-use invite.
+            return None, "account_suspended"
         bind_identity(user, identity)
         invite.used_at = now
         invite.used_by_user_id = user.id

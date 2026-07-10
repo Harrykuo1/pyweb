@@ -56,16 +56,22 @@ def bind_identity(user: User, identity: DiscordIdentity) -> None:
     user.pending_discord_username = None
 
 
-def link_or_queue(db: Session, identity: DiscordIdentity) -> User | None:
+def link_or_queue(db: Session, identity: DiscordIdentity) -> User | str | None:
     """Try to bind this Discord identity to a waiting pre-created account.
 
     Returns the now-linked User (caller logs them in) on a unique handle
-    match; returns None after queueing a PendingDiscordLink otherwise.
+    match; returns "suspended" when the sole match is a suspended account
+    (nothing is mutated); returns None after queueing a PendingDiscordLink
+    otherwise.
     """
     candidates = pending_account_candidates(db, identity.username)
 
     if len(candidates) == 1:
         user = candidates[0]
+        if not user.is_active:
+            # Suspended pre-created account: do not bind or queue; the caller
+            # turns the login away without mutating anything.
+            return "suspended"
         bind_identity(user, identity)
         db.commit()
         db.refresh(user)
