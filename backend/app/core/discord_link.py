@@ -62,6 +62,27 @@ def bind_identity(user: User, identity: DiscordIdentity) -> None:
     user.pending_discord_username = None
 
 
+def queue_pending_link(db: Session, identity: DiscordIdentity) -> None:
+    """Park a verified Discord identity in pending_discord_links for an admin
+    to attach to the right member. Upserts on discord_id so a repeat login
+    refreshes the recorded handle. Does not commit."""
+    existing = (
+        db.query(PendingDiscordLink).filter_by(discord_id=identity.id).one_or_none()
+    )
+    if existing is None:
+        db.add(
+            PendingDiscordLink(
+                discord_id=identity.id,
+                discord_username=identity.username,
+                discord_global_name=identity.global_name,
+                first_seen_at=datetime.now(UTC),
+            )
+        )
+    else:
+        existing.discord_username = identity.username
+        existing.discord_global_name = identity.global_name
+
+
 def link_or_queue(db: Session, identity: DiscordIdentity) -> User | str | None:
     """Try to bind this Discord identity to a waiting pre-created account.
 
@@ -85,20 +106,6 @@ def link_or_queue(db: Session, identity: DiscordIdentity) -> User | str | None:
         return user
 
     # Zero or ambiguous match -> queue for manual admin linking.
-    existing = (
-        db.query(PendingDiscordLink).filter_by(discord_id=identity.id).one_or_none()
-    )
-    if existing is None:
-        db.add(
-            PendingDiscordLink(
-                discord_id=identity.id,
-                discord_username=identity.username,
-                discord_global_name=identity.global_name,
-                first_seen_at=datetime.now(UTC),
-            )
-        )
-    else:
-        existing.discord_username = identity.username
-        existing.discord_global_name = identity.global_name
+    queue_pending_link(db, identity)
     db.commit()
     return None

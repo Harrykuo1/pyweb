@@ -16,6 +16,7 @@ from app.core.discord_link import (
     bind_identity,
     clear_pending_link,
     pending_account_candidates,
+    queue_pending_link,
 )
 from app.core.discord_oauth import DiscordIdentity
 from app.models import RegistrationInvite, User, UserRole
@@ -63,6 +64,13 @@ def register_via_invite(
         db.commit()
         db.refresh(user)
         return user, None
+
+    if len(candidates) > 1:
+        # Ambiguous handle -- can't safely claim any. Queue for an admin like
+        # the login path does; do NOT mint a duplicate or consume the invite.
+        queue_pending_link(db, identity)
+        db.commit()
+        return None, "link_ambiguous"
 
     user = User(
         role=UserRole.MEMBER,

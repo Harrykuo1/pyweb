@@ -128,7 +128,9 @@ def test_register_does_not_claim_or_burn_for_suspended_pending_match(db_session)
     assert invite.used_at is None
 
 
-def test_register_mints_new_account_when_pending_match_is_ambiguous(db_session):
+def test_register_via_invite_queues_on_ambiguous_handle(db_session):
+    from app.models import PendingDiscordLink
+
     _seed_invite(db_session)
     db_session.add_all(
         [
@@ -137,12 +139,17 @@ def test_register_mints_new_account_when_pending_match_is_ambiguous(db_session):
         ]
     )
     db_session.commit()
+    before = db_session.query(User).count()
     ident = DiscordIdentity(id="NEW", username="alice", global_name=None)
 
     user, err = register_via_invite(db_session, ident, "valid")
 
-    # Ambiguous -> can't safely claim; a fresh account is created instead.
-    assert err is None
-    assert user.discord_id == "NEW"
-    assert user.pending_discord_username is None
-    assert db_session.query(User).count() == 3
+    assert user is None
+    assert err == "link_ambiguous"
+    assert db_session.query(User).count() == before  # NO new account minted
+    assert (
+        db_session.query(PendingDiscordLink).filter_by(discord_id="NEW").count() == 1
+    )
+    # invite NOT consumed on ambiguous
+    invite = db_session.query(RegistrationInvite).filter_by(token="valid").one()
+    assert invite.used_at is None
