@@ -160,8 +160,9 @@ describe('useMemberRoster', () => {
       .mockResolvedValue({ id: 2, role: 'admin' })
 
     const pending = a.rows.value.find((r) => r.id === 11)
-    await a.changeRole(pending, 'admin')
+    const ok = await a.changeRole(pending, 'admin')
 
+    expect(ok).toBe(true)
     expect(assignRole).toHaveBeenCalledWith(2, 'admin')
     expect(a.rows.value.find((r) => r.id === 11).role).toBe('admin')
     expect(ElMessage.success).toHaveBeenCalledWith('已更新角色')
@@ -180,8 +181,11 @@ describe('useMemberRoster', () => {
     })
 
     const claimed = a.rows.value.find((r) => r.id === 10)
-    await a.changeRole(claimed, 'member')
+    const ok = await a.changeRole(claimed, 'member')
 
+    // Signals failure so the caller can snap the select back, and the row's
+    // role is left untouched.
+    expect(ok).toBe(false)
     expect(ElMessage.error).toHaveBeenCalledWith('Cannot demote the last admin')
     expect(a.rows.value.find((r) => r.id === 10).role).toBe('admin')
     expect(a.savingId.value).toBeNull()
@@ -232,5 +236,16 @@ describe('useMemberRoster', () => {
       displayName({ id: 9, real_name: '', account_discord_username: 'handle' }),
     ).toBe('handle')
     expect(displayName({ id: 9, real_name: null })).toBe('#9')
+  })
+
+  it('load surfaces an error toast and settles loading when a fetch fails', async () => {
+    listSpy.mockRejectedValue(new Error('boom'))
+    const { get } = mountRoster()
+    await flushPromises()
+    const a = get()
+
+    expect(ElMessage.error).toHaveBeenCalledWith('載入成員名冊失敗')
+    expect(a.rows.value).toEqual([])
+    expect(a.loading.value).toBe(false)
   })
 })

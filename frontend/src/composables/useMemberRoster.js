@@ -61,8 +61,11 @@ export function useMemberRoster() {
     )
   }
 
+  // Returns true on success, false on failure — the caller uses that signal to
+  // snap a rejected select back to the row's unchanged role. On failure the row
+  // is left untouched (role is only patched after the API resolves).
   async function changeRole(member, role) {
-    if (role === member.role) return
+    if (role === member.role) return true
 
     savingId.value = member.account_id
     try {
@@ -71,9 +74,11 @@ export function useMemberRoster() {
         r.id === member.id ? { ...r, role } : r,
       )
       ElMessage.success('已更新角色')
+      return true
     } catch (err) {
       // Backend answers 409 "Cannot demote the last admin"; surface the detail.
       ElMessage.error(extractError(err, '更新角色失敗'))
+      return false
     } finally {
       savingId.value = null
     }

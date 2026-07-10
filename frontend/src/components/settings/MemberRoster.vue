@@ -103,7 +103,10 @@ async function onRoleChange(member, value) {
       return
     }
   }
-  changeRole(member, value)
+  // If the backend rejects the change (e.g. demoting the last admin), snap the
+  // select back to the row's real role via the same remount used for cancel.
+  const ok = await changeRole(member, value)
+  if (!ok) selectResetKey.value += 1
 }
 
 // ---- suspend: confirm before it fires (logs the account out immediately) ----
@@ -130,7 +133,10 @@ const {
   confirm: handleDeleteConfirm,
 } = useDeleteWithPassword({
   remove: (member, password) => membersApi.remove(member.id, password),
-  messages: { 409: '此成員已啟用帳號，請先停權後再刪除' },
+  // Delete is offered only for pending / legacy rows, so the "active account"
+  // 409 can never fire here — the only reachable 409 is a member still
+  // referenced by job records.
+  messages: { 409: '此成員已有關聯的求職記錄，無法刪除' },
   onSuccess: () => reload(),
 })
 </script>

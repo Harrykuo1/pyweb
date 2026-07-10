@@ -122,10 +122,18 @@ function makeRoster() {
     savingId: ref(null),
     load: vi.fn(),
     reload: vi.fn(),
-    changeRole: vi.fn(),
+    // Resolves true on success by default; failure-path tests override it.
+    changeRole: vi.fn().mockResolvedValue(true),
     setActive: vi.fn(),
     displayName: (m) => m.real_name,
   }
+}
+
+// The role select is remounted (via a bumped :key) whenever a change is
+// cancelled or rejected, so it re-reads the row's real role. A fresh component
+// instance after the interaction is the observable signal of that remount.
+function roleSelectVm(wrapper, id) {
+  return wrapper.findComponent(`[data-test="roster-role-${id}"]`).vm
 }
 
 // el-table defers its body rows to a post-mount tick, so wait for both the
@@ -294,15 +302,19 @@ describe('MemberRoster.vue', () => {
     )
   })
 
-  it('does not promote when the confirm is cancelled', async () => {
+  it('does not promote when the confirm is cancelled, and resets the select', async () => {
     ElMessageBox.confirm.mockRejectedValue('cancel')
     const wrapper = await mountRoster()
+    const before = roleSelectVm(wrapper, 10)
     const select = wrapper.findComponent('[data-test="roster-role-10"]')
     await select.vm.$emit('change', 'admin')
     await flushPromises()
+    await nextTick()
 
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1)
     expect(roster.changeRole).not.toHaveBeenCalled()
+    // Select was remounted, snapping its display back to the row's real role.
+    expect(roleSelectVm(wrapper, 10)).not.toBe(before)
   })
 
   it('demoting to member calls changeRole without a confirm', async () => {
@@ -316,6 +328,26 @@ describe('MemberRoster.vue', () => {
       expect.objectContaining({ id: 14 }),
       'member',
     )
+  })
+
+  it('resets the select when the backend rejects a role change', async () => {
+    // A demote (admin -> member) that the backend rejects: no confirm, but the
+    // select must snap back to the row's real role instead of showing 成員.
+    roster.changeRole.mockResolvedValue(false)
+    const wrapper = await mountRoster()
+    const before = roleSelectVm(wrapper, 14)
+    const select = wrapper.findComponent('[data-test="roster-role-14"]')
+    await select.vm.$emit('change', 'member')
+    await flushPromises()
+    await nextTick()
+
+    expect(roster.changeRole).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 14 }),
+      'member',
+    )
+    // Row role is unchanged (the composable never patched it) and the select
+    // was remounted to re-read it.
+    expect(roleSelectVm(wrapper, 14)).not.toBe(before)
   })
 
   it('新增成員 opens the member form dialog with a null member', async () => {
