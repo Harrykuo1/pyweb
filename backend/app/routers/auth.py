@@ -193,7 +193,12 @@ def discord_callback(
         user, err = discord_register.register_via_invite(db, identity, invite_token)
         if err is not None:
             return _oauth_error(err)
-        redirect_target = _REGISTER_PROFILE_PATH
+        # An invite can claim a pre-provisioned account that an admin already
+        # gave a Member profile; such a user shouldn't be sent to fill one in.
+        has_profile = (
+            db.query(Member.id).filter_by(user_id=user.id).first() is not None
+        )
+        redirect_target = _HOME_PATH if has_profile else _REGISTER_PROFILE_PATH
     else:
         user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
         if user is None:

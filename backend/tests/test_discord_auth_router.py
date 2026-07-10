@@ -290,6 +290,64 @@ def test_callback_registers_new_member_via_invite(client, db_session, monkeypatc
     assert client.get("/api/auth/me").status_code == 200
 
 
+def test_callback_invite_claims_already_profiled_account_goes_home(
+    client, db_session, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+    from urllib.parse import parse_qs, urlparse
+
+    from app.models import Member, RegistrationInvite
+
+    now = datetime.now(UTC)
+    db_session.add(
+        RegistrationInvite(
+            token="inv3", created_at=now, expires_at=now + timedelta(hours=1)
+        )
+    )
+    # Admin pre-provisioned this member WITH a profile: an account awaiting
+    # its Discord handle, already linked to a Member row.
+    precreated = User(
+        role=UserRole.MEMBER,
+        discord_id=None,
+        pending_discord_username="claimed",
+        is_active=True,
+    )
+    db_session.add(precreated)
+    db_session.flush()
+    db_session.add(
+        Member(
+            user_id=precreated.id,
+            graduation_year=2024,
+            real_name="Claimed Member",
+            institution="NTU",
+        )
+    )
+    db_session.commit()
+
+    _patch_flow(monkeypatch, identity_id="CLAIMED", is_member=True)
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="CLAIMED", username="claimed", global_name="Claimed"
+        ),
+    )
+    r0 = client.get(
+        "/api/auth/discord/register?token=inv3", follow_redirects=False
+    )
+    state = parse_qs(urlparse(r0.headers["location"]).query)["state"][0]
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert r.headers["location"] == "/"
+
+    claimed = db_session.query(User).filter_by(discord_id="CLAIMED").one()
+    assert claimed.id == precreated.id
+
+
 def test_failed_registration_does_not_hijack_a_later_login(
     client, db_session, monkeypatch
 ):
