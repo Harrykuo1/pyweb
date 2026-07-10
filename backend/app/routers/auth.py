@@ -212,6 +212,15 @@ def discord_callback(
             if linked is None:
                 return _oauth_error("not_linked")
             user = linked
+        elif (
+            user.discord_username != identity.username
+            or user.discord_global_name != identity.global_name
+        ):
+            # Discord handles are mutable; keep the stored copy in sync so
+            # admin lists don't show a stale handle after a rename.
+            user.discord_username = identity.username
+            user.discord_global_name = identity.global_name
+            db.commit()
         redirect_target = _HOME_PATH
 
     if not user.is_active:

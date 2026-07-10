@@ -96,6 +96,39 @@ def test_callback_links_existing_user_and_establishes_session(client, monkeypatc
     assert me.json()["role"] == "member"
 
 
+def test_callback_refreshes_stale_discord_handle(client, db_session, monkeypatch):
+    # A steady-state login where the Discord handle changed since last time.
+    user = db_session.query(User).filter_by(discord_id="D123").one()
+    user.discord_username = "old"
+    user.discord_global_name = "Old"
+    db_session.commit()
+
+    monkeypatch.setattr(discord_oauth, "exchange_code", lambda code: "tok")
+    monkeypatch.setattr(
+        discord_oauth,
+        "fetch_identity",
+        lambda tok: discord_oauth.DiscordIdentity(
+            id="D123", username="new", global_name="New"
+        ),
+    )
+    monkeypatch.setattr(
+        discord_oauth, "check_guild_membership", lambda tok, gid: "member"
+    )
+    state = _start_and_get_state(client)
+
+    r = client.get(
+        f"/api/auth/discord/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert r.status_code == 302
+    assert r.headers["location"] == "/"
+
+    db_session.expire_all()
+    refreshed = db_session.query(User).filter_by(discord_id="D123").one()
+    assert refreshed.discord_username == "new"
+    assert refreshed.discord_global_name == "New"
+
+
 def test_callback_blocks_suspended_account(client, db_session, monkeypatch):
     suspended = db_session.query(User).filter_by(discord_id="D123").one()
     suspended.is_active = False
