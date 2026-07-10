@@ -144,10 +144,11 @@ function canEdit(member) {
   return auth.myMemberId != null && member?.id === auth.myMemberId
 }
 
-// Short label for the member's account state. claimed / legacy carry no
-// badge (they're the ordinary states); only pending and suspended do.
+// Short label for the member's account state on the directory. "尚未加入"
+// (pending) is account-management info that belongs in Settings, not the
+// public members page, so it is not shown here; only 已停權 is surfaced (to
+// admins, who are the only ones who see suspended members here at all).
 function statusBadge(member) {
-  if (member.account_status === 'pending') return '尚未加入'
   if (member.account_status === 'suspended') return '已停權'
   return null
 }

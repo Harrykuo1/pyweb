@@ -791,12 +791,13 @@ describe('Members.vue — account state actions & badges', () => {
     expect(setActive).toHaveBeenCalledWith(103, true)
   })
 
-  it('admin sees a 尚未加入 badge on a pending member', async () => {
+  it('does not show a 尚未加入 badge on a pending member (that belongs in Settings)', async () => {
     const wrapper = await mountAsAdmin(stateMembers)
 
-    const badge = wrapper.find('[data-test="member-status-2"]')
-    expect(badge.exists()).toBe(true)
-    expect(badge.text()).toContain('尚未加入')
+    // The pending member still renders in the directory...
+    expect(wrapper.find('.member-anchor-2').exists()).toBe(true)
+    // ...but carries no account-status badge here.
+    expect(wrapper.find('[data-test="member-status-2"]').exists()).toBe(false)
   })
 
   it('pending / legacy members keep the delete button; claimed / suspended do not', async () => {
