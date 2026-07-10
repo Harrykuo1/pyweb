@@ -9,7 +9,7 @@ import { usePendingLinks } from '../../composables/usePendingLinks'
 const {
   loading,
   links,
-  members,
+  selectableMembers,
   picked,
   resolvingId,
   displayName,
@@ -54,7 +54,7 @@ const {
             placeholder="選擇成員"
           >
             <el-option
-              v-for="m in members"
+              v-for="m in selectableMembers"
               :key="m.id"
               :value="m.id"
               :label="memberLabel(m)"

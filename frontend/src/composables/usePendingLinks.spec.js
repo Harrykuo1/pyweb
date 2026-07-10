@@ -38,8 +38,27 @@ const LINKS = [
 ]
 
 const MEMBERS = [
-  { id: 10, real_name: '王小明', graduation_year: 2020, institution: 'NTU' },
-  { id: 11, real_name: '陳大文', graduation_year: 2021, institution: 'NCU' },
+  {
+    id: 10,
+    real_name: '王小明',
+    graduation_year: 2020,
+    institution: 'NTU',
+    account_status: 'pending',
+  },
+  {
+    id: 11,
+    real_name: '陳大文',
+    graduation_year: 2021,
+    institution: 'NCU',
+    account_status: 'claimed',
+  },
+  {
+    id: 12,
+    real_name: '林小美',
+    graduation_year: 2022,
+    institution: 'NCKU',
+    account_status: 'suspended',
+  },
 ]
 
 // Host component so the composable's onMounted(load) runs.
@@ -74,8 +93,15 @@ describe('usePendingLinks', () => {
     expect(authApi.listPendingLinks).toHaveBeenCalled()
     expect(membersApi.list).toHaveBeenCalled()
     expect(a.links.value).toHaveLength(2)
-    expect(a.members.value).toHaveLength(2)
+    expect(a.members.value).toHaveLength(3)
     expect(a.loading.value).toBe(false)
+  })
+
+  it('exposes only unclaimed (pending) members as resolve targets', async () => {
+    const { get } = mountPendingLinks()
+    await flushPromises()
+    const a = get()
+    expect(a.selectableMembers.value.map((m) => m.id)).toEqual([10])
   })
 
   it('resolve warns and does not call the API when no member is picked', async () => {

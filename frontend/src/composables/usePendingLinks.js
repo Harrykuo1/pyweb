@@ -1,4 +1,4 @@
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi } from '../api/auth'
@@ -16,6 +16,13 @@ export function usePendingLinks() {
   const resolvingId = ref(null)
   // discord_id -> chosen member id, driven by each row's el-select.
   const picked = reactive({})
+
+  // Only unclaimed members are valid resolve targets — the backend returns 409
+  // for members whose account is already claimed/suspended, so keep them out of
+  // the dropdown instead of surfacing the error after selection.
+  const selectableMembers = computed(() =>
+    members.value.filter((m) => m.account_status === 'pending'),
+  )
 
   async function load() {
     loading.value = true
@@ -88,6 +95,7 @@ export function usePendingLinks() {
     loading,
     links,
     members,
+    selectableMembers,
     picked,
     resolvingId,
     displayName,
