@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import Settings from './Settings.vue'
+import { authApi } from '../api/auth'
 
 const routeMock = { hash: '' }
 const replaceMock = vi.fn()
@@ -15,94 +16,141 @@ vi.mock('vue-router', async () => {
   }
 })
 
-// Section components hit Pinia / network on mount; this spec only cares
-// about layout & sidebar behavior, so swap them for tiny stubs.
+// Section components hit Pinia / network on mount; this spec only cares about
+// the navigation shell (groups + sub-tabs + hash sync), so swap them all for
+// tiny stubs. Stubbing by name also covers the dynamic <component :is>.
 const stubs = {
-  AccountSection: { template: '<div data-test="stub-account" />' },
+  UserRolesSection: { template: '<div data-test="stub-roles" />' },
+  InvitesSection: { template: '<div data-test="stub-invites" />' },
+  PendingLinksSection: { template: '<div data-test="stub-pending" />' },
+  GuildConfigSection: { template: '<div data-test="stub-discord" />' },
   AppearanceSection: { template: '<div data-test="stub-appearance" />' },
   SystemLimitsSection: { template: '<div data-test="stub-system" />' },
-  PhotoCropDialog: { template: '<div data-test="stub-crop" />' },
+  AccountSection: { template: '<div data-test="stub-account" />' },
 }
 
 beforeEach(() => {
   routeMock.hash = ''
   replaceMock.mockClear()
+  // Badge fetch on entering the members group — resolve to an empty list so
+  // nothing hits the network.
+  vi.spyOn(authApi, 'listPendingLinks').mockResolvedValue([])
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Settings.vue', () => {
-  it('renders one sidebar entry per section', () => {
+describe('Settings.vue navigation shell', () => {
+  it('renders exactly the three top-level groups in the sidebar', () => {
     const wrapper = mount(Settings, { global: { stubs } })
-    expect(wrapper.find('[data-test="settings-tab-account"]').exists()).toBe(
-      true,
-    )
-    expect(wrapper.find('[data-test="settings-tab-appearance"]').exists()).toBe(
-      true,
-    )
-    expect(wrapper.find('[data-test="settings-tab-system"]').exists()).toBe(
-      true,
-    )
+    expect(
+      wrapper.findAll('[data-test="settings-tab-members"]'),
+    ).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="settings-tab-site"]')).toHaveLength(1)
+    expect(
+      wrapper.findAll('[data-test="settings-tab-account"]'),
+    ).toHaveLength(1)
   })
 
-  it('defaults to the account section when hash is empty', async () => {
+  it('defaults to the members group / roles sub and normalizes an empty hash', async () => {
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
-    expect(wrapper.find('[data-test="settings-active-account"]').exists()).toBe(
-      true,
-    )
-    // Mount normalizes the URL hash so deep-links round-trip.
-    expect(replaceMock).toHaveBeenCalledWith({ hash: '#account' })
+    expect(
+      wrapper.find('[data-test="settings-active-sub-roles"]').exists(),
+    ).toBe(true)
+    expect(replaceMock).toHaveBeenCalledWith({ hash: '#roles' })
   })
 
-  it('honors a matching section hash on mount', async () => {
+  it('falls back to #roles for an unknown hash', async () => {
+    routeMock.hash = '#garbage'
+    const wrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    expect(
+      wrapper.find('[data-test="settings-active-sub-roles"]').exists(),
+    ).toBe(true)
+    expect(replaceMock).toHaveBeenCalledWith({ hash: '#roles' })
+  })
+
+  it('deep-links #system to the site group without rewriting the hash', async () => {
     routeMock.hash = '#system'
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
-    expect(wrapper.find('[data-test="settings-active-system"]').exists()).toBe(
+    expect(
+      wrapper.find('[data-test="settings-active-sub-system"]').exists(),
+    ).toBe(true)
+    expect(wrapper.find('[data-test="settings-active-site"]').exists()).toBe(
       true,
     )
-    // Hash already matched the active section, no replace needed.
+    // Hash already resolved to a valid leaf — leave it untouched.
     expect(replaceMock).not.toHaveBeenCalled()
   })
 
-  it('falls back to default for an unknown hash', async () => {
-    routeMock.hash = '#totally-bogus'
-    const wrapper = mount(Settings, { global: { stubs } })
-    await flushPromises()
-    expect(wrapper.find('[data-test="settings-active-account"]').exists()).toBe(
-      true,
-    )
-    expect(replaceMock).toHaveBeenCalledWith({ hash: '#account' })
+  it('resolves every legacy hash to the right group and sub', async () => {
+    const cases = [
+      { hash: '#roles', group: 'members', sub: 'roles' },
+      { hash: '#invites', group: 'members', sub: 'invites' },
+      { hash: '#pending-links', group: 'members', sub: 'pending-links' },
+      { hash: '#discord', group: 'site', sub: 'discord' },
+      { hash: '#appearance', group: 'site', sub: 'appearance' },
+      { hash: '#system', group: 'site', sub: 'system' },
+      { hash: '#account', group: 'account', sub: 'account' },
+    ]
+    for (const { hash, group, sub } of cases) {
+      routeMock.hash = hash
+      replaceMock.mockClear()
+      const wrapper = mount(Settings, { global: { stubs } })
+      await flushPromises()
+      expect(
+        wrapper.find(`[data-test="settings-active-sub-${sub}"]`).exists(),
+      ).toBe(true)
+      expect(
+        wrapper.find(`[data-test="settings-active-${group}"]`).exists(),
+      ).toBe(true)
+      // A valid deep-link must round-trip unchanged.
+      expect(replaceMock).not.toHaveBeenCalled()
+      wrapper.unmount()
+    }
   })
 
-  it('clicking a sidebar item switches the active section and updates the hash', async () => {
+  it('clicking the site group jumps to its first sub (#discord)', async () => {
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
     replaceMock.mockClear()
 
-    await wrapper.find('[data-test="settings-tab-appearance"]').trigger('click')
+    await wrapper.find('[data-test="settings-tab-site"]').trigger('click')
     expect(
-      wrapper.find('[data-test="settings-active-appearance"]').exists(),
+      wrapper.find('[data-test="settings-active-sub-discord"]').exists(),
     ).toBe(true)
-    expect(replaceMock).toHaveBeenCalledWith({ hash: '#appearance' })
+    expect(replaceMock).toHaveBeenCalledWith({ hash: '#discord' })
   })
 
-  it('marks the active sidebar item with is-active', async () => {
+  it('marks the sidebar group of the active leaf as active', async () => {
+    routeMock.hash = '#invites'
     const wrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
 
-    const accountBtn = wrapper.find('[data-test="settings-tab-account"]')
-    expect(accountBtn.classes()).toContain('is-active')
-
-    await wrapper.find('[data-test="settings-tab-system"]').trigger('click')
     expect(
-      wrapper.find('[data-test="settings-tab-system"]').classes(),
+      wrapper.find('[data-test="settings-tab-members"]').classes(),
     ).toContain('is-active')
     expect(
-      wrapper.find('[data-test="settings-tab-account"]').classes(),
+      wrapper.find('[data-test="settings-tab-site"]').classes(),
     ).not.toContain('is-active')
+  })
+
+  it('shows a sub-tab bar for multi-sub groups but not for the account group', async () => {
+    routeMock.hash = '#roles'
+    const membersWrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    expect(
+      membersWrapper.find('[data-test="settings-subtab-roles"]').exists(),
+    ).toBe(true)
+
+    routeMock.hash = '#account'
+    const accountWrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    expect(
+      accountWrapper.find('[data-test="settings-subtab-account"]').exists(),
+    ).toBe(false)
   })
 })
