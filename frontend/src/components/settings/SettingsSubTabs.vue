@@ -13,15 +13,14 @@ function select(key) {
 </script>
 
 <template>
-  <div class="settings-subtabs" role="tablist">
+  <div class="settings-subtabs">
     <button
       v-for="item in items"
       :key="item.key"
       type="button"
-      role="tab"
       class="settings-subtabs__item"
       :class="{ 'is-active': item.key === modelValue }"
-      :aria-selected="item.key === modelValue ? 'true' : 'false'"
+      :aria-pressed="item.key === modelValue ? 'true' : 'false'"
       :data-test="`settings-subtab-${item.key}`"
       @click="select(item.key)"
     >
@@ -29,6 +28,7 @@ function select(key) {
       <span
         v-if="item.badge > 0"
         class="settings-subtabs__badge"
+        :aria-label="`${item.badge} 筆待處理`"
         :data-test="`settings-subtab-badge-${item.key}`"
         >{{ item.badge }}</span
       >

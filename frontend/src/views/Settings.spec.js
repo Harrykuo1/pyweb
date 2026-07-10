@@ -44,6 +44,8 @@ afterEach(() => {
 describe('Settings.vue navigation shell', () => {
   it('renders exactly the three top-level groups in the sidebar', () => {
     const wrapper = mount(Settings, { global: { stubs } })
+    // Exactly three group tabs — a stray fourth group would fail here.
+    expect(wrapper.findAll('.settings-sidebar__item')).toHaveLength(3)
     expect(
       wrapper.findAll('[data-test="settings-tab-members"]'),
     ).toHaveLength(1)
@@ -123,6 +125,58 @@ describe('Settings.vue navigation shell', () => {
       wrapper.find('[data-test="settings-active-sub-discord"]').exists(),
     ).toBe(true)
     expect(replaceMock).toHaveBeenCalledWith({ hash: '#discord' })
+  })
+
+  it('clicking a sub-tab switches the sub and syncs the hash within a group', async () => {
+    routeMock.hash = '#roles'
+    const wrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    replaceMock.mockClear()
+
+    await wrapper
+      .find('[data-test="settings-subtab-invites"]')
+      .trigger('click')
+    expect(
+      wrapper.find('[data-test="settings-active-sub-invites"]').exists(),
+    ).toBe(true)
+    expect(replaceMock).toHaveBeenCalledWith({ hash: '#invites' })
+  })
+
+  it('renders the component actually mapped to each leaf', async () => {
+    routeMock.hash = '#discord'
+    const discordWrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    expect(
+      discordWrapper.find('[data-test="stub-discord"]').exists(),
+    ).toBe(true)
+    expect(discordWrapper.find('[data-test="stub-roles"]').exists()).toBe(false)
+
+    routeMock.hash = '#roles'
+    const rolesWrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    expect(rolesWrapper.find('[data-test="stub-roles"]').exists()).toBe(true)
+    expect(rolesWrapper.find('[data-test="stub-discord"]').exists()).toBe(false)
+  })
+
+  it('shows the待連結 badge with the unread count and hides it when empty', async () => {
+    // Non-empty: badge shows the count.
+    authApi.listPendingLinks.mockResolvedValue([{}, {}, {}])
+    routeMock.hash = '#roles'
+    const withBadge = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    const badge = withBadge.find(
+      '[data-test="settings-subtab-badge-pending-links"]',
+    )
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('3')
+
+    // Empty (beforeEach default resolves []): no badge.
+    authApi.listPendingLinks.mockResolvedValue([])
+    const noBadge = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    expect(
+      noBadge.find('[data-test="settings-subtab-badge-pending-links"]').exists(),
+    ).toBe(false)
   })
 
   it('marks the sidebar group of the active leaf as active', async () => {

@@ -30,14 +30,23 @@ describe('SettingsSubTabs.vue', () => {
     ).toBe(true)
   })
 
-  it('marks the active item', () => {
+  it('marks the active item via class and aria-pressed', () => {
     const wrapper = mountBar({ modelValue: 'invites' })
-    expect(
-      wrapper.find('[data-test="settings-subtab-invites"]').classes(),
-    ).toContain('is-active')
-    expect(
-      wrapper.find('[data-test="settings-subtab-roles"]').classes(),
-    ).not.toContain('is-active')
+    const activeBtn = wrapper.find('[data-test="settings-subtab-invites"]')
+    expect(activeBtn.classes()).toContain('is-active')
+    expect(activeBtn.attributes('aria-pressed')).toBe('true')
+
+    const idleBtn = wrapper.find('[data-test="settings-subtab-roles"]')
+    expect(idleBtn.classes()).not.toContain('is-active')
+    expect(idleBtn.attributes('aria-pressed')).toBe('false')
+  })
+
+  it('uses semantic buttons, not the ARIA tab role (keyboard-safe)', () => {
+    const wrapper = mountBar()
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+    const btn = wrapper.find('[data-test="settings-subtab-roles"]')
+    expect(btn.attributes('role')).toBeUndefined()
+    expect(btn.attributes('aria-selected')).toBeUndefined()
   })
 
   it('emits update:modelValue when a sub-tab is clicked', async () => {
