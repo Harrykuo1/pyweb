@@ -8,11 +8,11 @@ import AccountSection from '../components/settings/AccountSection.vue'
 import AppearanceSection from '../components/settings/AppearanceSection.vue'
 import GuildConfigSection from '../components/settings/GuildConfigSection.vue'
 import InvitesSection from '../components/settings/InvitesSection.vue'
+import MemberRoster from '../components/settings/MemberRoster.vue'
 import PendingLinksSection from '../components/settings/PendingLinksSection.vue'
 import SettingsSidebar from '../components/settings/SettingsSidebar.vue'
 import SettingsSubTabs from '../components/settings/SettingsSubTabs.vue'
 import SystemLimitsSection from '../components/settings/SystemLimitsSection.vue'
-import UserRolesSection from '../components/settings/UserRolesSection.vue'
 import { authApi } from '../api/auth'
 
 // Two-level navigation: the sidebar lists three top-level GROUPS; each group
@@ -25,7 +25,7 @@ const GROUPS = [
     description: '成員名冊、邀請連結與待連結帳號',
     icon: Avatar,
     subs: [
-      { key: 'roles', label: '成員名冊', component: UserRolesSection },
+      { key: 'roles', label: '成員名冊', component: MemberRoster },
       { key: 'invites', label: '邀請連結', component: InvitesSection },
       { key: 'pending-links', label: '待連結', component: PendingLinksSection },
     ],
@@ -82,6 +82,12 @@ const activeGroupKey = computed({
     if (group) active.value = group.subs[0].key
   },
 })
+
+// The roster's 產生邀請連結 button jumps to the invites sub-tab within the
+// members group. Harmless on other leaves, which never emit generate-invite.
+function goToInvites() {
+  active.value = 'invites'
+}
 
 const pendingCount = ref(0)
 
@@ -177,7 +183,7 @@ watch(active, (next) => {
           class="settings-section__body"
           :data-test="`settings-active-sub-${active}`"
         >
-          <component :is="activeComponent" />
+          <component :is="activeComponent" @generate-invite="goToInvites" />
         </div>
       </main>
     </div>

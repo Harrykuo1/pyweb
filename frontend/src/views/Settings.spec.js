@@ -20,7 +20,12 @@ vi.mock('vue-router', async () => {
 // the navigation shell (groups + sub-tabs + hash sync), so swap them all for
 // tiny stubs. Stubbing by name also covers the dynamic <component :is>.
 const stubs = {
-  UserRolesSection: { template: '<div data-test="stub-roles" />' },
+  MemberRoster: {
+    name: 'MemberRoster',
+    emits: ['generate-invite'],
+    template:
+      '<div data-test="stub-roles"><button data-test="stub-roster-invite" @click="$emit(\'generate-invite\')" /></div>',
+  },
   InvitesSection: { template: '<div data-test="stub-invites" />' },
   PendingLinksSection: { template: '<div data-test="stub-pending" />' },
   GuildConfigSection: { template: '<div data-test="stub-discord" />' },
@@ -46,13 +51,13 @@ describe('Settings.vue navigation shell', () => {
     const wrapper = mount(Settings, { global: { stubs } })
     // Exactly three group tabs — a stray fourth group would fail here.
     expect(wrapper.findAll('.settings-sidebar__item')).toHaveLength(3)
-    expect(
-      wrapper.findAll('[data-test="settings-tab-members"]'),
-    ).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="settings-tab-members"]')).toHaveLength(
+      1,
+    )
     expect(wrapper.findAll('[data-test="settings-tab-site"]')).toHaveLength(1)
-    expect(
-      wrapper.findAll('[data-test="settings-tab-account"]'),
-    ).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="settings-tab-account"]')).toHaveLength(
+      1,
+    )
   })
 
   it('defaults to the members group / roles sub and normalizes an empty hash', async () => {
@@ -133,9 +138,7 @@ describe('Settings.vue navigation shell', () => {
     await flushPromises()
     replaceMock.mockClear()
 
-    await wrapper
-      .find('[data-test="settings-subtab-invites"]')
-      .trigger('click')
+    await wrapper.find('[data-test="settings-subtab-invites"]').trigger('click')
     expect(
       wrapper.find('[data-test="settings-active-sub-invites"]').exists(),
     ).toBe(true)
@@ -146,9 +149,9 @@ describe('Settings.vue navigation shell', () => {
     routeMock.hash = '#discord'
     const discordWrapper = mount(Settings, { global: { stubs } })
     await flushPromises()
-    expect(
-      discordWrapper.find('[data-test="stub-discord"]').exists(),
-    ).toBe(true)
+    expect(discordWrapper.find('[data-test="stub-discord"]').exists()).toBe(
+      true,
+    )
     expect(discordWrapper.find('[data-test="stub-roles"]').exists()).toBe(false)
 
     routeMock.hash = '#roles'
@@ -175,8 +178,24 @@ describe('Settings.vue navigation shell', () => {
     const noBadge = mount(Settings, { global: { stubs } })
     await flushPromises()
     expect(
-      noBadge.find('[data-test="settings-subtab-badge-pending-links"]').exists(),
+      noBadge
+        .find('[data-test="settings-subtab-badge-pending-links"]')
+        .exists(),
     ).toBe(false)
+  })
+
+  it('roster generate-invite switches the members group to the invites sub', async () => {
+    routeMock.hash = '#roles'
+    const wrapper = mount(Settings, { global: { stubs } })
+    await flushPromises()
+    replaceMock.mockClear()
+
+    await wrapper.find('[data-test="stub-roster-invite"]').trigger('click')
+
+    expect(
+      wrapper.find('[data-test="settings-active-sub-invites"]').exists(),
+    ).toBe(true)
+    expect(replaceMock).toHaveBeenCalledWith({ hash: '#invites' })
   })
 
   it('marks the sidebar group of the active leaf as active', async () => {
