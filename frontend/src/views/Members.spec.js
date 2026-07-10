@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { membersApi } from '../api/members'
+import { authApi } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import Members from './Members.vue'
@@ -104,6 +105,68 @@ const booleanSearchMembers = [
     has_photo: false,
     has_resume_md: false,
     has_resume_pdf: false,
+  },
+]
+
+// Members across the four account states, for the state-driven action /
+// badge tests. is_active mirrors the backend derivation: a plain pending
+// account is still active; only a suspended account is is_active=false.
+const stateMembers = [
+  {
+    id: 1,
+    graduation_year: 2020,
+    real_name: 'Claimed',
+    institution: 'SWE',
+    resume_md: null,
+    joined_at: '2020-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+    account_status: 'claimed',
+    is_active: true,
+    account_id: 101,
+  },
+  {
+    id: 2,
+    graduation_year: 2021,
+    real_name: 'Pending',
+    institution: 'PM',
+    resume_md: null,
+    joined_at: '2021-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+    account_status: 'pending',
+    is_active: true,
+    account_id: 102,
+  },
+  {
+    id: 3,
+    graduation_year: 2022,
+    real_name: 'Suspended',
+    institution: 'QA',
+    resume_md: null,
+    joined_at: '2022-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+    account_status: 'suspended',
+    is_active: false,
+    account_id: 103,
+  },
+  {
+    id: 4,
+    graduation_year: 2023,
+    real_name: 'Legacy',
+    institution: 'Ops',
+    resume_md: null,
+    joined_at: '2023-01-01T00:00:00+00:00',
+    has_photo: false,
+    has_resume_md: false,
+    has_resume_pdf: false,
+    account_status: 'legacy',
+    is_active: true,
+    account_id: null,
   },
 ]
 
@@ -690,6 +753,85 @@ describe('Members.vue', () => {
     expect(wrapper.vm.photoCropOpen).toBe(true)
     expect(wrapper.vm.photoCropTarget?.id).toBe(1)
     expect(wrapper.vm.photoCropFile?.name).toBe(file.name)
+  })
+})
+
+describe('Members.vue — account state actions & badges', () => {
+  it('admin sees a 停權 button on a claimed member; click suspends the account', async () => {
+    const wrapper = await mountAsAdmin(stateMembers)
+    const setActive = vi.spyOn(authApi, 'setUserActive').mockResolvedValue({})
+
+    const btn = wrapper.find('[data-test="member-suspend-1"]')
+    expect(btn.exists()).toBe(true)
+
+    await btn.trigger('click')
+    await flushPromises()
+
+    expect(setActive).toHaveBeenCalledWith(101, false)
+  })
+
+  it('admin sees a 復權 button and 已停權 badge on a suspended member', async () => {
+    const wrapper = await mountAsAdmin(stateMembers)
+
+    const btn = wrapper.find('[data-test="member-reactivate-3"]')
+    expect(btn.exists()).toBe(true)
+
+    const badge = wrapper.find('[data-test="member-status-3"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('已停權')
+  })
+
+  it('clicking 復權 reactivates the suspended account', async () => {
+    const wrapper = await mountAsAdmin(stateMembers)
+    const setActive = vi.spyOn(authApi, 'setUserActive').mockResolvedValue({})
+
+    await wrapper.find('[data-test="member-reactivate-3"]').trigger('click')
+    await flushPromises()
+
+    expect(setActive).toHaveBeenCalledWith(103, true)
+  })
+
+  it('admin sees a 尚未加入 badge on a pending member', async () => {
+    const wrapper = await mountAsAdmin(stateMembers)
+
+    const badge = wrapper.find('[data-test="member-status-2"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('尚未加入')
+  })
+
+  it('pending / legacy members keep the delete button; claimed / suspended do not', async () => {
+    const wrapper = await mountAsAdmin(stateMembers)
+
+    // Pending (2) and legacy (4) still delete; claimed (1) and suspended (3)
+    // are managed via suspend/reactivate instead.
+    expect(
+      wrapper.find('.member-anchor-2 [data-test="delete-button"]').exists(),
+    ).toBe(true)
+    expect(
+      wrapper.find('.member-anchor-4 [data-test="delete-button"]').exists(),
+    ).toBe(true)
+    expect(
+      wrapper.find('.member-anchor-1 [data-test="delete-button"]').exists(),
+    ).toBe(false)
+    expect(
+      wrapper.find('.member-anchor-3 [data-test="delete-button"]').exists(),
+    ).toBe(false)
+  })
+
+  it('a previewing admin does not see suspended members', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    auth.previewAsMember = true
+    vi.spyOn(membersApi, 'list').mockResolvedValue(stateMembers)
+    const wrapper = mount(Members, { attachTo: document.body })
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+
+    expect(wrapper.find('.member-anchor-3').exists()).toBe(false)
+    // The non-suspended members are still rendered.
+    expect(wrapper.find('.member-anchor-1').exists()).toBe(true)
+    expect(wrapper.find('.member-anchor-2').exists()).toBe(true)
+    expect(wrapper.find('.member-anchor-4').exists()).toBe(true)
   })
 })
 

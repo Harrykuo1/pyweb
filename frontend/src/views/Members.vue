@@ -34,6 +34,8 @@ import ResumeViewerDialog from '../components/members/ResumeViewerDialog.vue'
 import { storeToRefs } from 'pinia'
 
 import { membersApi } from '../api/members'
+import { authApi } from '../api/auth'
+import { extractError } from '../utils/apiError'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
 import { useDeepLinkFocus } from '../composables/useDeepLinkFocus'
@@ -79,6 +81,15 @@ const SORT_OPTIONS = [
   { key: 'real_name', label: '本名' },
   { key: 'institution', label: '學校／公司' },
 ]
+// An admin previewing the member experience shouldn't see suspended
+// members either — the backend already hides them from real non-admins,
+// so this only covers the client-side preview toggle. Feed the filtered
+// list into the search/sort helpers so both grid and table respect it.
+const visibleMembers = computed(() => {
+  if (!auth.isPreviewingAsMember) return members.value
+  return members.value.filter((m) => m.account_status !== 'suspended')
+})
+
 // Client-side filtering + sorting (grid uses sortedMembers; the el-table
 // list sorts itself off filteredMembers via the helpers below).
 const {
@@ -90,7 +101,7 @@ const {
   sortedMembers,
   memberCount,
   filteredCount,
-} = useMemberFiltering(members)
+} = useMemberFiltering(visibleMembers)
 
 // Sort orders are restricted to two states so a click cycles asc → desc →
 // asc instead of the el-table default asc → desc → none.
@@ -131,6 +142,29 @@ function openEdit(member) {
 function canEdit(member) {
   if (auth.isAdmin) return true
   return auth.myMemberId != null && member?.id === auth.myMemberId
+}
+
+// Short label for the member's account state. claimed / legacy carry no
+// badge (they're the ordinary states); only pending and suspended do.
+function statusBadge(member) {
+  if (member.account_status === 'pending') return '尚未加入'
+  if (member.account_status === 'suspended') return '已停權'
+  return null
+}
+
+// Admin suspend / reactivate of the member's linked account. Reuses the
+// accounts API (not membersApi) since it acts on the account, not the
+// member profile.
+async function setMemberActive(member, isActive) {
+  try {
+    await authApi.setUserActive(member.account_id, isActive)
+    ElMessage.success(isActive ? '已復權' : '已停權')
+    reloadFresh()
+  } catch (err) {
+    ElMessage.error(
+      extractError(err, isActive ? '復權失敗，請稍後再試' : '停權失敗，請稍後再試'),
+    )
+  }
 }
 
 // Photo removal: admins re-authenticate via the password dialog; an owning
@@ -436,8 +470,19 @@ onMounted(() => {
                 履歷
               </el-button>
 
-              <span v-if="canEdit(m)" class="card-admin-actions">
+              <span
+                v-if="canEdit(m) || auth.isActuallyAdmin"
+                class="card-admin-actions"
+              >
+                <span
+                  v-if="auth.isActuallyAdmin && statusBadge(m)"
+                  :class="['status-badge', `status-badge--${m.account_status}`]"
+                  :data-test="`member-status-${m.id}`"
+                >
+                  {{ statusBadge(m) }}
+                </span>
                 <el-button
+                  v-if="canEdit(m)"
                   size="small"
                   plain
                   data-test="edit-button"
@@ -445,16 +490,41 @@ onMounted(() => {
                 >
                   編輯
                 </el-button>
-                <el-button
-                  v-if="auth.isAdmin"
-                  size="small"
-                  type="danger"
-                  plain
-                  data-test="delete-button"
-                  @click="askDeleteMember(m)"
-                >
-                  刪除
-                </el-button>
+                <template v-if="auth.isActuallyAdmin">
+                  <el-button
+                    v-if="m.account_status === 'claimed'"
+                    size="small"
+                    type="warning"
+                    plain
+                    :data-test="`member-suspend-${m.id}`"
+                    @click="setMemberActive(m, false)"
+                  >
+                    停權
+                  </el-button>
+                  <el-button
+                    v-if="m.is_active === false"
+                    size="small"
+                    type="success"
+                    plain
+                    :data-test="`member-reactivate-${m.id}`"
+                    @click="setMemberActive(m, true)"
+                  >
+                    復權
+                  </el-button>
+                  <el-button
+                    v-if="
+                      m.account_status !== 'claimed' &&
+                      m.account_status !== 'suspended'
+                    "
+                    size="small"
+                    type="danger"
+                    plain
+                    data-test="delete-button"
+                    @click="askDeleteMember(m)"
+                  >
+                    刪除
+                  </el-button>
+                </template>
               </span>
             </div>
           </div>
@@ -616,12 +686,19 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column
-        v-if="auth.isAdmin || auth.myMemberId != null"
+        v-if="auth.isActuallyAdmin || auth.myMemberId != null"
         label="操作"
-        width="120"
+        width="160"
         align="center"
       >
         <template #default="{ row }">
+          <span
+            v-if="auth.isActuallyAdmin && statusBadge(row)"
+            :class="['status-badge', `status-badge--${row.account_status}`]"
+            :data-test="`member-status-${row.id}`"
+          >
+            {{ statusBadge(row) }}
+          </span>
           <el-tooltip v-if="canEdit(row)" content="編輯" placement="top">
             <el-button
               size="small"
@@ -633,18 +710,43 @@ onMounted(() => {
               @click="openEdit(row)"
             />
           </el-tooltip>
-          <el-button
-            v-if="auth.isAdmin"
-            size="small"
-            type="danger"
-            plain
-            circle
-            :icon="Delete"
-            data-test="delete-button"
-            aria-label="刪除"
-            title="刪除"
-            @click="askDeleteMember(row)"
-          />
+          <template v-if="auth.isActuallyAdmin">
+            <el-button
+              v-if="row.account_status === 'claimed'"
+              size="small"
+              type="warning"
+              plain
+              :data-test="`member-suspend-${row.id}`"
+              @click="setMemberActive(row, false)"
+            >
+              停權
+            </el-button>
+            <el-button
+              v-if="row.is_active === false"
+              size="small"
+              type="success"
+              plain
+              :data-test="`member-reactivate-${row.id}`"
+              @click="setMemberActive(row, true)"
+            >
+              復權
+            </el-button>
+            <el-button
+              v-if="
+                row.account_status !== 'claimed' &&
+                row.account_status !== 'suspended'
+              "
+              size="small"
+              type="danger"
+              plain
+              circle
+              :icon="Delete"
+              data-test="delete-button"
+              aria-label="刪除"
+              title="刪除"
+              @click="askDeleteMember(row)"
+            />
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -1047,7 +1149,31 @@ onMounted(() => {
 .card-admin-actions {
   margin-left: auto;
   display: inline-flex;
+  align-items: center;
   gap: 4px;
+}
+
+/* Account-state badge: pending (尚未加入) reads as neutral/amber, suspended
+   (已停權) as a muted danger tone. Shown next to the admin action buttons. */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.status-badge--pending {
+  background: rgba(234, 179, 8, 0.14);
+  color: #a16207;
+}
+
+.status-badge--suspended {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
 }
 
 /* ---------- Skeleton (initial-fetch placeholder) ---------- */
