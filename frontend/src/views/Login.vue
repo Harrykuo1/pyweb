@@ -164,8 +164,16 @@ async function handleSubmit() {
               :loading="submitting"
               @click="handleSubmit"
             >
-              登入
+              {{ submitting ? '驗證中…' : '登入' }}
             </el-button>
+
+            <p
+              v-if="submitting"
+              class="pending-hint"
+              data-test="login-pending-hint"
+            >
+              正在驗證密碼，請稍候…
+            </p>
           </el-form>
         </div>
       </main>
@@ -360,6 +368,13 @@ async function handleSubmit() {
   color: #ef4444;
   font-size: 13px;
   margin: -4px 0 16px;
+}
+
+.pending-hint {
+  margin: 10px 0 0;
+  text-align: center;
+  color: var(--ink-500);
+  font-size: 13px;
 }
 
 /* Discord brand button — the primary login path going forward. */
