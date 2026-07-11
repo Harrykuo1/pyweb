@@ -144,12 +144,13 @@ const {
 <template>
   <div class="member-roster">
     <div class="member-roster__toolbar">
-      <div class="member-roster__filters" role="tablist" aria-label="狀態篩選">
+      <div class="member-roster__filters" role="group" aria-label="狀態篩選">
         <button
           v-for="f in FILTERS"
           :key="f.key"
           type="button"
           :class="['roster-filter', { 'is-active': statusFilter === f.key }]"
+          :aria-pressed="statusFilter === f.key"
           :data-test="`roster-filter-${f.key}`"
           @click="statusFilter = f.key"
         >
