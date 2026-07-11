@@ -221,10 +221,11 @@ const form = reactive({
   company: '',
   category: '',
   is_anonymous: false,
-  // Admin-only attribution: pick a member (subject_member_id) or type a
-  // free-text real_name for a non-member. Ignored by the backend for members.
-  subject_member_id: null,
-  real_name: '',
+  // Admin-only attribution in ONE field: a number is a picked roster member
+  // (subject_member_id); a string is a free-text name for a non-member
+  // (real_name); null is unattributed. Members can't attribute to others, so
+  // the backend ignores this for them. buildPayload splits it back out.
+  subject: null,
   experience_md: '',
   timeline_events: [],
 })
@@ -243,6 +244,24 @@ async function loadMembers() {
 function memberLabel(m) {
   return `${m.real_name}（${m.graduation_year}）`
 }
+
+// Options for the single "歸屬對象" select: roster members, plus — in edit
+// mode — the post's existing free-text name (a string not in the roster) so
+// the select can display it.
+const subjectOptions = computed(() => {
+  const opts = members.value.map((m) => ({
+    value: m.id,
+    label: memberLabel(m),
+  }))
+  if (
+    typeof form.subject === 'string' &&
+    form.subject.trim() &&
+    !opts.some((o) => o.value === form.subject)
+  ) {
+    opts.unshift({ value: form.subject, label: form.subject })
+  }
+  return opts
+})
 
 // Two-way bridge between the el-date-picker (Date) and the form's
 // integer (year, month) pair. Using a writable computed keeps the form
@@ -288,11 +307,13 @@ function resetForm(job) {
     company: job?.company ?? '',
     category: job?.category ?? '',
     is_anonymous: job?.is_anonymous ?? false,
-    subject_member_id: job?.subject_member_id ?? null,
-    // For an admin, display_name == the free-text real_name when no subject
-    // member is attached (the response drops real_name itself), so recover it
-    // from there; a post attributed to a member leaves this blank.
-    real_name: job?.subject_member_id ? '' : (job?.display_name ?? ''),
+    // A member subject → its id (number); otherwise recover the free-text
+    // name from display_name (the response drops real_name itself); null when
+    // there's neither.
+    subject:
+      job?.subject_member_id != null
+        ? job.subject_member_id
+        : (job?.display_name ?? null),
     experience_md: job?.experience_md ?? '',
     // Structured editor bound to a copy so the user's edits don't
     // mutate the parent's job object until they actually save.
@@ -353,7 +374,6 @@ async function fetchCategorySuggestions(queryString, cb) {
 }
 
 function buildPayload() {
-  const trimmedRealName = form.real_name.trim()
   const trimmedCategory = form.category.trim()
   // Drop incomplete rows (missing date or blank event text) so the
   // backend's per-row validation never sees partial input. An entirely
@@ -388,14 +408,19 @@ function buildPayload() {
     timeline_md: null,
   }
   // Attribution is admin-only; the backend ignores it for members (their
-  // subject is always themselves). A picked member wins over free-text.
+  // subject is always themselves). Split the single field back out: a number
+  // is a roster member, a non-empty string is a free-text name.
   if (auth.isActuallyAdmin) {
-    payload.subject_member_id = form.subject_member_id ?? null
-    payload.real_name = form.subject_member_id
-      ? null
-      : trimmedRealName === ''
-        ? null
-        : trimmedRealName
+    if (typeof form.subject === 'number') {
+      payload.subject_member_id = form.subject
+      payload.real_name = null
+    } else if (typeof form.subject === 'string' && form.subject.trim()) {
+      payload.subject_member_id = null
+      payload.real_name = form.subject.trim()
+    } else {
+      payload.subject_member_id = null
+      payload.real_name = null
+    }
   }
   return payload
 }
@@ -515,33 +540,27 @@ async function handleSubmit() {
         </el-form-item>
 
         <template v-if="auth.isActuallyAdmin">
-          <el-form-item label="代表成員（選填）">
+          <el-form-item label="歸屬對象（選填）">
             <el-select
-              v-model="form.subject_member_id"
+              v-model="form.subject"
               filterable
               clearable
-              placeholder="選擇成員，或留空並自訂本名"
+              allow-create
+              default-first-option
+              placeholder="選名冊成員，或直接輸入姓名（可留空）"
               class="form-subject-select"
               data-test="form-subject-member"
             >
               <el-option
-                v-for="m in members"
-                :key="m.id"
-                :value="m.id"
-                :label="memberLabel(m)"
+                v-for="o in subjectOptions"
+                :key="o.value"
+                :value="o.value"
+                :label="o.label"
               />
             </el-select>
-          </el-form-item>
-
-          <el-form-item label="本名（非成員時填寫）" prop="real_name">
-            <el-input
-              v-model="form.real_name"
-              :disabled="form.subject_member_id != null"
-              placeholder="未選成員時，可自訂發表者姓名"
-              maxlength="64"
-              show-word-limit
-              data-test="form-real-name"
-            />
+            <p class="subject-hint">
+              選成員會連到其個人檔案；輸入非成員姓名則只顯示文字。
+            </p>
           </el-form-item>
         </template>
 
@@ -750,6 +769,13 @@ async function handleSubmit() {
 
 .form-subject-select {
   width: 100%;
+}
+
+.subject-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-500);
 }
 
 /* Equal-width 1:1 split for the company / category pair on desktop.

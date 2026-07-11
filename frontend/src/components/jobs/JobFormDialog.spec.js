@@ -311,26 +311,60 @@ describe('JobFormDialog — submit', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('treats blank real_name as null and empty timeline as [] in the payload', async () => {
+  it('leaves attribution null when nothing is picked, and timeline []', async () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
 
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(
-      findMdEditorByDataTest(wrapper, 'form-experience-md'),
-      '## x',
-    )
-    // real_name has a placeholder of "可留空"
-    setNativeValue(findInputByDataTest(wrapper, 'form-real-name'), '   ')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
     await flushPromises()
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
     const payload = create.mock.calls[0][0]
+    expect(payload.subject_member_id).toBeNull()
     expect(payload.real_name).toBeNull()
     expect(payload.timeline_md).toBeNull()
     expect(payload.timeline_events).toEqual([])
+  })
+
+  it('sends a typed free-text name in the 歸屬 field as real_name', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    // allow-create yields a string value for a typed, non-roster name.
+    wrapper
+      .getComponent('[data-test="form-subject-member"]')
+      .vm.$emit('update:modelValue', '外部講者小明')
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = create.mock.calls[0][0]
+    expect(payload.real_name).toBe('外部講者小明')
+    expect(payload.subject_member_id).toBeNull()
+  })
+
+  it('sends a picked roster member in the 歸屬 field as subject_member_id', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    // A picked member option carries the member id (a number).
+    wrapper
+      .getComponent('[data-test="form-subject-member"]')
+      .vm.$emit('update:modelValue', 7)
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = create.mock.calls[0][0]
+    expect(payload.subject_member_id).toBe(7)
+    expect(payload.real_name).toBeNull()
   })
 
   it('sends is_anonymous true when the toggle is on', async () => {
@@ -352,7 +386,7 @@ describe('JobFormDialog — submit', () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog({}, 'member')
 
-    expect(findInputByDataTest(wrapper, 'form-real-name')).toBeNull()
+    // The whole admin attribution field is hidden for members.
     expect(wrapper.find('[data-test="form-subject-member"]').exists()).toBe(
       false,
     )
