@@ -184,6 +184,37 @@ def test_member_editing_rejected_post_resubmits_to_pending(ctx, db_session):
     assert r.json()["status"] == "pending"
 
 
+def test_member_editing_accepted_post_returns_to_pending(ctx, db_session):
+    from app.models import Job, PostStatus
+
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    # Admin approved it; the member then edits the (public) post.
+    db_session.query(Job).filter_by(id=jid).update({"status": PostStatus.ACCEPTED})
+    db_session.commit()
+
+    r = client.put(f"/api/jobs/{jid}", json={"experience_md": "sneaky edit"})
+    assert r.status_code == 200
+    # Editing public content re-enters the review queue; it must not stay live.
+    assert r.json()["status"] == "pending"
+
+
+def test_admin_editing_accepted_post_stays_accepted(ctx, db_session):
+    from app.models import Job, PostStatus
+
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    db_session.query(Job).filter_by(id=jid).update({"status": PostStatus.ACCEPTED})
+    db_session.commit()
+    client.post("/api/auth/logout")
+    login("admin-pw")
+
+    r = client.put(f"/api/jobs/{jid}", json={"experience_md": "admin edit"})
+    assert r.status_code == 200
+    # Admin edits are trusted and do not bounce the post back to review.
+    assert r.json()["status"] == "accepted"
+
+
 def test_member_cannot_reassign_subject(ctx):
     client, login, ids = ctx
     jid = _member_creates(client, login)

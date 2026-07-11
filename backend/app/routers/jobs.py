@@ -366,8 +366,13 @@ def update_job(
             value = JobKind(value)
         setattr(obj, field, value)
     obj.last_edited_by_user_id = current_user.id
-    # An owner editing a rejected post resubmits it for review.
-    if not is_admin and is_owner and obj.status is PostStatus.REJECTED:
+    # An owner editing a rejected post resubmits it; editing an already
+    # accepted (public) post sends it back for re-review so content can't
+    # be changed out from under the approval. Admin edits stay as-is.
+    if not is_admin and is_owner and obj.status in (
+        PostStatus.REJECTED,
+        PostStatus.ACCEPTED,
+    ):
         obj.status = PostStatus.PENDING
 
     db.commit()

@@ -128,6 +128,28 @@ def test_member_editing_rejected_event_resubmits(ctx, db_session):
     assert r.json()["status"] == "pending"
 
 
+def test_member_editing_accepted_event_returns_to_pending(ctx, db_session):
+    client, login = ctx
+    eid = _member_creates(client, login)
+    db_session.query(Event).filter_by(id=eid).update({"status": PostStatus.ACCEPTED})
+    db_session.commit()
+    r = client.put(f"/api/events/{eid}", json={"description_md": "sneaky edit"})
+    # Editing public content re-enters the review queue; it must not stay live.
+    assert r.json()["status"] == "pending"
+
+
+def test_admin_editing_accepted_event_stays_accepted(ctx, db_session):
+    client, login = ctx
+    eid = _member_creates(client, login)
+    db_session.query(Event).filter_by(id=eid).update({"status": PostStatus.ACCEPTED})
+    db_session.commit()
+    client.post("/api/auth/logout")
+    login("admin-pw")
+    r = client.put(f"/api/events/{eid}", json={"description_md": "admin edit"})
+    # Admin edits are trusted and do not bounce the event back to review.
+    assert r.json()["status"] == "accepted"
+
+
 def test_owner_deletes_own_event_without_password(ctx):
     client, login = ctx
     eid = _member_creates(client, login)
