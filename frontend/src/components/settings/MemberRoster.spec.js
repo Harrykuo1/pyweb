@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { computed, nextTick, ref } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import MemberRoster from './MemberRoster.vue'
 import { useMemberRoster } from '../../composables/useMemberRoster'
+import { membersApi } from '../../api/members'
 
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
@@ -452,6 +453,19 @@ describe('MemberRoster.vue', () => {
 
     expect(del.props('modelValue')).toBe(true)
     expect(del.props('itemName')).toBe('林小美')
+  })
+
+  it('shows a success toast after a member is deleted', async () => {
+    vi.spyOn(membersApi, 'remove').mockResolvedValue()
+    const wrapper = await mountRoster()
+    await wrapper.find('[data-test="roster-delete-11"]').trigger('click')
+
+    wrapper
+      .findComponent({ name: 'DeleteWithPasswordDialog' })
+      .vm.$emit('confirm', 'pw')
+    await flushPromises()
+
+    expect(ElMessage.success).toHaveBeenCalledWith('已刪除成員')
   })
 
   it('emits generate-invite from the toolbar button', async () => {

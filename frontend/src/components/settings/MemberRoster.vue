@@ -2,6 +2,7 @@
 import {
   ElButton,
   ElEmpty,
+  ElMessage,
   ElMessageBox,
   ElSkeleton,
   ElTable,
@@ -135,7 +136,10 @@ const {
   // 409 can never fire here — the only reachable 409 is a member still
   // referenced by job records.
   messages: { 409: '此成員已有關聯的求職記錄，無法刪除' },
-  onSuccess: () => reload(),
+  onSuccess: () => {
+    ElMessage.success('已刪除成員')
+    reload()
+  },
 })
 </script>
 
