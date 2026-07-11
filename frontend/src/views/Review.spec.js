@@ -59,6 +59,28 @@ describe('Review.vue', () => {
     expect(wrapper.find('[data-test="pending-count"]').text()).toContain('2')
   })
 
+  it('tabs between 求職 and 活動, activating one at a time', async () => {
+    const wrapper = await mountReview()
+    const jobsTab = () => wrapper.find('[data-test="review-tab-jobs"]')
+    const eventsTab = () => wrapper.find('[data-test="review-tab-events"]')
+    // Defaults to the jobs tab.
+    expect(jobsTab().text()).toContain('求職')
+    expect(jobsTab().attributes('aria-pressed')).toBe('true')
+    expect(eventsTab().attributes('aria-pressed')).toBe('false')
+
+    await eventsTab().trigger('click')
+    expect(eventsTab().attributes('aria-pressed')).toBe('true')
+    expect(jobsTab().attributes('aria-pressed')).toBe('false')
+  })
+
+  it('defaults to the 活動 tab when only events are pending', async () => {
+    const wrapper = await mountReview([], EVENTS)
+    expect(wrapper.find('[data-test="pending-event-row"]').isVisible()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="jobs-tab-empty"]').exists()).toBe(true)
+  })
+
   it('masks an anonymous job as 匿名 in the queue', async () => {
     const wrapper = await mountReview([
       { ...JOBS[0], is_anonymous: true, display_name: 'Ada' },

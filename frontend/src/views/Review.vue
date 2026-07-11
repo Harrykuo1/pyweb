@@ -1,4 +1,5 @@
 <script setup>
+import { ref, watch } from 'vue'
 import { ElButton, ElIcon, ElSkeleton } from 'element-plus'
 import {
   Calendar,
@@ -14,6 +15,22 @@ import { useReviewQueue } from '../composables/useReviewQueue'
 
 const { loading, jobs, events, busyKey, pendingCount, accept, reject } =
   useReviewQueue()
+
+// 求職 / 活動 live in one tabbed queue. Default (once, on first load) to
+// whichever category actually has something to review; after that, respect
+// the reviewer's manual choice even as they clear items.
+const tab = ref('jobs')
+let tabPicked = false
+watch(
+  [jobs, events],
+  ([j, e]) => {
+    if (!tabPicked && (j.length || e.length)) {
+      tab.value = j.length ? 'jobs' : 'events'
+      tabPicked = true
+    }
+  },
+  { immediate: true },
+)
 
 const KIND_LABEL = { internship: '實習', fulltime: '正職' }
 
@@ -69,13 +86,41 @@ function excerpt(md, max = 90) {
     </div>
 
     <template v-else>
+      <div class="review-tabs" role="tablist">
+        <button
+          type="button"
+          class="review-tab"
+          :class="{ 'is-active': tab === 'jobs' }"
+          :aria-pressed="tab === 'jobs'"
+          data-test="review-tab-jobs"
+          @click="tab = 'jobs'"
+        >
+          <el-icon :size="15"><Briefcase /></el-icon>
+          求職 <span class="review-tab__count">{{ jobs.length }}</span>
+        </button>
+        <button
+          type="button"
+          class="review-tab"
+          :class="{ 'is-active': tab === 'events' }"
+          :aria-pressed="tab === 'events'"
+          data-test="review-tab-events"
+          @click="tab = 'events'"
+        >
+          <el-icon :size="15"><Calendar /></el-icon>
+          活動 <span class="review-tab__count">{{ events.length }}</span>
+        </button>
+      </div>
+
       <!-- ---------- Pending jobs ---------- -->
-      <section v-if="jobs.length" class="review-section">
-        <h2 class="section-title">
-          <el-icon :size="16"><Briefcase /></el-icon>
-          待審求職 <span class="section-count">{{ jobs.length }}</span>
-        </h2>
-        <ul class="review-list">
+      <section
+        v-show="tab === 'jobs'"
+        class="review-section"
+        data-test="review-jobs-section"
+      >
+        <p v-if="!jobs.length" class="tab-empty" data-test="jobs-tab-empty">
+          目前沒有待審求職 🎉
+        </p>
+        <ul v-else class="review-list">
           <li
             v-for="j in jobs"
             :key="j.id"
@@ -130,12 +175,15 @@ function excerpt(md, max = 90) {
       </section>
 
       <!-- ---------- Pending events ---------- -->
-      <section v-if="events.length" class="review-section">
-        <h2 class="section-title">
-          <el-icon :size="16"><Calendar /></el-icon>
-          待審活動 <span class="section-count">{{ events.length }}</span>
-        </h2>
-        <ul class="review-list">
+      <section
+        v-show="tab === 'events'"
+        class="review-section"
+        data-test="review-events-section"
+      >
+        <p v-if="!events.length" class="tab-empty" data-test="events-tab-empty">
+          目前沒有待審活動 🎉
+        </p>
+        <ul v-else class="review-list">
           <li
             v-for="e in events"
             :key="e.id"
@@ -197,7 +245,8 @@ function excerpt(md, max = 90) {
 
 <style scoped>
 .review-page {
-  max-width: 900px;
+  /* No page-level width cap — fill the layout's content container (1200px)
+     so this page reads at the same width as members / jobs / events. */
   margin: 0 auto;
 }
 
@@ -245,27 +294,64 @@ function excerpt(md, max = 90) {
   color: var(--ink-500);
 }
 
-.review-section {
-  margin-top: 24px;
-}
-
-.section-title {
+.review-tabs {
   display: flex;
-  align-items: center;
   gap: 8px;
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--ink-900);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.section-count {
+.review-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-500);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  transition:
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.review-tab:hover {
+  color: var(--brand-primary);
+}
+
+.review-tab.is-active {
+  color: var(--brand-primary);
+  border-bottom-color: var(--brand-primary);
+}
+
+.review-tab__count {
   font-size: 12px;
   font-weight: 700;
   color: var(--ink-500);
   background: var(--surface-2);
   border-radius: 999px;
   padding: 1px 9px;
+}
+
+.review-tab.is-active .review-tab__count {
+  color: var(--brand-primary);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.review-section {
+  margin-top: 20px;
+}
+
+.tab-empty {
+  color: var(--ink-500);
+  font-size: 14px;
+  padding: 24px 0;
+  text-align: center;
 }
 
 .review-list {
