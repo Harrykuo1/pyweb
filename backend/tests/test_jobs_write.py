@@ -184,6 +184,28 @@ def test_member_editing_rejected_post_resubmits_to_pending(ctx, db_session):
     assert r.json()["status"] == "pending"
 
 
+def test_resubmit_clears_stale_review_state(ctx, db_session):
+    from app.models import Job, PostStatus
+
+    client, login, _ = ctx
+    jid = _member_creates(client, login)
+    db_session.query(Job).filter_by(id=jid).update(
+        {
+            "status": PostStatus.REJECTED,
+            "review_reason": "缺少細節",
+            "reviewed_at": None,
+        }
+    )
+    db_session.commit()
+
+    r = client.put(f"/api/jobs/{jid}", json={"experience_md": "revised"})
+    assert r.json()["status"] == "pending"
+    db_session.expire_all()
+    row = db_session.query(Job).filter_by(id=jid).first()
+    # The stale rejection reason must not ride along on the re-queued post.
+    assert row.review_reason is None
+
+
 def test_member_editing_accepted_post_returns_to_pending(ctx, db_session):
     from app.models import Job, PostStatus
 

@@ -128,6 +128,20 @@ def test_member_editing_rejected_event_resubmits(ctx, db_session):
     assert r.json()["status"] == "pending"
 
 
+def test_event_resubmit_clears_stale_review_state(ctx, db_session):
+    client, login = ctx
+    eid = _member_creates(client, login)
+    db_session.query(Event).filter_by(id=eid).update(
+        {"status": PostStatus.REJECTED, "review_reason": "缺少細節"}
+    )
+    db_session.commit()
+    r = client.put(f"/api/events/{eid}", json={"description_md": "revised"})
+    assert r.json()["status"] == "pending"
+    db_session.expire_all()
+    row = db_session.query(Event).filter_by(id=eid).first()
+    assert row.review_reason is None
+
+
 def test_member_editing_accepted_event_returns_to_pending(ctx, db_session):
     client, login = ctx
     eid = _member_creates(client, login)

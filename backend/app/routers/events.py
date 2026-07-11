@@ -334,6 +334,11 @@ def update_event(
         PostStatus.ACCEPTED,
     ):
         obj.status = PostStatus.PENDING
+        # Returning to the queue drops the previous review outcome so a stale
+        # rejection reason (or old reviewer/timestamp) doesn't cling to it.
+        obj.review_reason = None
+        obj.reviewed_by_user_id = None
+        obj.reviewed_at = None
     db.commit()
     db.refresh(obj)
     return _serialize_many(
