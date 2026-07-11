@@ -43,6 +43,19 @@ afterEach(() => {
 })
 
 describe('useAccounts', () => {
+  it('counts only the roles it actually lists, not member accounts', async () => {
+    // listUsers returns members too, but the list only renders admin/viewer;
+    // the "N 個帳號" total must match what is shown, not include members.
+    authApi.listUsers.mockResolvedValue([
+      ...USERS,
+      { id: 3, role: 'member', username: null },
+      { id: 4, role: 'member', username: null },
+    ])
+    const { get } = mountAccounts()
+    await flushPromises()
+    expect(get().totalCount.value).toBe(2)
+  })
+
   it('loads users on mount, keys + seeds the forms, and selects the first', async () => {
     const { get } = mountAccounts()
     await flushPromises()
