@@ -21,6 +21,9 @@ import 'md-editor-v3/lib/preview.css'
 
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
 import TimelineDisplay from '../TimelineDisplay.vue'
+import { useAuthStore } from '../../stores/auth'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -49,8 +52,11 @@ const tab = ref('experience')
 // The admin can reveal it per-open with an explicit click; it re-masks on
 // close so a revealed name never lingers.
 const revealName = ref(false)
+// Revealing an anonymous author is a real-admin power; hide it while an admin
+// is previewing as a member (auth.isAdmin is false then) so the preview can't
+// unmask names a member could never see.
 const canRevealAnon = computed(
-  () => !!(props.job?.is_anonymous && props.job?.display_name),
+  () => !!(props.job?.is_anonymous && props.job?.display_name && auth.isAdmin),
 )
 const showRealName = computed(
   () =>

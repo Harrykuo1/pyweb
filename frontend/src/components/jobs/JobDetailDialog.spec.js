@@ -101,6 +101,17 @@ describe('JobDetailDialog — header', () => {
     expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
   })
 
+  it('hides the reveal control while an admin previews as a member', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, is_anonymous: true, display_name: 'Alice' },
+    })
+    expect(wrapper.find('[data-test="anon-reveal"]').exists()).toBe(true)
+
+    useAuthStore().previewAsMember = true
+    await flushPromises()
+    expect(wrapper.find('[data-test="anon-reveal"]').exists()).toBe(false)
+  })
+
   it('does not offer a reveal control to non-admins on anonymous posts', async () => {
     const wrapper = await mountDialog(
       { job: { ...sample, is_anonymous: true, display_name: null } },
