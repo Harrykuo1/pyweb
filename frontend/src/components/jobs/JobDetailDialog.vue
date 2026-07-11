@@ -190,6 +190,7 @@ function formatJobYearMonth(j) {
             :model-value="job.experience_md ?? ''"
             theme="light"
             preview-theme="default"
+            language="zh-TW"
             :sanitize="sanitizeHtml"
           />
         </div>
@@ -208,6 +209,7 @@ function formatJobYearMonth(j) {
               :model-value="job.timeline_md ?? ''"
               theme="light"
               preview-theme="default"
+              language="zh-TW"
               :sanitize="sanitizeHtml"
             />
           </div>

@@ -239,6 +239,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           :model-value="event.description_md"
           theme="light"
           preview-theme="default"
+          language="zh-TW"
           :sanitize="sanitizeHtml"
         />
       </div>

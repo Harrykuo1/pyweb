@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import ElementPlus, { ElMessage } from 'element-plus'
 import 'element-plus/dist/index.css'
 import { config as configMdEditor } from 'md-editor-v3'
+import { mdEditorLangZhTW } from './utils/mdEditorLangZhTW'
 
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'
@@ -26,6 +27,10 @@ import { useAuthStore } from './stores/auth'
 // the standard companion for new-tab links to prevent the opened
 // page from referencing window.opener.
 configMdEditor({
+  // Register Traditional Chinese; editors/previews pass language="zh-TW".
+  editorConfig: {
+    languageUserDefined: { 'zh-TW': mdEditorLangZhTW },
+  },
   markdownItConfig(md) {
     const defaultLinkOpen =
       md.renderer.rules.link_open ||

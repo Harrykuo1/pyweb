@@ -271,6 +271,7 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
           <MdPreview
             :model-value="member.resume_md ?? ''"
             theme="light"
+            language="zh-TW"
             :sanitize="sanitizeHtml"
           />
         </div>

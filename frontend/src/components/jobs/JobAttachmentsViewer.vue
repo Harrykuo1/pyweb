@@ -449,6 +449,7 @@ onBeforeUnmount(() => {
             v-else-if="isMarkdown(selected) && textMode === 'rendered'"
             :model-value="textContent"
             theme="light"
+            language="zh-TW"
             :sanitize="sanitizeHtml"
             data-test="viewer-text-rendered"
           />
