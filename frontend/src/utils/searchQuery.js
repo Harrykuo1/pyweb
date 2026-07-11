@@ -7,6 +7,7 @@
  *
  * Supported syntax:
  *   - Implicit AND between terms: `react vue` requires both
+ *   - Uppercase `AND` is an explicit synonym for that implicit AND (no-op)
  *   - Uppercase OR (low precedence): `a b OR c d` = (a AND b) OR (c AND d)
  *   - Negation via `-prefix` or uppercase NOT keyword
  *   - Quoted phrases preserve internal whitespace: `"team lead"`
@@ -35,6 +36,11 @@ export function parseQuery(q) {
     }
     if (!isPhrase && !negPrefix && text === 'NOT') {
       pendingNot = true
+      continue
+    }
+    // `AND` is redundant with the implicit AND between terms — accept it as a
+    // no-op so `a AND b` becomes `a b`, not a literal "AND" term.
+    if (!isPhrase && !negPrefix && text === 'AND') {
       continue
     }
     const negate = negPrefix || pendingNot

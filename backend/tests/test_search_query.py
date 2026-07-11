@@ -44,6 +44,16 @@ def test_parse_collapses_multiple_spaces():
     assert parse("react   vue") == [[t("react"), t("vue")]]
 
 
+def test_parse_and_keyword_is_a_noop():
+    # `AND` is redundant with the implicit AND, so it drops out — matching
+    # what a user typing "react AND vue" expects.
+    assert parse("react AND vue") == [[t("react"), t("vue")]]
+
+
+def test_parse_lowercase_and_is_a_normal_term():
+    assert parse("react and vue") == [[t("react"), t("and"), t("vue")]]
+
+
 # ---------- OR (Google-style: low precedence) ----------
 
 

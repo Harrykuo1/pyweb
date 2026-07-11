@@ -2,6 +2,8 @@
 
 Supported syntax:
   * Implicit AND between adjacent terms: ``react vue`` requires both.
+  * ``AND`` (uppercase) is an explicit synonym for that implicit AND — a
+    no-op accepted so ``react AND vue`` behaves like ``react vue``.
   * ``OR`` (uppercase) splits the query at the top level — AND binds tighter:
     ``a b OR c d`` parses as ``(a AND b) OR (c AND d)``.
   * Negation via ``-prefix`` or ``NOT`` keyword: ``-junior`` / ``NOT junior``.
@@ -99,6 +101,11 @@ def parse(q: str) -> list[list[Term]]:
             continue
         if not is_phrase and not neg_prefix and text == "NOT":
             pending_not = True
+            continue
+        # `AND` is redundant with the implicit AND between terms — accept it
+        # as a no-op so a user typing "a AND b" gets "a b", not a literal
+        # "AND" term that matches nothing.
+        if not is_phrase and not neg_prefix and text == "AND":
             continue
         negate = neg_prefix or pending_not
         pending_not = False
