@@ -15,10 +15,14 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import require_admin, require_completed_member
+from app.core.deps import (
+    require_admin,
+    require_completed_member,
+    require_posting_member,
+)
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Event, EventPhoto, User
+from app.models import Event, EventPhoto, User, UserRole
 from app.schemas import (
     EventPhotoCaptionUpdate,
     EventPhotoResponse,
@@ -69,6 +73,17 @@ def _get_event_or_404(db: Session, event_id: int) -> Event:
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
     return event
+
+
+def _require_event_editor(event: Event, user: User) -> None:
+    # Same ownership rule as events.py update/delete: an admin, or the
+    # event's own author, may manage its photos.
+    if user.role is UserRole.ADMIN:
+        return
+    if event.author_user_id is None or event.author_user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not your post"
+        )
 
 
 def _get_photo_or_404(db: Session, event_id: int, photo_id: int) -> EventPhoto:
@@ -131,9 +146,10 @@ async def upload_photo(
     caption: str | None = Form(default=None),
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
 ) -> EventPhoto:
-    _get_event_or_404(db, event_id)
+    event = _get_event_or_404(db, event_id)
+    _require_event_editor(event, current_user)
 
     if file.content_type not in PHOTO_MIME_TO_EXT:
         raise HTTPException(
@@ -187,8 +203,10 @@ def update_photo_caption(
     photo_id: int,
     payload: EventPhotoCaptionUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
 ) -> EventPhoto:
+    event = _get_event_or_404(db, event_id)
+    _require_event_editor(event, current_user)
     photo = _get_photo_or_404(db, event_id, photo_id)
     caption = payload.caption.strip() if payload.caption else ""
     photo.caption = caption or None
@@ -204,12 +222,20 @@ def update_photo_caption(
 def delete_photo(
     event_id: int,
     photo_id: int,
-    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> Response:
-    _require_admin_password(payload.password, admin)
+    event = _get_event_or_404(db, event_id)
+    _require_event_editor(event, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Password is required",
+            )
+        _require_admin_password(payload.password, current_user)
     photo = _get_photo_or_404(db, event_id, photo_id)
 
     event_dir = event_uploads_dir(uploads_root, event_id)

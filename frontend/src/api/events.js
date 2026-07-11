@@ -75,9 +75,10 @@ export const eventsApi = {
     return data
   },
   async removePhoto(eventId, photoId, password) {
-    await client.delete(`/events/${eventId}/photos/${photoId}`, {
-      data: { password },
-    })
+    // Admins send their password to re-authenticate; the post author omits
+    // the body entirely so the backend takes the owner (no-password) path.
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/events/${eventId}/photos/${photoId}`, config)
   },
   // Content-addressed photo URL (bytes for an id never change), so no
   // cache-buster needed — see the backend's immutable Cache-Control.
