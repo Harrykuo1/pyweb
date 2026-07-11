@@ -16,6 +16,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
@@ -189,6 +190,7 @@ function formatJobYearMonth(j) {
             :model-value="job.experience_md ?? ''"
             theme="light"
             preview-theme="default"
+            :sanitize="sanitizeHtml"
           />
         </div>
       </el-tab-pane>
@@ -206,6 +208,7 @@ function formatJobYearMonth(j) {
               :model-value="job.timeline_md ?? ''"
               theme="light"
               preview-theme="default"
+              :sanitize="sanitizeHtml"
             />
           </div>
         </div>

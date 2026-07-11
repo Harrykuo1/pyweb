@@ -12,6 +12,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import { eventsApi } from '../../api/events'
@@ -238,6 +239,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           :model-value="event.description_md"
           theme="light"
           preview-theme="default"
+          :sanitize="sanitizeHtml"
         />
       </div>
 

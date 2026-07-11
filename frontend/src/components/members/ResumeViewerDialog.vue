@@ -21,6 +21,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
@@ -267,7 +268,11 @@ defineExpose({ handleUploadPdf, handleDeletePdf, askDeletePdf })
         />
 
         <div v-else-if="tab === 'md'" class="md-frame" data-test="md-preview">
-          <MdPreview :model-value="member.resume_md ?? ''" theme="light" />
+          <MdPreview
+            :model-value="member.resume_md ?? ''"
+            theme="light"
+            :sanitize="sanitizeHtml"
+          />
         </div>
       </div>
     </div>

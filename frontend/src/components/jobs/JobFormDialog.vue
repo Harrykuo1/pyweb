@@ -27,6 +27,7 @@ import {
 } from 'element-plus'
 import { FullScreen, Loading } from '@element-plus/icons-vue'
 import { MdEditor } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/style.css'
 
 import { jobsApi } from '../../api/jobs'
@@ -609,6 +610,7 @@ async function handleSubmit() {
               language="zh-TW"
               :preview="false"
               :toolbars="editorToolbars"
+              :sanitize="sanitizeHtml"
               data-test="form-experience-md"
             />
             <p v-if="!form.experience_md.trim()" class="md-required-hint">
