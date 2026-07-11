@@ -12,9 +12,27 @@ import {
 } from '@element-plus/icons-vue'
 
 import { useReviewQueue } from '../composables/useReviewQueue'
+import JobDetailDialog from '../components/jobs/JobDetailDialog.vue'
+import EventDetailDialog from '../components/events/EventDetailDialog.vue'
 
 const { loading, jobs, events, busyKey, pendingCount, accept, reject } =
   useReviewQueue()
+
+// Open the full detail dialog so a reviewer can read the whole post —
+// experience / timeline / attachments (jobs) or description / photos
+// (events) — before deciding, not just the card excerpt.
+const detailJob = ref(null)
+const jobDetailOpen = ref(false)
+const detailEvent = ref(null)
+const eventDetailOpen = ref(false)
+function openJobDetail(j) {
+  detailJob.value = j
+  jobDetailOpen.value = true
+}
+function openEventDetail(e) {
+  detailEvent.value = e
+  eventDetailOpen.value = true
+}
 
 // 求職 / 活動 live in one tabbed queue. Default (once, on first load) to
 // whichever category actually has something to review; after that, respect
@@ -148,6 +166,14 @@ function excerpt(md, max = 90) {
               <p v-if="excerpt(j.experience_md)" class="review-card__excerpt">
                 {{ excerpt(j.experience_md) }}
               </p>
+              <button
+                type="button"
+                class="review-view"
+                :data-test="`view-job-${j.id}`"
+                @click="openJobDetail(j)"
+              >
+                查看完整內容（心得 / 時程 / 附件）›
+              </button>
             </div>
             <div class="review-card__actions">
               <el-button
@@ -214,6 +240,14 @@ function excerpt(md, max = 90) {
               <p v-if="excerpt(e.description_md)" class="review-card__excerpt">
                 {{ excerpt(e.description_md) }}
               </p>
+              <button
+                type="button"
+                class="review-view"
+                :data-test="`view-event-${e.id}`"
+                @click="openEventDetail(e)"
+              >
+                查看完整內容（說明 / 照片）›
+              </button>
             </div>
             <div class="review-card__actions">
               <el-button
@@ -240,6 +274,9 @@ function excerpt(md, max = 90) {
         </ul>
       </section>
     </template>
+
+    <JobDetailDialog v-model="jobDetailOpen" :job="detailJob" />
+    <EventDetailDialog v-model="eventDetailOpen" :event="detailEvent" />
   </div>
 </template>
 
@@ -438,6 +475,23 @@ function excerpt(md, max = 90) {
   font-size: 13px;
   color: var(--ink-700);
   line-height: 1.6;
+}
+
+.review-view {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 10px 0 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-primary);
+}
+
+.review-view:hover {
+  text-decoration: underline;
 }
 
 .review-card__actions {

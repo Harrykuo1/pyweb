@@ -6,6 +6,22 @@ import Review from './Review.vue'
 import { jobsApi } from '../api/jobs'
 import { eventsApi } from '../api/events'
 
+// Stub the heavy detail dialogs to simple visibility markers.
+vi.mock('../components/jobs/JobDetailDialog.vue', () => ({
+  default: {
+    name: 'JobDetailDialog',
+    props: ['modelValue', 'job'],
+    template: '<div v-if="modelValue" data-test="job-detail-open" />',
+  },
+}))
+vi.mock('../components/events/EventDetailDialog.vue', () => ({
+  default: {
+    name: 'EventDetailDialog',
+    props: ['modelValue', 'event'],
+    template: '<div v-if="modelValue" data-test="event-detail-open" />',
+  },
+}))
+
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
   return {
@@ -79,6 +95,20 @@ describe('Review.vue', () => {
       true,
     )
     expect(wrapper.find('[data-test="jobs-tab-empty"]').exists()).toBe(true)
+  })
+
+  it('opens the full job detail from a review card', async () => {
+    const wrapper = await mountReview()
+    expect(wrapper.find('[data-test="job-detail-open"]').exists()).toBe(false)
+    await wrapper.find('[data-test="view-job-1"]').trigger('click')
+    expect(wrapper.find('[data-test="job-detail-open"]').exists()).toBe(true)
+  })
+
+  it('opens the full event detail from a review card', async () => {
+    const wrapper = await mountReview()
+    await wrapper.find('[data-test="review-tab-events"]').trigger('click')
+    await wrapper.find('[data-test="view-event-5"]').trigger('click')
+    expect(wrapper.find('[data-test="event-detail-open"]').exists()).toBe(true)
   })
 
   it('masks an anonymous job as 匿名 in the queue', async () => {
