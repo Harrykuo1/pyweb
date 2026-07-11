@@ -242,7 +242,12 @@ async function loadMembers() {
   }
 }
 function memberLabel(m) {
-  return `${m.real_name}（${m.graduation_year}）`
+  // Disambiguate same-name members by their Discord handle (the permanent
+  // identity in this system) rather than graduation year; fall back to just
+  // the name for members without a linked handle.
+  return m.account_discord_username
+    ? `${m.real_name}（@${m.account_discord_username}）`
+    : m.real_name
 }
 
 // Options for the single "歸屬對象" select: roster members, plus — in edit
@@ -539,31 +544,6 @@ async function handleSubmit() {
           </div>
         </el-form-item>
 
-        <template v-if="auth.isActuallyAdmin">
-          <el-form-item label="歸屬對象（選填）">
-            <el-select
-              v-model="form.subject"
-              filterable
-              clearable
-              allow-create
-              default-first-option
-              placeholder="選名冊成員，或直接輸入姓名（可留空）"
-              class="form-subject-select"
-              data-test="form-subject-member"
-            >
-              <el-option
-                v-for="o in subjectOptions"
-                :key="o.value"
-                :value="o.value"
-                :label="o.label"
-              />
-            </el-select>
-            <p class="subject-hint">
-              選成員會連到其個人檔案；輸入非成員姓名則只顯示文字。
-            </p>
-          </el-form-item>
-        </template>
-
         <el-form-item label="求職年月" prop="job_year">
           <el-date-picker
             v-model="jobYearMonth"
@@ -576,6 +556,36 @@ async function handleSubmit() {
           />
         </el-form-item>
       </div>
+
+      <!-- Admin attribution on its own row: the allow-create select has a
+           variable width, so keeping it out of the inline row above stops it
+           from re-wrapping (and visually jumping) when it gains focus. -->
+      <el-form-item
+        v-if="auth.isActuallyAdmin"
+        label="歸屬對象（選填）"
+        class="form-subject-item"
+      >
+        <el-select
+          v-model="form.subject"
+          filterable
+          clearable
+          allow-create
+          default-first-option
+          placeholder="選名冊成員，或直接輸入姓名（可留空）"
+          class="form-subject-select"
+          data-test="form-subject-member"
+        >
+          <el-option
+            v-for="o in subjectOptions"
+            :key="o.value"
+            :value="o.value"
+            :label="o.label"
+          />
+        </el-select>
+        <p class="subject-hint">
+          選成員會連到其個人檔案；輸入非成員姓名則只顯示文字。
+        </p>
+      </el-form-item>
 
       <div class="form-row-inline form-company-row">
         <el-form-item label="公司" prop="company" class="form-company-item">
@@ -765,6 +775,10 @@ async function handleSubmit() {
 .anon-hint {
   font-size: 12px;
   color: var(--ink-500);
+}
+
+.form-subject-item {
+  max-width: 460px;
 }
 
 .form-subject-select {
