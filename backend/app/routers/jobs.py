@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_admin, require_completed_member, require_member
+from app.core.deps import (
+    require_admin,
+    require_completed_member,
+    require_posting_member,
+)
 from app.core.job_serialize import serialize_job
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
@@ -259,7 +263,7 @@ def get_job(
 def create_job(
     payload: JobCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_member),
+    current_user: User = Depends(require_posting_member),
 ) -> JobResponse:
     is_admin = current_user.role is UserRole.ADMIN
     viewer_member_id = _viewer_member_id(db, current_user)
@@ -328,7 +332,7 @@ def update_job(
     job_id: int,
     payload: JobUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_member),
+    current_user: User = Depends(require_posting_member),
 ) -> JobResponse:
     obj = _get_or_404(db, job_id)
     is_admin = current_user.role is UserRole.ADMIN
@@ -384,7 +388,7 @@ def delete_job(
     job_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    current_user: User = Depends(require_member),
+    current_user: User = Depends(require_posting_member),
     payload: PasswordConfirmRequest | None = None,
 ) -> None:
     obj = _get_or_404(db, job_id)

@@ -18,10 +18,13 @@ def ctx(db_session):
     mem = User(
         username="mem", password_hash=hash_password("mem-pw"), role=UserRole.MEMBER
     )
+    np = User(
+        username="np", password_hash=hash_password("np-pw"), role=UserRole.MEMBER
+    )
     otheru = User(
         username="otheru", password_hash=hash_password("other-pw"), role=UserRole.MEMBER
     )
-    db_session.add_all([admin, viewer, mem, otheru])
+    db_session.add_all([admin, viewer, mem, np, otheru])
     db_session.flush()
     db_session.add_all(
         [
@@ -86,6 +89,15 @@ def test_member_create_is_pending_with_author(ctx):
 def test_viewer_cannot_create_event(ctx):
     client, login = ctx
     login("viewer-pw")
+    assert client.post("/api/events", json=_ev()).status_code == 403
+
+
+def test_member_without_profile_cannot_create_event(ctx):
+    # A member who registered but hasn't completed their profile (no
+    # Member row) must not be able to post content — otherwise they can
+    # publish without ever showing up in the members-first admin roster.
+    client, login = ctx
+    login("np-pw")
     assert client.post("/api/events", json=_ev()).status_code == 403
 
 

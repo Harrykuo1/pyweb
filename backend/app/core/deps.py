@@ -84,3 +84,26 @@ def require_completed_member(
                 detail="profile_incomplete",
             )
     return current_user
+
+
+def require_posting_member(
+    current_user: User = Depends(require_member),
+    db: Session = Depends(get_db),
+) -> User:
+    # Gate for creating/editing job & event content. require_member already
+    # rejects the read-only viewer; on top of that a member must have
+    # completed their profile, otherwise a profileless account could publish
+    # content while never appearing in the members-first admin roster. Unlike
+    # require_completed_member (used by read endpoints), this does NOT exempt
+    # the viewer — viewers stay read-only.
+    if current_user.role is UserRole.MEMBER:
+        has_profile = (
+            db.query(Member.id).filter_by(user_id=current_user.id).first()
+            is not None
+        )
+        if not has_profile:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="profile_incomplete",
+            )
+    return current_user

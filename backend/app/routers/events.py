@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_admin, require_completed_member, require_member
+from app.core.deps import (
+    require_admin,
+    require_completed_member,
+    require_posting_member,
+)
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.core.security import verify_password
@@ -270,7 +274,7 @@ def get_event(
 def create_event(
     payload: EventCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_member),
+    current_user: User = Depends(require_posting_member),
 ) -> EventResponse:
     is_admin = current_user.role is UserRole.ADMIN
     obj = Event(
@@ -304,7 +308,7 @@ def update_event(
     event_id: int,
     payload: EventUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_member),
+    current_user: User = Depends(require_posting_member),
 ) -> EventResponse:
     obj = _get_or_404(db, event_id)
     is_admin = current_user.role is UserRole.ADMIN
@@ -336,7 +340,7 @@ def delete_event(
     event_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    current_user: User = Depends(require_member),
+    current_user: User = Depends(require_posting_member),
     payload: PasswordConfirmRequest | None = None,
 ) -> None:
     obj = _get_or_404(db, event_id)
