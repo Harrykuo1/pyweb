@@ -85,9 +85,11 @@ async function mountPage(
   items = sample,
   total = items.length,
   role = 'viewer',
+  preview = false,
 ) {
   const auth = useAuthStore()
   auth.user = { id: 1, username: 'a', role }
+  if (preview) auth.previewAsMember = true
   const listSpy = vi.spyOn(jobsApi, 'list').mockResolvedValue({ items, total })
   const wrapper = mount(Jobs)
   pendingTeardowns.push(wrapper)
@@ -156,6 +158,20 @@ describe('Jobs.vue — empty state', () => {
 })
 
 describe('Jobs.vue — URL-driven state on first paint', () => {
+  it('restricts to accepted posts when an admin previews as a member', async () => {
+    const { listSpy } = await mountPage(sample, sample.length, 'admin', true)
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'accepted' }),
+    )
+  })
+
+  it('does not restrict status for a real admin (not previewing)', async () => {
+    const { listSpy } = await mountPage(sample, sample.length, 'admin', false)
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ status: undefined }),
+    )
+  })
+
   it('reads sort/order from route.query and uses them for the first fetch', async () => {
     routeQuery.value = { sort: 'company', order: 'asc' }
     const { listSpy, wrapper } = await mountPage()

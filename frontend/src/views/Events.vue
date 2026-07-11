@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -202,6 +202,10 @@ async function loadItems() {
       year: year.value ?? undefined,
       tag: tag.value,
       q: q.value || undefined,
+      // Preview-as-member is client-only; the backend still serves this admin
+      // session pending/rejected events. Restrict to accepted so the preview
+      // shows only what a member would actually see.
+      status: auth.isPreviewingAsMember ? 'accepted' : undefined,
     })
   } catch {
     ElMessage.error('載入活動失敗')
@@ -309,6 +313,9 @@ function onSaved() {
 }
 
 onMounted(loadItems)
+
+// Re-fetch when preview-as-member toggles so the accepted-only filter applies.
+watch(() => auth.isPreviewingAsMember, reloadFresh)
 </script>
 
 <template>

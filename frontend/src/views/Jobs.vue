@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
 import { Briefcase, Delete, Plus, Refresh } from '@element-plus/icons-vue'
@@ -185,6 +185,11 @@ async function loadItems() {
       category: category.value,
       kind: kind.value || undefined,
       q: q.value || undefined,
+      // "Preview as member" is a client-only illusion, but the backend still
+      // serves this admin session the full set (incl. pending / rejected).
+      // Restrict to accepted so the preview matches what a member actually
+      // sees — only publishers and admins see under-review posts.
+      status: auth.isPreviewingAsMember ? 'accepted' : undefined,
     })
   } catch (err) {
     ElMessage.error('載入求職紀錄失敗')
@@ -208,6 +213,10 @@ function toggleSort(key) {
 }
 
 onMounted(loadItems)
+
+// Re-fetch when the admin toggles preview-as-member so the accepted-only
+// filter above takes effect immediately.
+watch(() => auth.isPreviewingAsMember, reloadFresh)
 </script>
 
 <template>

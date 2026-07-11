@@ -116,6 +116,21 @@ describe('Events — timeline', () => {
     expect(wrapper.findAll('[data-test="timeline-entry"]')).toHaveLength(2)
   })
 
+  it('restricts to accepted events when an admin previews as a member', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    auth.previewAsMember = true
+    const listSpy = vi
+      .spyOn(eventsApi, 'list')
+      .mockResolvedValue({ items: sample, total: sample.length })
+    const wrapper = mount(Events)
+    pendingTeardowns.push(wrapper)
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'accepted' }),
+    )
+  })
+
   it('groups entries by year with a marker per year', async () => {
     const wrapper = await mountPage()
     const labels = wrapper.findAll('[data-test="year-label"]')
