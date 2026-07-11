@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElIcon, ElImage } from 'element-plus'
 import { ArrowRight, Briefcase, Promotion } from '@element-plus/icons-vue'
@@ -8,6 +8,9 @@ import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
 
 // A compact preview of the timeline feed designed to live inside the
 // hero. Visually distinct (dark glass card on the hero gradient) and
@@ -26,9 +29,13 @@ const router = useRouter()
 const items = ref([])
 const loading = ref(true)
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
   try {
-    const data = await timelineApi.list({ limit: props.limit })
+    const data = await timelineApi.list({
+      limit: props.limit,
+      preview: auth.isPreviewingAsMember,
+    })
     items.value = data.items ?? []
   } catch {
     // Hero degrades gracefully — empty state copy covers both empty DB
@@ -38,7 +45,11 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
+// Reload when the admin toggles preview-as-member.
+watch(() => auth.isPreviewingAsMember, load)
 
 function handleRowClick(item) {
   if (item.type === 'member_joined') {

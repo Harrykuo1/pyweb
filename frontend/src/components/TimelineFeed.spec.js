@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 import TimelineFeed from './TimelineFeed.vue'
 import { timelineApi } from '../api/timeline'
+import { useAuthStore } from '../stores/auth'
 
 const pushMock = vi.fn()
 
@@ -48,6 +50,7 @@ function fireIntersect(isIntersecting = true) {
 }
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   pushMock.mockClear()
   observerInstances = []
   vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
@@ -277,7 +280,17 @@ describe('TimelineFeed.vue', () => {
       .mockResolvedValue({ items: [], has_more: false })
     mount(TimelineFeed, { props: { pageSize: 5 } })
     await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith({ limit: 5 })
+    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ limit: 5 }))
+  })
+
+  it('requests the member view when an admin previews as a member', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    auth.previewAsMember = true
+    const { listSpy } = await mountFeed([])
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ preview: true }),
+    )
   })
 })
 
@@ -359,11 +372,14 @@ describe('TimelineFeed.vue — lazy load (cursor pagination)', () => {
     fireIntersect(true)
     await flushPromises()
 
-    expect(listSpy).toHaveBeenNthCalledWith(1, { limit: 1 })
-    expect(listSpy).toHaveBeenNthCalledWith(2, {
-      limit: 1,
-      before: ONE_HOUR_AGO,
-    })
+    expect(listSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({ limit: 1 }))
+    expect(listSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        limit: 1,
+        before: ONE_HOUR_AGO,
+      }),
+    )
     // Both rows now in the DOM; sentinel is gone (has_more=false).
     expect(
       wrapper.findAll('[data-test="timeline-row-member_joined"]').length,

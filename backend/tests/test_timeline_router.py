@@ -381,3 +381,71 @@ def test_list_timeline_before_with_no_older_rows_returns_empty(
     # Cursor older than the only row → empty + has_more=False.
     body = client.get("/api/timeline?before=2025-01-01T00:00:00%2B00:00").json()
     assert body == {"items": [], "has_more": False}
+
+
+def test_admin_preview_renders_the_member_view(client_factory, db_session):
+    # Active + suspended member, and accepted / pending / anonymous jobs.
+    _add_member(
+        db_session, real_name="活躍成員", joined_at=datetime(2025, 6, 1, tzinfo=UTC)
+    )
+    sus_user = User(role=UserRole.MEMBER, is_active=False)
+    db_session.add(sus_user)
+    db_session.flush()
+    db_session.add(
+        Member(
+            graduation_year=2025,
+            real_name="停權成員",
+            institution="X",
+            joined_at=datetime(2025, 6, 2, tzinfo=UTC),
+            user_id=sus_user.id,
+        )
+    )
+    _add_job(
+        db_session, company="Accepted", created_at=datetime(2025, 6, 3, tzinfo=UTC)
+    )
+    db_session.add(
+        Job(
+            job_year=2025,
+            job_month=6,
+            company="Pending",
+            kind=JobKind.INTERNSHIP,
+            experience_md="x",
+            status=PostStatus.PENDING,
+            created_at=datetime(2025, 6, 4, tzinfo=UTC),
+        )
+    )
+    db_session.add(
+        Job(
+            job_year=2025,
+            job_month=6,
+            company="Anon",
+            kind=JobKind.INTERNSHIP,
+            experience_md="x",
+            is_anonymous=True,
+            real_name="秘密",
+            status=PostStatus.ACCEPTED,
+            created_at=datetime(2025, 6, 5, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    client, login_as = client_factory
+    login_as("admin")
+
+    # Real admin view: everything is visible, including the anon real name.
+    items = client.get("/api/timeline").json()["items"]
+    companies = [i["company"] for i in items if i["type"] == "job_created"]
+    names = [i["real_name"] for i in items if i["type"] == "member_joined"]
+    assert "Pending" in companies
+    assert "停權成員" in names
+    anon = next(i for i in items if i.get("company") == "Anon")
+    assert anon["real_name"] == "秘密"
+
+    # Preview-as-member: pending gone, suspended member gone, anon masked.
+    p = client.get("/api/timeline", params={"preview": "true"}).json()["items"]
+    companies_p = [i["company"] for i in p if i["type"] == "job_created"]
+    names_p = [i["real_name"] for i in p if i["type"] == "member_joined"]
+    assert "Pending" not in companies_p
+    assert "停權成員" not in names_p
+    anon_p = next(i for i in p if i.get("company") == "Anon")
+    assert anon_p["real_name"] is None
