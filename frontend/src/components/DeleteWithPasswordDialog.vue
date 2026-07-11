@@ -17,6 +17,10 @@ const props = defineProps({
   warning: { type: String, default: '此操作無法復原。' },
   loading: { type: Boolean, default: false },
   errorMessage: { type: String, default: '' },
+  // Admins re-authenticate with their password before a destructive delete.
+  // Post authors deleting their own content don't — the dialog then acts as
+  // a plain confirmation and emits `confirm` with no password.
+  requirePassword: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
@@ -40,8 +44,13 @@ function close() {
 }
 
 function submit() {
-  if (!password.value || props.loading) return
-  emit('confirm', password.value)
+  if (props.loading) return
+  if (props.requirePassword) {
+    if (!password.value) return
+    emit('confirm', password.value)
+  } else {
+    emit('confirm', undefined)
+  }
 }
 </script>
 
@@ -68,7 +77,7 @@ function submit() {
     </div>
 
     <el-form label-position="top" @submit.prevent="submit">
-      <el-form-item label="管理員密碼">
+      <el-form-item v-if="requirePassword" label="管理員密碼">
         <el-input
           ref="inputRef"
           v-model="password"
@@ -91,7 +100,7 @@ function submit() {
       <el-button
         type="danger"
         :loading="loading"
-        :disabled="!password"
+        :disabled="requirePassword && !password"
         data-test="delete-confirm"
         @click="submit"
       >

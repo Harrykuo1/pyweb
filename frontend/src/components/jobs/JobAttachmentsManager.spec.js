@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { jobAttachmentsApi } from '../../api/jobAttachments'
 import { settingsApi } from '../../api/settings'
+import { useAuthStore } from '../../stores/auth'
 import JobAttachmentsManager from './JobAttachmentsManager.vue'
 import AttachmentConflictDialog from './AttachmentConflictDialog.vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
@@ -27,6 +29,7 @@ const SAMPLE_LIST = [
 ]
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   vi.spyOn(settingsApi, 'getConfig').mockResolvedValue(SAMPLE_CONFIG)
   vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue([...SAMPLE_LIST])
 })
@@ -36,6 +39,23 @@ afterEach(() => {
 })
 
 describe('JobAttachmentsManager.vue', () => {
+  it('requires a password for admins but not for the post author', async () => {
+    // Default store has no user -> a non-admin author manages their own job.
+    const author = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+    await flushPromises()
+    expect(
+      author.findComponent(DeleteWithPasswordDialog).props('requirePassword'),
+    ).toBe(false)
+
+    setActivePinia(createPinia())
+    useAuthStore().user = { id: 1, role: 'admin' }
+    const admin = mount(JobAttachmentsManager, { props: { jobId: 7 } })
+    await flushPromises()
+    expect(
+      admin.findComponent(DeleteWithPasswordDialog).props('requirePassword'),
+    ).toBe(true)
+  })
+
   it('renders existing attachments and the configured count cap', async () => {
     const wrapper = mount(JobAttachmentsManager, { props: { jobId: 7 } })
     await flushPromises()

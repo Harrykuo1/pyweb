@@ -29,8 +29,9 @@ class BulkDeleteRequest(BaseModel):
     # Re-auth the admin in front of the bulk delete, same as the
     # single-attachment DELETE endpoint. Without this, a forgotten
     # unlocked session could fan out a deletion across an entire job
-    # in one request.
-    password: str = Field(min_length=1, max_length=255)
+    # in one request. Optional: post authors deleting their own
+    # attachments don't re-auth; the router requires it only for admins.
+    password: str | None = Field(default=None, max_length=255)
 
 
 class BulkDeleteResponse(BaseModel):

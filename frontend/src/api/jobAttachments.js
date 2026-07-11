@@ -57,15 +57,16 @@ export const jobAttachmentsApi = {
   },
   async remove(jobId, attachmentId, password) {
     // axios needs `data:` (not the second positional arg) to send a body
-    // on DELETE — matches the pattern in members.js.
-    await client.delete(`/jobs/${jobId}/attachments/${attachmentId}`, {
-      data: { password },
-    })
+    // on DELETE — matches the pattern in members.js. Admins send their
+    // password; the post author omits the body so the backend takes the
+    // owner (no-password) path.
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/jobs/${jobId}/attachments/${attachmentId}`, config)
   },
   async bulkRemove(jobId, ids, password) {
     const { data } = await client.post(
       `/jobs/${jobId}/attachments/bulk-delete`,
-      { ids, password },
+      password ? { ids, password } : { ids },
     )
     return data
   },

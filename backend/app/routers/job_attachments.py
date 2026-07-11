@@ -28,11 +28,15 @@ from app.core.attachments import (
     sanitize_relpath,
 )
 from app.core.config import settings
-from app.core.deps import require_admin, require_completed_member
+from app.core.deps import (
+    require_admin,
+    require_completed_member,
+    require_posting_member,
+)
 from app.core.runtime_config import get_int
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Job, JobAttachment, User
+from app.models import Job, JobAttachment, Member, User, UserRole
 from app.schemas import (
     BulkDeleteRequest,
     BulkDeleteResponse,
@@ -110,6 +114,18 @@ def _get_job_or_404(db: Session, job_id: int) -> Job:
     return job
 
 
+def _require_job_editor(db: Session, job: Job, user: User) -> None:
+    # Same ownership rule as jobs.py update/delete: an admin, or the job's
+    # own subject member (the author), may manage the post's attachments.
+    if user.role is UserRole.ADMIN:
+        return
+    member_id = db.query(Member.id).filter_by(user_id=user.id).scalar()
+    if job.subject_member_id is None or job.subject_member_id != member_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not your post"
+        )
+
+
 @router.post(
     "/{job_id}/attachments",
     response_model=JobAttachmentResponse,
@@ -122,9 +138,10 @@ async def upload_attachment(
     relative_path: Annotated[str | None, Form()] = None,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
 ) -> JobAttachmentResponse:
-    _get_job_or_404(db, job_id)
+    job = _get_job_or_404(db, job_id)
+    _require_job_editor(db, job, current_user)
 
     # Folder uploads send the in-folder relpath as a separate form
     # field — file.filename only has the basename, which would lose
@@ -451,7 +468,7 @@ def bulk_delete_attachments(
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
 ) -> BulkDeleteResponse:
     """Delete every attachment whose id appears in the body. Scoped
     to a single job so a malicious or buggy client can't spray
@@ -461,7 +478,15 @@ def bulk_delete_attachments(
     Used both by the multi-select bulk action and by "delete this
     whole folder" — the frontend expands the folder into its
     descendant file IDs before sending."""
-    _require_admin_password(payload.password, admin)
+    job = _get_job_or_404(db, job_id)
+    _require_job_editor(db, job, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if not payload.password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Password is required",
+            )
+        _require_admin_password(payload.password, current_user)
     rows = (
         db.query(JobAttachment)
         .filter(
@@ -502,12 +527,20 @@ def bulk_delete_attachments(
 def delete_attachment(
     job_id: int,
     attachment_id: int,
-    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> Response:
-    _require_admin_password(payload.password, admin)
+    job = _get_job_or_404(db, job_id)
+    _require_job_editor(db, job, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Password is required",
+            )
+        _require_admin_password(payload.password, current_user)
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     job_dir = job_uploads_dir(uploads_root, job_id)

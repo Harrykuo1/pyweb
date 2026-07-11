@@ -112,6 +112,21 @@ describe('DeleteWithPasswordDialog', () => {
     expect(w.emitted('update:modelValue').at(-1)).toEqual([false])
   })
 
+  it('hides the password field and confirms without a password when requirePassword=false', async () => {
+    const w = open({ requirePassword: false })
+    await flushPromises()
+
+    // No password input for post authors deleting their own content.
+    expect(document.querySelector('[data-test="delete-password-input"]')).toBeNull()
+
+    confirmButton(w)?.click()
+    await flushPromises()
+
+    expect(w.emitted('confirm')).toBeTruthy()
+    // Emits with no password payload.
+    expect(w.emitted('confirm')[0]).toEqual([undefined])
+  })
+
   it('clears the password field when reopened', async () => {
     const w = open()
     await flushPromises()
