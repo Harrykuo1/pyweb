@@ -69,6 +69,47 @@ describe('JobDetailDialog — header', () => {
     expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
   })
 
+  it('masks an anonymous post by default and reveals the real name on click', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, is_anonymous: true, display_name: 'Alice' },
+    })
+    // Masked by default even for admin: shows 匿名 and an "anonymous" badge,
+    // not the real name.
+    expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-anon-badge"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
+
+    // Admin has a reveal control; clicking it shows the real name.
+    await wrapper.find('[data-test="anon-reveal"]').trigger('click')
+    expect(wrapper.find('[data-test="detail-real-name"]').text()).toContain(
+      'Alice',
+    )
+  })
+
+  it('re-masks the name each time the dialog reopens', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, is_anonymous: true, display_name: 'Alice' },
+    })
+    await wrapper.find('[data-test="anon-reveal"]').trigger('click')
+    expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(true)
+
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    // Reopening resets to masked so an anonymous name never lingers revealed.
+    expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
+  })
+
+  it('does not offer a reveal control to non-admins on anonymous posts', async () => {
+    const wrapper = await mountDialog(
+      { job: { ...sample, is_anonymous: true, display_name: null } },
+      'member',
+    )
+    expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="anon-reveal"]').exists()).toBe(false)
+  })
+
   it('shows a status pill for non-accepted posts and the rejection reason', async () => {
     const accepted = await mountDialog()
     expect(accepted.find('[data-test="detail-status-pending"]').exists()).toBe(

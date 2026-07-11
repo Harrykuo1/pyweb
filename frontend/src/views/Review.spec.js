@@ -59,6 +59,19 @@ describe('Review.vue', () => {
     expect(wrapper.find('[data-test="pending-count"]').text()).toContain('2')
   })
 
+  it('masks an anonymous job as 匿名 in the queue', async () => {
+    const wrapper = await mountReview([
+      { ...JOBS[0], is_anonymous: true, display_name: 'Ada' },
+    ])
+    // The real name must not show in the (streamable) review queue.
+    expect(wrapper.find('[data-test="pending-job-row"]').text()).not.toContain(
+      'Ada',
+    )
+    expect(wrapper.find('[data-test="pending-job-row"]').text()).toContain(
+      '匿名',
+    )
+  })
+
   it('shows the empty state when nothing is pending', async () => {
     const wrapper = await mountReview([], [])
     expect(wrapper.find('[data-test="review-empty"]').exists()).toBe(true)

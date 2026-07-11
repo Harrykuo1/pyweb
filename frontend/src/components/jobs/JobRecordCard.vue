@@ -57,8 +57,15 @@ function onLeave() {
   chip.style.removeProperty('--marquee-duration')
 }
 
+// Anonymous posts show 匿名 to everyone here — the backend still sends
+// admins the real name, but the list must never render it (it could leak
+// while presenting/streaming); the real name is revealable in the detail.
+function isMasked(item) {
+  return item.is_anonymous || !item.display_name
+}
+
 function displayNameOrAnonymous(item) {
-  return item.display_name || '匿名'
+  return isMasked(item) ? '匿名' : item.display_name
 }
 
 function formatJobYearMonth(item) {
@@ -130,8 +137,8 @@ function formatDate(iso) {
     </h3>
 
     <p
-      :class="['card-name', { 'is-anonymous': !job.display_name }]"
-      :data-test="job.display_name ? 'real-name' : 'anonymous'"
+      :class="['card-name', { 'is-anonymous': isMasked(job) }]"
+      :data-test="isMasked(job) ? 'anonymous' : 'real-name'"
     >
       <el-icon :size="12"><User /></el-icon>
       {{ displayNameOrAnonymous(job) }}

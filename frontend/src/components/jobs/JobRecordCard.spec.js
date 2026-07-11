@@ -37,6 +37,19 @@ describe('JobRecordCard', () => {
     expect(wrapper.find('[data-test="real-name"]').exists()).toBe(false)
   })
 
+  it('masks an anonymous post as 匿名 even when a real name is present (admin view)', () => {
+    // The backend still sends admins the real name, but the list must not
+    // show it — it could leak on screen while presenting.
+    const wrapper = mountCard({
+      ...baseJob,
+      is_anonymous: true,
+      display_name: 'Alice',
+    })
+    expect(wrapper.find('[data-test="anonymous"]').text()).toContain('匿名')
+    expect(wrapper.text()).not.toContain('Alice')
+    expect(wrapper.find('[data-test="real-name"]').exists()).toBe(false)
+  })
+
   it('shows a status pill only for non-accepted posts', () => {
     expect(mountCard().find('[data-test="status-pending"]').exists()).toBe(false)
     expect(

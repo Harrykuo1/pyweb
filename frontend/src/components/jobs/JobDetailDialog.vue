@@ -44,6 +44,23 @@ const STATUS_META = {
 
 const tab = ref('experience')
 
+// Anonymous posts stay masked as 匿名 by default — even for an admin, whom
+// the backend does send the real name — so it can't leak while presenting.
+// The admin can reveal it per-open with an explicit click; it re-masks on
+// close so a revealed name never lingers.
+const revealName = ref(false)
+const canRevealAnon = computed(
+  () => !!(props.job?.is_anonymous && props.job?.display_name),
+)
+const showRealName = computed(
+  () =>
+    !!props.job?.display_name &&
+    (!props.job?.is_anonymous || revealName.value),
+)
+const shownName = computed(() =>
+  showRealName.value ? props.job.display_name : '匿名',
+)
+
 // Bumped on every dialog open so the attachments viewer's :key
 // changes, forcing a fresh GET. Without this the lazy-rendered tab
 // pane caches its first list and the user has to F5 after uploading
@@ -78,6 +95,7 @@ watch(
     if (open) {
       tab.value = 'experience'
       openCounter.value += 1
+      revealName.value = false
     }
   },
 )
@@ -150,14 +168,28 @@ function formatJobYearMonth(j) {
         <div class="detail-meta">
           <span
             class="meta-name"
-            :class="{ 'is-anonymous': !job.display_name }"
-            :data-test="
-              job.display_name ? 'detail-real-name' : 'detail-anonymous'
-            "
+            :class="{ 'is-anonymous': !showRealName }"
+            :data-test="showRealName ? 'detail-real-name' : 'detail-anonymous'"
           >
             <el-icon :size="13"><User /></el-icon>
-            {{ job.display_name || '匿名' }}
+            {{ shownName }}
           </span>
+          <span
+            v-if="job.is_anonymous"
+            class="anon-badge"
+            data-test="detail-anon-badge"
+          >
+            🔒 對外匿名
+          </span>
+          <button
+            v-if="canRevealAnon"
+            type="button"
+            class="anon-reveal"
+            data-test="anon-reveal"
+            @click="revealName = !revealName"
+          >
+            {{ revealName ? '隱藏本名' : '顯示本名' }}
+          </button>
           <span class="meta-year">
             <el-icon :size="13"><School /></el-icon>
             {{ formatJobYearMonth(job) }} 求職
@@ -386,6 +418,33 @@ function formatJobYearMonth(j) {
 .meta-name.is-anonymous {
   font-style: italic;
   color: var(--ink-400, #94a3b8);
+}
+
+.anon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--ink-500);
+}
+
+.anon-reveal {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--brand-primary);
+  text-decoration: underline;
+}
+
+.anon-reveal:hover {
+  opacity: 0.8;
 }
 
 .meta-year {

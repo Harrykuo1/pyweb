@@ -91,9 +91,9 @@ function excerpt(md, max = 90) {
               </div>
               <h3 class="review-card__title">{{ j.company }}</h3>
               <div class="review-card__meta">
-                <span :class="{ 'is-anon': !j.display_name }">
+                <span :class="{ 'is-anon': j.is_anonymous || !j.display_name }">
                   <el-icon :size="12"><User /></el-icon>
-                  {{ j.display_name || '匿名' }}
+                  {{ j.is_anonymous ? '匿名' : j.display_name || '匿名' }}
                 </span>
                 <span>
                   <el-icon :size="12"><School /></el-icon>
