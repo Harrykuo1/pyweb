@@ -129,11 +129,11 @@ function makeRoster() {
   }
 }
 
-// The role select is remounted (via a bumped :key) whenever a change is
-// cancelled or rejected, so it re-reads the row's real role. A fresh component
-// instance after the interaction is the observable signal of that remount.
-function roleSelectVm(wrapper, id) {
-  return wrapper.findComponent(`[data-test="roster-role-${id}"]`).vm
+// The role tag renders straight from row.role inside an el-dropdown trigger,
+// so tests drive role changes by emitting the dropdown's `command` event and
+// assert the rendered tag text (no remount machinery to observe anymore).
+function roleTrigger(wrapper, id) {
+  return wrapper.findComponent(`[data-test="roster-role-trigger-${id}"]`)
 }
 
 // el-table defers its body rows to a post-mount tick, so wait for both the
@@ -226,14 +226,12 @@ describe('MemberRoster.vue', () => {
   it('renders status-driven actions per account_status', async () => {
     const wrapper = await mountRoster()
 
-    // claimed member (10): role select + suspend + edit
-    expect(wrapper.find('[data-test="roster-role-10"]').exists()).toBe(true)
+    // claimed member (10): suspend + edit
     expect(wrapper.find('[data-test="roster-suspend-10"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="roster-edit-10"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="roster-delete-10"]').exists()).toBe(false)
 
-    // pending (11): edit + delete, no role select
-    expect(wrapper.find('[data-test="roster-role-11"]').exists()).toBe(false)
+    // pending (11): edit + delete
     expect(wrapper.find('[data-test="roster-edit-11"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="roster-delete-11"]').exists()).toBe(true)
 
@@ -249,9 +247,40 @@ describe('MemberRoster.vue', () => {
     expect(wrapper.find('[data-test="roster-delete-13"]').exists()).toBe(true)
   })
 
+  it('shows a role dropdown trigger only on claimed rows', async () => {
+    const wrapper = await mountRoster()
+
+    // claimed (10, 14): the role tag doubles as a dropdown trigger
+    expect(wrapper.find('[data-test="roster-role-trigger-10"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="roster-role-trigger-14"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="roster-role-trigger-10"]').text()).toContain(
+      '成員',
+    )
+    expect(wrapper.find('[data-test="roster-role-trigger-14"]').text()).toContain(
+      '管理員',
+    )
+
+    // pending / suspended / legacy: static tag only, no trigger
+    expect(wrapper.find('[data-test="roster-role-trigger-11"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('[data-test="roster-role-trigger-12"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('[data-test="roster-role-trigger-13"]').exists()).toBe(
+      false,
+    )
+  })
+
   it('hides 停權 for a claimed member whose role is already admin', async () => {
     const wrapper = await mountRoster()
-    expect(wrapper.find('[data-test="roster-role-14"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="roster-role-trigger-14"]').exists()).toBe(
+      true,
+    )
     expect(wrapper.find('[data-test="roster-suspend-14"]').exists()).toBe(false)
   })
 
@@ -289,10 +318,9 @@ describe('MemberRoster.vue', () => {
     )
   })
 
-  it('promoting to admin confirms then calls changeRole(member, admin)', async () => {
+  it('promoting to admin via the dropdown confirms then calls changeRole(member, admin)', async () => {
     const wrapper = await mountRoster()
-    const select = wrapper.findComponent('[data-test="roster-role-10"]')
-    await select.vm.$emit('change', 'admin')
+    await roleTrigger(wrapper, 10).vm.$emit('command', 'admin')
     await flushPromises()
 
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1)
@@ -302,25 +330,22 @@ describe('MemberRoster.vue', () => {
     )
   })
 
-  it('does not promote when the confirm is cancelled, and resets the select', async () => {
+  it('does not promote when the confirm is cancelled, and keeps the original tag', async () => {
     ElMessageBox.confirm.mockRejectedValue('cancel')
     const wrapper = await mountRoster()
-    const before = roleSelectVm(wrapper, 10)
-    const select = wrapper.findComponent('[data-test="roster-role-10"]')
-    await select.vm.$emit('change', 'admin')
+    await roleTrigger(wrapper, 10).vm.$emit('command', 'admin')
     await flushPromises()
     await nextTick()
 
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1)
     expect(roster.changeRole).not.toHaveBeenCalled()
-    // Select was remounted, snapping its display back to the row's real role.
-    expect(roleSelectVm(wrapper, 10)).not.toBe(before)
+    // The tag renders straight from row.role, which was never touched.
+    expect(roleTrigger(wrapper, 10).text()).toContain('成員')
   })
 
-  it('demoting to member calls changeRole without a confirm', async () => {
+  it('demoting to member calls changeRole directly without a confirm', async () => {
     const wrapper = await mountRoster()
-    const select = wrapper.findComponent('[data-test="roster-role-14"]')
-    await select.vm.$emit('change', 'member')
+    await roleTrigger(wrapper, 14).vm.$emit('command', 'member')
     await flushPromises()
 
     expect(ElMessageBox.confirm).not.toHaveBeenCalled()
@@ -330,14 +355,22 @@ describe('MemberRoster.vue', () => {
     )
   })
 
-  it('resets the select when the backend rejects a role change', async () => {
-    // A demote (admin -> member) that the backend rejects: no confirm, but the
-    // select must snap back to the row's real role instead of showing 成員.
+  it('selecting the current role is a no-op', async () => {
+    const wrapper = await mountRoster()
+    await roleTrigger(wrapper, 10).vm.$emit('command', 'member')
+    await flushPromises()
+
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(roster.changeRole).not.toHaveBeenCalled()
+  })
+
+  it('keeps showing the real role tag when the backend rejects a role change', async () => {
+    // A demote (admin -> member) the backend rejects: no confirm, changeRole
+    // resolves false and never patches the row, so the tag must still read
+    // from the unchanged row.role.
     roster.changeRole.mockResolvedValue(false)
     const wrapper = await mountRoster()
-    const before = roleSelectVm(wrapper, 14)
-    const select = wrapper.findComponent('[data-test="roster-role-14"]')
-    await select.vm.$emit('change', 'member')
+    await roleTrigger(wrapper, 14).vm.$emit('command', 'member')
     await flushPromises()
     await nextTick()
 
@@ -345,9 +378,7 @@ describe('MemberRoster.vue', () => {
       expect.objectContaining({ id: 14 }),
       'member',
     )
-    // Row role is unchanged (the composable never patched it) and the select
-    // was remounted to re-read it.
-    expect(roleSelectVm(wrapper, 14)).not.toBe(before)
+    expect(roleTrigger(wrapper, 14).text()).toContain('管理員')
   })
 
   it('新增成員 opens the member form dialog with a null member', async () => {

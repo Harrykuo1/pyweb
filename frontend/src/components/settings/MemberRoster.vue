@@ -1,16 +1,18 @@
 <script setup>
 import {
   ElButton,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElEmpty,
+  ElIcon,
   ElMessageBox,
-  ElOption,
-  ElSelect,
   ElSkeleton,
   ElTable,
   ElTableColumn,
   ElTag,
 } from 'element-plus'
-import { Link, Plus } from '@element-plus/icons-vue'
+import { ArrowDown, Link, Plus } from '@element-plus/icons-vue'
 import { ref } from 'vue'
 
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
@@ -79,15 +81,12 @@ function openEdit(member) {
   formOpen.value = true
 }
 
-// ---- change role: confirm-on-promote + remount-on-cancel ----
-// selectResetKey is bumped on a cancelled promote to force the select to
-// remount and snap its displayed value back to the row's unchanged role
-// (it binds :model-value one-way, so a remount re-reads row.role).
-const selectResetKey = ref(0)
-
-async function onRoleChange(member, value) {
-  if (value === member.role) return
-  if (value === 'admin') {
+// ---- change role from the role-tag dropdown: confirm-on-promote ----
+// The tag always renders from row.role, which changeRole only patches on
+// success — so a cancelled confirm or a rejected change needs no reset.
+async function onRoleCommand(member, role) {
+  if (role === member.role) return
+  if (role === 'admin') {
     try {
       await ElMessageBox.confirm(
         `確定要將「${displayName(member)}」設為管理員嗎？管理員擁有完整權限。`,
@@ -99,14 +98,10 @@ async function onRoleChange(member, value) {
         },
       )
     } catch {
-      selectResetKey.value += 1
       return
     }
   }
-  // If the backend rejects the change (e.g. demoting the last admin), snap the
-  // select back to the row's real role via the same remount used for cancel.
-  const ok = await changeRole(member, value)
-  if (!ok) selectResetKey.value += 1
+  changeRole(member, role)
 }
 
 // ---- suspend: confirm before it fires (logs the account out immediately) ----
@@ -219,10 +214,50 @@ const {
         </template>
       </el-table-column>
 
-      <el-table-column label="角色" width="100" align="center">
+      <el-table-column label="角色" width="110" align="center">
         <template #default="{ row }">
+          <!-- claimed: the tag itself is the role switcher -->
+          <el-dropdown
+            v-if="row.account_status === 'claimed' && row.role"
+            trigger="click"
+            :disabled="savingId === row.account_id"
+            :data-test="`roster-role-trigger-${row.id}`"
+            @command="(role) => onRoleCommand(row, role)"
+          >
+            <span class="roster-role-trigger" role="button" tabindex="0">
+              <el-tag
+                :type="tagFor(row.role).type"
+                size="small"
+                effect="light"
+                round
+              >
+                {{ tagFor(row.role).label }}
+              </el-tag>
+              <el-icon class="roster-role-trigger__caret">
+                <ArrowDown />
+              </el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  command="admin"
+                  :disabled="row.role === 'admin'"
+                  :data-test="`roster-role-admin-${row.id}`"
+                >
+                  管理員
+                </el-dropdown-item>
+                <el-dropdown-item
+                  command="member"
+                  :disabled="row.role === 'member'"
+                  :data-test="`roster-role-member-${row.id}`"
+                >
+                  成員
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-tag
-            v-if="row.role"
+            v-else-if="row.role"
             :type="tagFor(row.role).type"
             size="small"
             effect="light"
@@ -245,23 +280,11 @@ const {
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" min-width="230">
+      <el-table-column label="操作" min-width="150">
         <template #default="{ row }">
           <div class="roster-row-actions">
-            <!-- claimed: role select + suspend (non-admin only) -->
+            <!-- claimed: suspend (non-admin only) -->
             <template v-if="row.account_status === 'claimed'">
-              <el-select
-                :key="selectResetKey"
-                :model-value="row.role"
-                size="small"
-                class="roster-role-select"
-                :disabled="savingId === row.account_id"
-                :data-test="`roster-role-${row.id}`"
-                @change="(value) => onRoleChange(row, value)"
-              >
-                <el-option label="管理員" value="admin" />
-                <el-option label="成員" value="member" />
-              </el-select>
               <el-button
                 v-if="row.role !== 'admin'"
                 size="small"
@@ -489,20 +512,36 @@ const {
   color: var(--ink-500);
 }
 
+/* ---------- Role-tag dropdown trigger ---------- */
+.roster-role-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  outline: none;
+}
+
+.roster-role-trigger__caret {
+  font-size: 12px;
+  color: var(--ink-500);
+  transition: color var(--dur) var(--ease);
+}
+
+.roster-role-trigger:hover .roster-role-trigger__caret {
+  color: var(--brand-primary);
+}
+
 /* ---------- Row actions ---------- */
 .roster-row-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .roster-row-actions :deep(.el-button + .el-button) {
   margin-left: 0;
-}
-
-.roster-role-select {
-  width: 110px;
 }
 
 @media (max-width: 640px) {
