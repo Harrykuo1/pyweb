@@ -58,6 +58,20 @@ describe('Login.vue', () => {
     expect(wrapper.find('[data-test="login-pending-hint"]').exists()).toBe(false)
   })
 
+  it('shows the suspension message when password login returns 403 Account suspended', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'login').mockRejectedValue(
+      Object.assign(new Error('403'), {
+        response: { status: 403, data: { detail: 'Account suspended' } },
+      }),
+    )
+
+    const wrapper = mount(Login)
+    await submitWithPassword(wrapper, 'pw')
+
+    expect(wrapper.find('[data-test="error"]').text()).toContain('停權')
+  })
+
   it('successful login pushes to / by default', async () => {
     const auth = useAuthStore()
     const loginSpy = vi.spyOn(auth, 'login').mockResolvedValue()

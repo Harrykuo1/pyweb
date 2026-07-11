@@ -77,6 +77,12 @@ export function createAuthGuard() {
     }
 
     if (to.meta.requiresAuth && !auth.isAuthenticated) {
+      // A suspended session (the /auth/me check above 401'd with that reason)
+      // gets sent to /login with the reason so it can be explained, not the
+      // generic "log in again" redirect.
+      if (auth.suspended) {
+        return { path: '/login', query: { error: 'account_suspended' } }
+      }
       return { path: '/login', query: { redirect: to.fullPath } }
     }
 

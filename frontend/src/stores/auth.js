@@ -13,6 +13,11 @@ export const useAuthStore = defineStore('auth', () => {
   // non-admin role; the legacy viewer role is retired in a later phase.
   const previewAsMember = ref(false)
 
+  // Set when the last session check failed because the account is suspended,
+  // so the guard can send the user to /login with a reason instead of the
+  // generic "please log in" redirect.
+  const suspended = ref(false)
+
   const isAuthenticated = computed(() => user.value !== null)
   const actualRole = computed(() => user.value?.role ?? null)
   const isActuallyAdmin = computed(() => actualRole.value === 'admin')
@@ -35,12 +40,14 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(password) {
     user.value = await authApi.login(password)
     previewAsMember.value = false
+    suspended.value = false
   }
 
   async function logout() {
     await authApi.logout()
     user.value = null
     previewAsMember.value = false
+    suspended.value = false
   }
 
   // Reset client-side auth state without touching the server. Used by the
@@ -49,6 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearLocal() {
     user.value = null
     previewAsMember.value = false
+    suspended.value = false
   }
 
   // Used by router guard on first navigation to restore session from cookie.
@@ -56,9 +64,12 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchMe() {
     try {
       user.value = await authApi.getMe()
+      suspended.value = false
     } catch (err) {
       if (err?.response?.status === 401) {
         user.value = null
+        suspended.value =
+          err.response?.data?.detail === 'Account suspended'
         return
       }
       throw err
@@ -87,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user,
     previewAsMember,
+    suspended,
     isAuthenticated,
     isAdmin,
     isActuallyAdmin,

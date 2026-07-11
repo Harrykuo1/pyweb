@@ -66,8 +66,14 @@ async function handleSubmit() {
       typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.push(redirect)
   } catch (err) {
-    if (err?.response?.status === 401) {
+    const status = err?.response?.status
+    if (status === 401) {
       errorMessage.value = '密碼錯誤'
+    } else if (
+      status === 403 &&
+      err?.response?.data?.detail === 'Account suspended'
+    ) {
+      errorMessage.value = OAUTH_ERRORS.account_suspended
     } else {
       errorMessage.value = '登入失敗，請稍後再試'
     }

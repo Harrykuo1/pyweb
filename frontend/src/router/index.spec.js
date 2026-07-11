@@ -43,6 +43,21 @@ describe('auth guard', () => {
     })
   })
 
+  it('redirects a suspended user to /login with the suspension reason', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'fetchMe').mockImplementation(async () => {
+      auth.suspended = true
+    })
+
+    const guard = createAuthGuard()
+    const result = await guard(membersRoute)
+
+    expect(result).toEqual({
+      path: '/login',
+      query: { error: 'account_suspended' },
+    })
+  })
+
   it('allows authenticated users to access protected routes', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }

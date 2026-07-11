@@ -115,6 +115,28 @@ describe('useAuthStore', () => {
     expect(store.user).toBeNull()
   })
 
+  it('fetchMe() flags suspension on a 401 with an Account suspended detail', async () => {
+    vi.spyOn(authApi, 'getMe').mockRejectedValue(
+      Object.assign(new Error('401'), {
+        response: { status: 401, data: { detail: 'Account suspended' } },
+      }),
+    )
+
+    const store = useAuthStore()
+    await store.fetchMe()
+    expect(store.user).toBeNull()
+    expect(store.suspended).toBe(true)
+  })
+
+  it('fetchMe() clears the suspension flag on a valid session', async () => {
+    const store = useAuthStore()
+    store.suspended = true
+    vi.spyOn(authApi, 'getMe').mockResolvedValue({ id: 1, role: 'admin' })
+
+    await store.fetchMe()
+    expect(store.suspended).toBe(false)
+  })
+
   it('fetchMe() rethrows non-401 errors', async () => {
     vi.spyOn(authApi, 'getMe').mockRejectedValue(
       Object.assign(new Error('500'), { response: { status: 500 } }),
