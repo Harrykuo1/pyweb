@@ -146,14 +146,25 @@ function select(key) {
   .settings-sidebar {
     position: static;
     flex-direction: row;
-    overflow-x: auto;
     gap: 6px;
     padding: 6px;
   }
 
+  /* Equal-width tabs that fill the row — every group stays visible (no
+     horizontal-scroll strip) so the active indicator is always in view. */
   .settings-sidebar__item {
-    flex: 0 0 auto;
-    padding: 8px 10px;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 10px 8px;
+  }
+
+  .settings-sidebar__label {
+    white-space: nowrap;
+    font-size: 13px;
   }
 
   .settings-sidebar__hint {

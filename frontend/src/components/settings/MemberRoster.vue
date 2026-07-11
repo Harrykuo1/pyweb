@@ -1,23 +1,19 @@
 <script setup>
 import {
   ElButton,
-  ElDropdown,
-  ElDropdownItem,
-  ElDropdownMenu,
   ElEmpty,
-  ElIcon,
   ElMessageBox,
   ElSkeleton,
   ElTable,
   ElTableColumn,
-  ElTag,
 } from 'element-plus'
-import { ArrowDown, Link, Plus } from '@element-plus/icons-vue'
-import { ref } from 'vue'
+import { Link, Plus } from '@element-plus/icons-vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import MemberFormDialog from '../members/MemberFormDialog.vue'
 import MemberPhotoCell from '../members/MemberPhotoCell.vue'
+import RosterRowActions from './RosterRowActions.vue'
 
 import { membersApi } from '../../api/members'
 import { useDeleteWithPassword } from '../../composables/useDeleteWithPassword'
@@ -46,15 +42,22 @@ const FILTERS = [
   { key: 'suspended', label: '已停權' },
 ]
 
-// Every known role gets a tag; viewer is display-only and never settable.
-const ROLE_TAG = {
-  admin: { type: 'danger', label: '管理員' },
-  member: { type: '', label: '成員' },
-  viewer: { type: 'info', label: '檢視者' },
+// The 7-column table only stays readable when the content area is wide
+// enough for every column to fit; below that it re-renders as a card list.
+// The threshold sits above the widths where the table would otherwise need
+// a horizontal scroll (which is where el-table's fixed columns misbehave),
+// so cards cover phones, tablets and small laptops.
+const isNarrow = ref(false)
+let _mql = null
+function _syncNarrow(e) {
+  isNarrow.value = e.matches
 }
-function tagFor(role) {
-  return ROLE_TAG[role] ?? { type: 'info', label: role }
-}
+onMounted(() => {
+  _mql = window.matchMedia('(max-width: 1199px)')
+  isNarrow.value = _mql.matches
+  _mql.addEventListener('change', _syncNarrow)
+})
+onBeforeUnmount(() => _mql?.removeEventListener('change', _syncNarrow))
 
 // Account-state badge per row. claimed/legacy read as 已加入 / 舊資料;
 // pending and suspended get their own explicit label.
@@ -177,169 +180,127 @@ const {
 
     <el-empty v-else-if="!filteredRows.length" description="沒有符合的成員" />
 
-    <el-table v-else :data="filteredRows" class="member-roster__table">
-      <el-table-column label="照片" width="80">
-        <template #default="{ row }">
-          <MemberPhotoCell :member="row" />
-        </template>
-      </el-table-column>
+    <template v-else>
+      <!-- Wide screens only (see isNarrow): rendered only when the content
+           area fits all columns, so every column expands to fill and nothing
+           needs a horizontal scroll. -->
+      <el-table
+        v-if="!isNarrow"
+        :data="filteredRows"
+        class="member-roster__table"
+      >
+        <el-table-column label="照片" width="72">
+          <template #default="{ row }">
+            <MemberPhotoCell :member="row" />
+          </template>
+        </el-table-column>
 
-      <el-table-column label="本名" min-width="110">
-        <template #default="{ row }">
-          <span class="roster-name">{{ row.real_name }}</span>
-        </template>
-      </el-table-column>
+        <el-table-column label="本名" min-width="100">
+          <template #default="{ row }">
+            <span class="roster-name">{{ row.real_name }}</span>
+          </template>
+        </el-table-column>
 
-      <el-table-column label="Discord" min-width="130">
-        <template #default="{ row }">
-          <span v-if="row.account_discord_username" class="roster-handle">
-            @{{ row.account_discord_username }}
-          </span>
-          <span v-else class="roster-muted">—</span>
-        </template>
-      </el-table-column>
+        <el-table-column label="Discord" min-width="130">
+          <template #default="{ row }">
+            <span v-if="row.account_discord_username" class="roster-handle">
+              @{{ row.account_discord_username }}
+            </span>
+            <span v-else class="roster-muted">—</span>
+          </template>
+        </el-table-column>
 
-      <el-table-column label="畢業年" width="90" align="center">
-        <template #default="{ row }">{{ row.graduation_year }}</template>
-      </el-table-column>
+        <el-table-column label="畢業年" width="88" align="center">
+          <template #default="{ row }">{{ row.graduation_year }}</template>
+        </el-table-column>
 
-      <el-table-column label="學校職位" min-width="160">
-        <template #default="{ row }">
-          <div class="roster-inst">
-            <span class="roster-inst__school">{{ row.institution }}</span>
-            <span v-if="row.position" class="roster-muted">
-              {{ row.position }}
+        <el-table-column label="學校職位" min-width="150">
+          <template #default="{ row }">
+            <div class="roster-inst">
+              <span class="roster-inst__school">{{ row.institution }}</span>
+              <span v-if="row.position" class="roster-muted">
+                {{ row.position }}
+              </span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="狀態" width="96" align="center">
+          <template #default="{ row }">
+            <span
+              :class="['roster-status', badgeFor(row.account_status).class]"
+              :data-test="`roster-status-${row.id}`"
+            >
+              {{ badgeFor(row.account_status).label }}
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="角色 / 操作" min-width="220">
+          <template #default="{ row }">
+            <RosterRowActions
+              :row="row"
+              :saving-id="savingId"
+              @role-command="(role) => onRoleCommand(row, role)"
+              @suspend="onSuspend(row)"
+              @reactivate="setActive(row, true)"
+              @edit="openEdit(row)"
+              @delete="askDelete(row)"
+            />
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- Narrow screens: one card per member — no horizontal scroll. -->
+      <ul v-else class="roster-cards" data-test="roster-cards">
+        <li v-for="row in filteredRows" :key="row.id" class="roster-card">
+          <div class="roster-card__head">
+            <MemberPhotoCell :member="row" />
+            <div class="roster-card__ident">
+              <span class="roster-name">{{ row.real_name }}</span>
+              <span
+                v-if="row.account_discord_username"
+                class="roster-handle"
+              >
+                @{{ row.account_discord_username }}
+              </span>
+            </div>
+            <span
+              :class="['roster-status', badgeFor(row.account_status).class]"
+              :data-test="`roster-status-${row.id}`"
+            >
+              {{ badgeFor(row.account_status).label }}
             </span>
           </div>
-        </template>
-      </el-table-column>
 
-      <el-table-column label="角色" width="110" align="center">
-        <template #default="{ row }">
-          <!-- claimed: the tag itself is the role switcher -->
-          <el-dropdown
-            v-if="row.account_status === 'claimed' && row.role"
-            trigger="click"
-            :disabled="savingId === row.account_id"
-            :data-test="`roster-role-trigger-${row.id}`"
-            @command="(role) => onRoleCommand(row, role)"
-          >
-            <span class="roster-role-trigger" role="button" tabindex="0">
-              <el-tag
-                :type="tagFor(row.role).type"
-                size="small"
-                effect="light"
-                round
-              >
-                {{ tagFor(row.role).label }}
-              </el-tag>
-              <el-icon class="roster-role-trigger__caret">
-                <ArrowDown />
-              </el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item
-                  command="admin"
-                  :disabled="row.role === 'admin'"
-                  :data-test="`roster-role-admin-${row.id}`"
+          <dl class="roster-card__meta">
+            <div>
+              <dt>畢業年</dt>
+              <dd>{{ row.graduation_year }}</dd>
+            </div>
+            <div>
+              <dt>學校職位</dt>
+              <dd>
+                {{ row.institution
+                }}<span v-if="row.position" class="roster-muted">
+                  · {{ row.position }}</span
                 >
-                  管理員
-                </el-dropdown-item>
-                <el-dropdown-item
-                  command="member"
-                  :disabled="row.role === 'member'"
-                  :data-test="`roster-role-member-${row.id}`"
-                >
-                  成員
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-tag
-            v-else-if="row.role"
-            :type="tagFor(row.role).type"
-            size="small"
-            effect="light"
-            round
-          >
-            {{ tagFor(row.role).label }}
-          </el-tag>
-          <span v-else class="roster-muted">—</span>
-        </template>
-      </el-table-column>
+              </dd>
+            </div>
+          </dl>
 
-      <el-table-column label="狀態" width="100" align="center">
-        <template #default="{ row }">
-          <span
-            :class="['roster-status', badgeFor(row.account_status).class]"
-            :data-test="`roster-status-${row.id}`"
-          >
-            {{ badgeFor(row.account_status).label }}
-          </span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="操作" min-width="150">
-        <template #default="{ row }">
-          <div class="roster-row-actions">
-            <!-- claimed: suspend (non-admin only) -->
-            <template v-if="row.account_status === 'claimed'">
-              <el-button
-                v-if="row.role !== 'admin'"
-                size="small"
-                type="warning"
-                plain
-                :loading="savingId === row.account_id"
-                :data-test="`roster-suspend-${row.id}`"
-                @click="onSuspend(row)"
-              >
-                停權
-              </el-button>
-            </template>
-
-            <!-- suspended: reactivate -->
-            <template v-else-if="row.account_status === 'suspended'">
-              <el-button
-                size="small"
-                type="success"
-                plain
-                :loading="savingId === row.account_id"
-                :data-test="`roster-reactivate-${row.id}`"
-                @click="setActive(row, true)"
-              >
-                復權
-              </el-button>
-            </template>
-
-            <!-- edit is available on every row -->
-            <el-button
-              size="small"
-              plain
-              :data-test="`roster-edit-${row.id}`"
-              @click="openEdit(row)"
-            >
-              編輯
-            </el-button>
-
-            <!-- pending / legacy: no linked active account, so delete is safe -->
-            <el-button
-              v-if="
-                row.account_status === 'pending' ||
-                row.account_status === 'legacy'
-              "
-              size="small"
-              type="danger"
-              plain
-              :data-test="`roster-delete-${row.id}`"
-              @click="askDelete(row)"
-            >
-              刪除
-            </el-button>
-          </div>
-        </template>
-      </el-table-column>
-    </el-table>
+          <RosterRowActions
+            :row="row"
+            :saving-id="savingId"
+            @role-command="(role) => onRoleCommand(row, role)"
+            @suspend="onSuspend(row)"
+            @reactivate="setActive(row, true)"
+            @edit="openEdit(row)"
+            @delete="askDelete(row)"
+          />
+        </li>
+      </ul>
+    </template>
 
     <MemberFormDialog
       v-model="formOpen"
@@ -512,36 +473,63 @@ const {
   color: var(--ink-500);
 }
 
-/* ---------- Role-tag dropdown trigger ---------- */
-.roster-role-trigger {
-  display: inline-flex;
+/* ---------- Narrow-screen card layout ---------- */
+.roster-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.roster-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: var(--radius-lg);
+  background: var(--surface-0);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.roster-card__head {
+  display: flex;
   align-items: center;
+  gap: 12px;
+}
+
+.roster-card__ident {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  cursor: pointer;
-  outline: none;
+  min-width: 0;
+  flex: 1;
 }
 
-.roster-role-trigger__caret {
-  font-size: 12px;
-  color: var(--ink-500);
-  transition: color var(--dur) var(--ease);
+.roster-card__meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  margin: 0;
 }
 
-.roster-role-trigger:hover .roster-role-trigger__caret {
-  color: var(--brand-primary);
+.roster-card__meta > div {
+  min-width: 0;
 }
 
-/* ---------- Row actions ---------- */
-.roster-row-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+.roster-card__meta dt {
+  font-size: 11px;
+  color: var(--ink-400);
+  margin-bottom: 2px;
 }
 
-.roster-row-actions :deep(.el-button + .el-button) {
-  margin-left: 0;
+.roster-card__meta dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-700);
+  word-break: break-word;
 }
 
 @media (max-width: 640px) {

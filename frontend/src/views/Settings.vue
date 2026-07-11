@@ -192,7 +192,9 @@ watch(active, (next) => {
 
 <style scoped>
 .settings-page {
-  max-width: 1080px;
+  /* Wide enough that the member roster's table fits without a horizontal
+     scroll at desktop widths; the sidebar takes 240 of it. */
+  max-width: 1240px;
   margin: 0 auto;
 }
 

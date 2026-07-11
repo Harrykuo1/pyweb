@@ -186,6 +186,30 @@ afterEach(() => {
 })
 
 describe('MemberRoster.vue', () => {
+  it('renders a card layout (not the table) on narrow screens', async () => {
+    const original = window.matchMedia
+    window.matchMedia = (query) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+      onchange: null,
+    })
+    try {
+      const wrapper = await mountRoster()
+      expect(wrapper.find('[data-test="roster-cards"]').exists()).toBe(true)
+      expect(wrapper.find('.member-roster__table').exists()).toBe(false)
+      // Row actions are still reachable inside the cards.
+      expect(wrapper.find('[data-test="roster-edit-10"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="roster-suspend-10"]').exists()).toBe(true)
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
   it('shows live status counts and filters the table by status', async () => {
     const wrapper = await mountRoster()
 
@@ -223,6 +247,23 @@ describe('MemberRoster.vue', () => {
     )
   })
 
+  it('orders 編輯 before the lifecycle action (停權/復權/刪除 sit last)', async () => {
+    const wrapper = await mountRoster()
+    const html = wrapper.html()
+    // claimed (10): 編輯 then 停權
+    expect(html.indexOf('roster-edit-10')).toBeLessThan(
+      html.indexOf('roster-suspend-10'),
+    )
+    // suspended (12): 編輯 then 復權
+    expect(html.indexOf('roster-edit-12')).toBeLessThan(
+      html.indexOf('roster-reactivate-12'),
+    )
+    // pending (11): 編輯 then 刪除
+    expect(html.indexOf('roster-edit-11')).toBeLessThan(
+      html.indexOf('roster-delete-11'),
+    )
+  })
+
   it('renders status-driven actions per account_status', async () => {
     const wrapper = await mountRoster()
 
@@ -247,14 +288,18 @@ describe('MemberRoster.vue', () => {
     expect(wrapper.find('[data-test="roster-delete-13"]').exists()).toBe(true)
   })
 
-  it('shows a role dropdown trigger only on claimed rows', async () => {
+  it('shows a role dropdown trigger on claimed and pending rows', async () => {
     const wrapper = await mountRoster()
 
-    // claimed (10, 14): the role tag doubles as a dropdown trigger
+    // claimed (10, 14) and pending (11) have settable accounts: the role tag
+    // doubles as a dropdown trigger so admins can (pre-)assign a role.
     expect(wrapper.find('[data-test="roster-role-trigger-10"]').exists()).toBe(
       true,
     )
     expect(wrapper.find('[data-test="roster-role-trigger-14"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="roster-role-trigger-11"]').exists()).toBe(
       true,
     )
     expect(wrapper.find('[data-test="roster-role-trigger-10"]').text()).toContain(
@@ -264,10 +309,7 @@ describe('MemberRoster.vue', () => {
       '管理員',
     )
 
-    // pending / suspended / legacy: static tag only, no trigger
-    expect(wrapper.find('[data-test="roster-role-trigger-11"]').exists()).toBe(
-      false,
-    )
+    // suspended / legacy: static tag only, no trigger
     expect(wrapper.find('[data-test="roster-role-trigger-12"]').exists()).toBe(
       false,
     )
