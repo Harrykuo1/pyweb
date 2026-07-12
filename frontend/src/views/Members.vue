@@ -51,6 +51,10 @@ const { members, loading } = storeToRefs(membersStore)
 const dialogOpen = ref(false)
 const editingMember = ref(null)
 
+// Which card is hovered — drives the institution/position marquee so long
+// text only scrolls while the pointer is over that card.
+const hoveredMemberId = ref(null)
+
 const resumeOpen = ref(false)
 const resumeMember = ref(null)
 
@@ -353,6 +357,8 @@ onMounted(() => {
           :key="m.id"
           :class="['member-card', `member-anchor-${m.id}`]"
           data-test="member-card"
+          @mouseenter="hoveredMemberId = m.id"
+          @mouseleave="hoveredMemberId = null"
         >
           <MemberPhotoCell
             :member="m"
@@ -366,10 +372,16 @@ onMounted(() => {
           <div class="card-body">
             <h3 class="card-name">{{ m.real_name }}</h3>
             <p class="card-institution">
-              <MarqueeText :text="m.institution" />
+              <MarqueeText
+                :text="m.institution"
+                :active="hoveredMemberId === m.id"
+              />
             </p>
             <p class="card-position" :class="{ 'is-empty': !m.position }">
-              <MarqueeText :text="m.position || '—'" />
+              <MarqueeText
+                :text="m.position || '—'"
+                :active="hoveredMemberId === m.id"
+              />
             </p>
 
             <div class="card-meta">

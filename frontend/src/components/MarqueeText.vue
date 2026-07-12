@@ -1,87 +1,67 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
-  // The text to display. Falsy values render as an empty marquee so the
-  // caller can pass a possibly-null field straight through.
+  // The text to display. Falsy values render an empty marquee so the caller
+  // can pass a possibly-null field straight through.
   text: { type: [String, Number], default: '' },
-  // Pixels-per-second the track moves while scrolling. Choose a value
-  // that reads comfortably; 28 ≈ a calm 2s per 60-char latin string.
+  // Pixels-per-second the text travels while scrolling.
   speed: { type: Number, default: 28 },
-  // Gap (px) appended to each duplicated chunk so consecutive loops are
-  // visually separated instead of running into themselves.
+  // Gap (px) between the primary copy and its trailing ghost so the loop seam
+  // stays invisible.
   gap: { type: Number, default: 32 },
-  // Pause animation while the cursor is over the marquee, so the user
-  // can read text that's currently mid-scroll.
-  pauseOnHover: { type: Boolean, default: true },
+  // Hover signal from the parent card. The text only scrolls while the card is
+  // hovered AND the text overflows; at rest it shows an ellipsis.
+  active: { type: Boolean, default: true },
 })
 
 const containerRef = ref(null)
-const probeRef = ref(null)
 const overflowing = ref(false)
-const duration = ref(0)
 
-// Measure whether the text overflows the container and, if so, derive
-// an animation duration proportional to text length so short and long
-// strings scroll at the same visual speed.
-async function measure() {
-  await nextTick()
-  const container = containerRef.value
-  const probe = probeRef.value
-  if (!container || !probe) return
-  const containerW = container.clientWidth
-  const textW = probe.scrollWidth
+const scrolling = computed(() => props.active && overflowing.value)
+
+// At rest the text is the container's own inline content, so scrollWidth is
+// the full text width and clientWidth the visible width. Only measure while
+// NOT scrolling — once the flex track mounts, scrollWidth reflects both copies.
+function measure() {
+  const el = containerRef.value
+  if (!el) return
+  const containerW = el.clientWidth
+  const textW = el.scrollWidth
   // +1 tolerates sub-pixel rounding that would otherwise flap.
   if (textW > containerW + 1) {
     overflowing.value = true
-    duration.value = (textW + props.gap) / props.speed
+    const distance = textW + props.gap
+    el.style.setProperty('--marquee-distance', `-${distance}px`)
+    el.style.setProperty(
+      '--marquee-duration',
+      `${Math.max(3, distance / props.speed)}s`,
+    )
   } else {
     overflowing.value = false
-    duration.value = 0
   }
 }
 
-let resizeObserver = null
-
-onMounted(() => {
-  measure()
-  if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
-    resizeObserver = new ResizeObserver(() => measure())
-    resizeObserver.observe(containerRef.value)
-  }
-})
-
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
-})
-
+// Measure on the rising edge of a hover (before the track mounts, so the
+// reading stays clean) and whenever the text changes.
+watch(
+  () => props.active,
+  (isActive) => {
+    if (isActive) measure()
+  },
+)
 watch(
   () => props.text,
-  () => measure(),
-)
-watch(
-  () => props.speed,
-  () => measure(),
-)
-watch(
-  () => props.gap,
-  () => measure(),
+  async () => {
+    await nextTick()
+    if (props.active) measure()
+    else overflowing.value = false
+  },
 )
 
-const trackStyle = computed(() => {
-  if (!overflowing.value) return {}
-  return {
-    animationDuration: `${duration.value}s`,
-  }
-})
-
-const chunkStyle = computed(() => {
-  if (!overflowing.value) return {}
-  // Tail gap lives on the chunk rather than as flex `gap` so the keyframe
-  // can translate exactly one chunk-width for a seamless loop.
-  return {
-    paddingRight: `${props.gap}px`,
-  }
+onMounted(async () => {
+  await nextTick()
+  if (props.active) measure()
 })
 </script>
 
@@ -89,57 +69,49 @@ const chunkStyle = computed(() => {
   <span
     ref="containerRef"
     class="marquee"
-    :class="{
-      'is-scrolling': overflowing,
-      'is-pauseable': pauseOnHover,
-    }"
+    :class="{ 'is-scrolling': scrolling }"
   >
-    <span class="marquee__track" :style="trackStyle">
-      <span ref="probeRef" class="marquee__chunk" :style="chunkStyle">
-        {{ text }}
-      </span>
+    <span v-if="scrolling" class="marquee__track">
+      <span class="marquee__copy">{{ text }}</span>
       <span
-        v-if="overflowing"
-        class="marquee__chunk"
-        :style="chunkStyle"
+        class="marquee__copy"
         aria-hidden="true"
+        :style="{ paddingLeft: `${gap}px` }"
+        >{{ text }}</span
       >
-        {{ text }}
-      </span>
     </span>
+    <template v-else>{{ text }}</template>
   </span>
 </template>
 
 <style scoped>
 .marquee {
   display: block;
+  width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  width: 100%;
+  /* At rest the text is the block's own inline content, so this ellipsis
+     clips overflow with a "…". */
+  text-overflow: ellipsis;
+}
+
+/* Scrolling: a two-copy flex track translates in a single-direction loop.
+   The ghost trails the primary by `gap`, so once the primary has moved one
+   (text + gap) the ghost lands exactly where the primary began — the keyframe
+   restart is seamless. Flex ignores inter-copy whitespace, keeping the seam
+   exact. */
+.marquee.is-scrolling {
+  text-overflow: clip;
 }
 
 .marquee__track {
   display: inline-flex;
-  align-items: baseline;
   will-change: transform;
+  animation: marquee-scroll var(--marquee-duration, 6s) linear infinite;
 }
 
-.marquee__chunk {
+.marquee__copy {
   flex: 0 0 auto;
-}
-
-/* Scrolling mode: translate by exactly one chunk's width (text + gap)
-   each loop. Because the track has two identical chunks, -50% lands the
-   second chunk exactly where the first chunk started — seamless. */
-.marquee.is-scrolling .marquee__track {
-  animation-name: marquee-scroll;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-.marquee.is-scrolling.is-pauseable:hover .marquee__track,
-.marquee.is-scrolling.is-pauseable:focus-within .marquee__track {
-  animation-play-state: paused;
 }
 
 @keyframes marquee-scroll {
@@ -147,16 +119,7 @@ const chunkStyle = computed(() => {
     transform: translateX(0);
   }
   100% {
-    transform: translateX(-50%);
-  }
-}
-
-/* Honor reduced-motion preferences: never auto-scroll. The user can
-   still hover to read past the truncation point — falling back to
-   overflow-ellipsis would lose the indication that more text exists. */
-@media (prefers-reduced-motion: reduce) {
-  .marquee.is-scrolling .marquee__track {
-    animation: none;
+    transform: translateX(var(--marquee-distance, 0));
   }
 }
 </style>
