@@ -19,12 +19,14 @@ from slowapi import Limiter
 
 
 def get_real_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # First entry is the original client; intermediate proxies append.
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
+    # Trust X-Real-IP, which nginx OVERWRITES with the connecting client's
+    # address on every hop, so it can't be forged. X-Forwarded-For is NOT
+    # safe here: nginx appends to it, leaving its first token fully
+    # client-controlled, which would let an attacker rotate the rate-limit
+    # key per request and defeat the login throttle entirely.
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip and real_ip.strip():
+        return real_ip.strip()
     if request.client is not None:
         return request.client.host
     return "unknown"

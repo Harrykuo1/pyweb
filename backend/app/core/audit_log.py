@@ -155,12 +155,12 @@ def record_success(ip: str, role: str) -> None:
 
 
 def client_ip(request) -> str:
-    """Extract client IP, preferring the first hop of X-Forwarded-For."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        first = xff.split(",", 1)[0].strip()
-        if first:
-            return first
+    """Client IP from nginx's X-Real-IP, which is overwritten (not appended)
+    on every hop so it can't be forged. X-Forwarded-For's first token is
+    client-controlled and must not be trusted for audit attribution."""
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip and real_ip.strip():
+        return real_ip.strip()
     return request.client.host if request.client else "unknown"
 
 

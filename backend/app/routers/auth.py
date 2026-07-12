@@ -42,13 +42,26 @@ LOGIN_RATE_LIMIT = "5/minute"
 
 
 def _get_user_by_role(db: Session, role: UserRole) -> User:
-    user = db.query(User).filter_by(role=role).one_or_none()
-    if user is None:
+    users = db.query(User).filter_by(role=role).all()
+    if not users:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No user with role '{role.value}'",
         )
-    return user
+    if len(users) > 1:
+        # Identifying the target by role only works while a role maps to one
+        # account. Once two share it (e.g. a member was promoted, so there
+        # are two admins), fail cleanly with 409 instead of 500-ing from
+        # .one()'s MultipleResultsFound — and steer callers to the id-based
+        # endpoints (/users/{id}/role, /users/{id}/active).
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Multiple accounts share the '{role.value}' role; "
+                "manage credentials by user id instead"
+            ),
+        )
+    return users[0]
 
 
 @router.post("/login", response_model=UserResponse)

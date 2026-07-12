@@ -89,7 +89,7 @@ def test_failed_login_writes_audit_line(client, audit_log_dir):
     r = client.post(
         "/api/auth/login",
         json={"password": "WRONG"},
-        headers={"x-forwarded-for": "203.0.113.7"},
+        headers={"x-real-ip": "203.0.113.7"},
     )
     assert r.status_code == 401
 
@@ -108,7 +108,7 @@ def test_successful_login_does_not_write_audit_line(client, audit_log_dir):
 
 
 def test_brute_forced_success_writes_suspicious_audit_line(client, audit_log_dir):
-    headers = {"x-forwarded-for": "198.51.100.9"}
+    headers = {"x-real-ip": "198.51.100.9"}
 
     from app.core import audit_log as audit
 
@@ -131,7 +131,7 @@ def test_login_rate_limit_blocks_sixth_request_from_same_ip(client):
     # The route is decorated with @limiter.limit("5/minute"), so the 6th
     # request within a minute from one IP must come back as 429 — even
     # before bcrypt runs, so this also rules out the bcrypt-cost amplifier.
-    headers = {"X-Forwarded-For": "10.0.0.1"}
+    headers = {"X-Real-IP": "10.0.0.1"}
     for _ in range(5):
         r = client.post(
             "/api/auth/login",
@@ -148,11 +148,32 @@ def test_login_rate_limit_blocks_sixth_request_from_same_ip(client):
     assert r.status_code == 429, r.text
 
 
+def test_login_rate_limit_keys_on_real_ip_not_spoofed_forwarded_for(client):
+    # Regression for the X-Forwarded-For bypass: rotating XFF per request
+    # must NOT mint fresh buckets. With a fixed nginx-set X-Real-IP, every
+    # attempt shares one bucket regardless of the client-forged XFF, so the
+    # 6th still 429s.
+    real = {"X-Real-IP": "77.0.0.1"}
+    for i in range(5):
+        r = client.post(
+            "/api/auth/login",
+            json={"password": "WRONG"},
+            headers={**real, "X-Forwarded-For": f"45.0.0.{i}"},
+        )
+        assert r.status_code == 401, r.text
+    r = client.post(
+        "/api/auth/login",
+        json={"password": "WRONG"},
+        headers={**real, "X-Forwarded-For": "45.0.0.99"},
+    )
+    assert r.status_code == 429, r.text
+
+
 def test_login_rate_limit_isolated_per_ip(client):
-    # Two different X-Forwarded-For sources keep separate counters, so
-    # one attacker can't lock out other users from the same login route.
-    bad = {"X-Forwarded-For": "10.0.0.2"}
-    good = {"X-Forwarded-For": "10.0.0.3"}
+    # Two different X-Real-IP sources keep separate counters, so one attacker
+    # can't lock out other users from the same login route.
+    bad = {"X-Real-IP": "10.0.0.2"}
+    good = {"X-Real-IP": "10.0.0.3"}
 
     for _ in range(5):
         r = client.post("/api/auth/login", json={"password": "WRONG"}, headers=bad)
@@ -176,7 +197,7 @@ def test_login_rate_limit_counts_successful_attempts_too(client):
     # A real user logging in 5 times in a minute then hitting the limit
     # is documented behavior — counts everything. The 6th call returns
     # 429 even though credentials are correct.
-    headers = {"X-Forwarded-For": "10.0.0.4"}
+    headers = {"X-Real-IP": "10.0.0.4"}
     for _ in range(5):
         r = client.post(
             "/api/auth/login",
@@ -315,6 +336,25 @@ def test_update_viewer_username_succeeds(client):
     assert r.status_code == 200
     assert r.json()["username"] == "watcher"
     assert r.json()["role"] == "viewer"
+
+
+def test_update_username_conflicts_when_role_is_ambiguous(client, db_session):
+    # Two accounts share a role -> targeting by role is ambiguous. Must 409,
+    # not 500 (the old .one_or_none() raised MultipleResultsFound).
+    db_session.add(
+        User(
+            username="viewer2",
+            password_hash=hash_password("viewer2-pw"),
+            role=UserRole.VIEWER,
+        )
+    )
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": "watcher"},
+    )
+    assert r.status_code == 409, r.text
 
 
 def test_update_admin_username_succeeds_and_me_reflects_it(client):
