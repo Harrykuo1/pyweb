@@ -44,7 +44,12 @@ const JOBS = [
   },
 ]
 const EVENTS = [
-  { id: 5, title: 'Party', event_date: '2026-01-01', author_display_name: 'Bo' },
+  {
+    id: 5,
+    title: 'Party',
+    event_date: '2026-01-01',
+    author_display_name: 'Bo',
+  },
 ]
 
 beforeEach(() => {
@@ -57,7 +62,10 @@ afterEach(() => {
 })
 
 async function mountReview(jobs = JOBS, events = EVENTS) {
-  vi.spyOn(jobsApi, 'list').mockResolvedValue({ items: jobs, total: jobs.length })
+  vi.spyOn(jobsApi, 'list').mockResolvedValue({
+    items: jobs,
+    total: jobs.length,
+  })
   vi.spyOn(eventsApi, 'list').mockResolvedValue({
     items: events,
     total: events.length,

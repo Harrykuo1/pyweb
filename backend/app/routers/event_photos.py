@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import (
-    require_admin,
     require_completed_member,
     require_posting_member,
 )

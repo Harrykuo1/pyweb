@@ -33,8 +33,7 @@ def client(db_session):
 
 def _login_admin(client):
     assert (
-        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code
-        == 200
+        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
     )
 
 
@@ -167,9 +166,7 @@ def test_delete_pending_link_removes_row(client, db_session):
     _login_admin(client)
 
     assert client.delete("/api/auth/pending-links/P1").status_code == 204
-    assert (
-        db_session.query(PendingDiscordLink).filter_by(discord_id="P1").count() == 0
-    )
+    assert db_session.query(PendingDiscordLink).filter_by(discord_id="P1").count() == 0
 
 
 def test_delete_pending_link_404_when_missing(client):

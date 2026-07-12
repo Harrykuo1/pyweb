@@ -21,7 +21,9 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => user.value !== null)
   const actualRole = computed(() => user.value?.role ?? null)
   const isActuallyAdmin = computed(() => actualRole.value === 'admin')
-  const isAdmin = computed(() => isActuallyAdmin.value && !previewAsMember.value)
+  const isAdmin = computed(
+    () => isActuallyAdmin.value && !previewAsMember.value,
+  )
   const isPreviewingAsMember = computed(
     () => isActuallyAdmin.value && previewAsMember.value,
   )
@@ -68,8 +70,7 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (err) {
       if (err?.response?.status === 401) {
         user.value = null
-        suspended.value =
-          err.response?.data?.detail === 'Account suspended'
+        suspended.value = err.response?.data?.detail === 'Account suspended'
         return
       }
       throw err

@@ -41,9 +41,7 @@ def upgrade() -> None:
             )
         )
         batch.add_column(sa.Column("review_reason", sa.Text(), nullable=True))
-        batch.add_column(
-            sa.Column("reviewed_by_user_id", sa.Integer(), nullable=True)
-        )
+        batch.add_column(sa.Column("reviewed_by_user_id", sa.Integer(), nullable=True))
         batch.add_column(
             sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True)
         )
@@ -71,9 +69,7 @@ def downgrade() -> None:
         # Drop the enum CHECK before dropping the status column it guards,
         # else the rebuilt table keeps a CHECK on a non-existent column.
         batch.drop_constraint("event_status", type_="check")
-        batch.drop_constraint(
-            "fk_events_reviewed_by_user_id_users", type_="foreignkey"
-        )
+        batch.drop_constraint("fk_events_reviewed_by_user_id_users", type_="foreignkey")
         batch.drop_constraint(
             "fk_events_last_edited_by_user_id_users", type_="foreignkey"
         )

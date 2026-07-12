@@ -26,7 +26,12 @@ const JOBS = [
   },
 ]
 const EVENTS = [
-  { id: 5, title: 'Party', event_date: '2026-01-01', author_display_name: 'Bo' },
+  {
+    id: 5,
+    title: 'Party',
+    event_date: '2026-01-01',
+    author_display_name: 'Bo',
+  },
 ]
 
 function mountQueue() {

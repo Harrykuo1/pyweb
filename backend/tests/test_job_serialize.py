@@ -68,7 +68,11 @@ def test_admin_sees_identity_even_when_anonymous():
         review_reason="因為",
     )
     r = serialize_job(
-        j, is_admin=True, viewer_member_id=None, attachment_count=0, subject_name="王小明"
+        j,
+        is_admin=True,
+        viewer_member_id=None,
+        attachment_count=0,
+        subject_name="王小明",
     )
     assert r.display_name == "王小明"
     assert r.subject_member_id == 7

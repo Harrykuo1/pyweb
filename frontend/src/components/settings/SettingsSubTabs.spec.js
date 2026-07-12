@@ -19,12 +19,12 @@ describe('SettingsSubTabs.vue', () => {
   it('renders one button per item', () => {
     const wrapper = mountBar()
     expect(wrapper.findAll('.settings-subtabs__item')).toHaveLength(3)
-    expect(
-      wrapper.find('[data-test="settings-subtab-roles"]').exists(),
-    ).toBe(true)
-    expect(
-      wrapper.find('[data-test="settings-subtab-invites"]').exists(),
-    ).toBe(true)
+    expect(wrapper.find('[data-test="settings-subtab-roles"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.find('[data-test="settings-subtab-invites"]').exists()).toBe(
+      true,
+    )
     expect(
       wrapper.find('[data-test="settings-subtab-pending-links"]').exists(),
     ).toBe(true)
@@ -51,9 +51,7 @@ describe('SettingsSubTabs.vue', () => {
 
   it('emits update:modelValue when a sub-tab is clicked', async () => {
     const wrapper = mountBar()
-    await wrapper
-      .find('[data-test="settings-subtab-invites"]')
-      .trigger('click')
+    await wrapper.find('[data-test="settings-subtab-invites"]').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([['invites']])
   })
 
@@ -81,7 +79,9 @@ describe('SettingsSubTabs.vue', () => {
       items: [{ key: 'pending-links', label: '待連結', badge: 0 }],
     })
     expect(
-      wrapper.find('[data-test="settings-subtab-badge-pending-links"]').exists(),
+      wrapper
+        .find('[data-test="settings-subtab-badge-pending-links"]')
+        .exists(),
     ).toBe(false)
   })
 })

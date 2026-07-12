@@ -219,7 +219,9 @@ describe('useRegistrationInvites', () => {
     await flushPromises()
     const a = get()
     ElMessageBox.confirm.mockResolvedValue('confirm')
-    const spy = vi.spyOn(authApi, 'deleteRegistrationInvite').mockResolvedValue()
+    const spy = vi
+      .spyOn(authApi, 'deleteRegistrationInvite')
+      .mockResolvedValue()
 
     await a.remove(ACTIVE)
 
@@ -233,7 +235,9 @@ describe('useRegistrationInvites', () => {
     await flushPromises()
     const a = get()
     ElMessageBox.confirm.mockRejectedValue('cancel')
-    const spy = vi.spyOn(authApi, 'deleteRegistrationInvite').mockResolvedValue()
+    const spy = vi
+      .spyOn(authApi, 'deleteRegistrationInvite')
+      .mockResolvedValue()
 
     await a.remove(ACTIVE)
 

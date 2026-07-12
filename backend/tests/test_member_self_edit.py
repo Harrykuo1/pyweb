@@ -132,9 +132,7 @@ def test_member_uploads_and_deletes_own_photo_without_password(client):
 def test_member_cannot_upload_others_photo(client):
     c, login = client
     login("m1-pw")
-    r = c.post(
-        "/api/members/2/photo", files={"file": ("p.png", TINY_PNG, "image/png")}
-    )
+    r = c.post("/api/members/2/photo", files={"file": ("p.png", TINY_PNG, "image/png")})
     assert r.status_code == 403
 
 

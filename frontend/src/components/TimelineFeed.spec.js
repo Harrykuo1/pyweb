@@ -372,7 +372,10 @@ describe('TimelineFeed.vue — lazy load (cursor pagination)', () => {
     fireIntersect(true)
     await flushPromises()
 
-    expect(listSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({ limit: 1 }))
+    expect(listSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ limit: 1 }),
+    )
     expect(listSpy).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({

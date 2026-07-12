@@ -128,6 +128,4 @@ def test_link_or_queue_clears_stale_pending_link_on_bind(db_session):
         db_session, DiscordIdentity(id="7", username="ally", global_name="A")
     )
     assert result is not None and not isinstance(result, str)  # bound User
-    assert (
-        db_session.query(PendingDiscordLink).filter_by(discord_id="7").count() == 0
-    )
+    assert db_session.query(PendingDiscordLink).filter_by(discord_id="7").count() == 0

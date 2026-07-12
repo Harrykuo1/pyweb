@@ -235,8 +235,7 @@ def get_job(
     is_admin = current_user.role is UserRole.ADMIN
     viewer_member_id = _viewer_member_id(db, current_user)
     is_owner = (
-        obj.subject_member_id is not None
-        and obj.subject_member_id == viewer_member_id
+        obj.subject_member_id is not None and obj.subject_member_id == viewer_member_id
     )
     # Don't let a non-admin fetch someone else's pending/rejected post by id —
     # 404 hides its very existence.
@@ -338,8 +337,7 @@ def update_job(
     is_admin = current_user.role is UserRole.ADMIN
     viewer_member_id = _viewer_member_id(db, current_user)
     is_owner = (
-        obj.subject_member_id is not None
-        and obj.subject_member_id == viewer_member_id
+        obj.subject_member_id is not None and obj.subject_member_id == viewer_member_id
     )
     if not is_admin and not is_owner:
         raise HTTPException(
@@ -369,9 +367,14 @@ def update_job(
     # An owner editing a rejected post resubmits it; editing an already
     # accepted (public) post sends it back for re-review so content can't
     # be changed out from under the approval. Admin edits stay as-is.
-    if not is_admin and is_owner and obj.status in (
-        PostStatus.REJECTED,
-        PostStatus.ACCEPTED,
+    if (
+        not is_admin
+        and is_owner
+        and obj.status
+        in (
+            PostStatus.REJECTED,
+            PostStatus.ACCEPTED,
+        )
     ):
         obj.status = PostStatus.PENDING
         # Returning to the queue drops the previous review outcome so a stale
@@ -405,8 +408,7 @@ def delete_job(
     is_admin = current_user.role is UserRole.ADMIN
     viewer_member_id = _viewer_member_id(db, current_user)
     is_owner = (
-        obj.subject_member_id is not None
-        and obj.subject_member_id == viewer_member_id
+        obj.subject_member_id is not None and obj.subject_member_id == viewer_member_id
     )
     if not is_admin and not is_owner:
         raise HTTPException(

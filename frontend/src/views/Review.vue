@@ -70,7 +70,10 @@ function formatDate(iso) {
 
 function excerpt(md, max = 90) {
   if (!md) return ''
-  const plain = md.replace(/[#*`>_~\-![\]()]/g, '').replace(/\s+/g, ' ').trim()
+  const plain = md
+    .replace(/[#*`>_~\-![\]()]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
   return plain.length > max ? `${plain.slice(0, max)}…` : plain
 }
 </script>
@@ -87,7 +90,9 @@ function excerpt(md, max = 90) {
           {{ pendingCount }} 筆待審
         </span>
       </div>
-      <p class="subtitle">通過後內容才會公開；退回時填寫原因，發表者可修正後重送。</p>
+      <p class="subtitle">
+        通過後內容才會公開；退回時填寫原因，發表者可修正後重送。
+      </p>
     </header>
 
     <el-skeleton v-if="loading" :rows="5" animated />
@@ -305,7 +310,11 @@ function excerpt(md, max = 90) {
   align-items: center;
   justify-content: center;
   color: #fff;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  background: linear-gradient(
+    135deg,
+    var(--brand-primary),
+    var(--brand-accent)
+  );
   box-shadow: 0 6px 16px rgba(99, 102, 241, 0.28);
 }
 

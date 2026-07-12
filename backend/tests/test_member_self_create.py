@@ -31,9 +31,7 @@ def client(db_session):
 
 
 def _login_member(client):
-    assert (
-        client.post("/api/auth/login", json={"password": "m1-pw"}).status_code == 200
-    )
+    assert client.post("/api/auth/login", json={"password": "m1-pw"}).status_code == 200
 
 
 def test_self_create_requires_login(client):

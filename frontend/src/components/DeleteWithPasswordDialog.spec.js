@@ -117,7 +117,9 @@ describe('DeleteWithPasswordDialog', () => {
     await flushPromises()
 
     // No password input for post authors deleting their own content.
-    expect(document.querySelector('[data-test="delete-password-input"]')).toBeNull()
+    expect(
+      document.querySelector('[data-test="delete-password-input"]'),
+    ).toBeNull()
 
     confirmButton(w)?.click()
     await flushPromises()

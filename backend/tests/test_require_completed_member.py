@@ -67,9 +67,7 @@ def test_member_with_profile_allowed(db_session):
 def test_admin_exempt_from_profile_gate(db_session):
     app = _build_app(
         db_session,
-        seed_users=[
-            User(id=3, username="a", password_hash="h", role=UserRole.ADMIN)
-        ],
+        seed_users=[User(id=3, username="a", password_hash="h", role=UserRole.ADMIN)],
     )
     client = TestClient(app)
     client.post("/login/3")
@@ -79,9 +77,7 @@ def test_admin_exempt_from_profile_gate(db_session):
 def test_viewer_exempt_from_profile_gate(db_session):
     app = _build_app(
         db_session,
-        seed_users=[
-            User(id=4, username="v", password_hash="h", role=UserRole.VIEWER)
-        ],
+        seed_users=[User(id=4, username="v", password_hash="h", role=UserRole.VIEWER)],
     )
     client = TestClient(app)
     client.post("/login/4")
@@ -136,7 +132,9 @@ def test_posting_admin_allowed(db_session):
 def test_posting_viewer_blocked(db_session):
     app = _build_app(
         db_session,
-        seed_users=[User(id=14, username="pv", password_hash="h", role=UserRole.VIEWER)],
+        seed_users=[
+            User(id=14, username="pv", password_hash="h", role=UserRole.VIEWER)
+        ],
     )
     client = TestClient(app)
     client.post("/login/14")

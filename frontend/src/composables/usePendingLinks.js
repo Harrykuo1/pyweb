@@ -72,7 +72,11 @@ export function usePendingLinks() {
       await ElMessageBox.confirm(
         `確定要忽略「${displayName(link)}」的連結請求嗎？對方重新登入後會再次出現。`,
         '忽略連結請求',
-        { type: 'warning', confirmButtonText: '忽略', cancelButtonText: '取消' },
+        {
+          type: 'warning',
+          confirmButtonText: '忽略',
+          cancelButtonText: '取消',
+        },
       )
     } catch {
       return // user cancelled

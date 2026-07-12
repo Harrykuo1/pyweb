@@ -51,7 +51,9 @@ describe('JobRecordCard', () => {
   })
 
   it('shows a status pill only for non-accepted posts', () => {
-    expect(mountCard().find('[data-test="status-pending"]').exists()).toBe(false)
+    expect(mountCard().find('[data-test="status-pending"]').exists()).toBe(
+      false,
+    )
     expect(
       mountCard({ ...baseJob, status: 'pending' })
         .find('[data-test="status-pending"]')

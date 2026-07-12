@@ -1,7 +1,14 @@
 import client from './client'
 
 export const eventsApi = {
-  async list({ sort = 'event_date', order = 'desc', year, tag, q, status } = {}) {
+  async list({
+    sort = 'event_date',
+    order = 'desc',
+    year,
+    tag,
+    q,
+    status,
+  } = {}) {
     // Build the query by hand so tag=[A,B] serializes as ?tag=A&tag=B
     // (FastAPI repeated-param style), matching jobsApi.list.
     const search = new URLSearchParams()

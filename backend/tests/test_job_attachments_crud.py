@@ -201,11 +201,15 @@ def test_download_normalizes_content_type_for_spoofed_inline_ext(client, job):
     Content-Type — otherwise it renders inline as HTML (stored XSS)."""
     _login_admin(client)
     files = {
-        "file": ("evil.png", BytesIO(b"<script>alert(document.domain)</script>"), "text/html"),
+        "file": (
+            "evil.png",
+            BytesIO(b"<script>alert(document.domain)</script>"),
+            "text/html",
+        ),
     }
-    attachment_id = client.post(
-        f"/api/jobs/{job.id}/attachments", files=files
-    ).json()["id"]
+    attachment_id = client.post(f"/api/jobs/{job.id}/attachments", files=files).json()[
+        "id"
+    ]
 
     r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}")
     assert r.status_code == 200

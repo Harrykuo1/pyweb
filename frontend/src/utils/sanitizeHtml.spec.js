@@ -25,7 +25,9 @@ describe('sanitizeHtml', () => {
   })
 
   it('strips <iframe> (including srcdoc)', () => {
-    const out = sanitizeHtml('<iframe srcdoc="<script>alert(1)</script>"></iframe>')
+    const out = sanitizeHtml(
+      '<iframe srcdoc="<script>alert(1)</script>"></iframe>',
+    )
     expect(out).not.toMatch(/<iframe/i)
     expect(out).not.toMatch(/srcdoc/i)
   })

@@ -7,7 +7,7 @@ from app.models import RegistrationInvite, User, UserRole
 
 def _invite(**kw):
     now = datetime.now(UTC)
-    defaults = dict(token="t", created_at=now, expires_at=now + timedelta(hours=1))
+    defaults = {"token": "t", "created_at": now, "expires_at": now + timedelta(hours=1)}
     defaults.update(kw)
     return RegistrationInvite(**defaults)
 
@@ -131,9 +131,7 @@ def test_register_does_not_claim_or_burn_for_suspended_pending_match(db_session)
     # A suspended pre-created account must not be claimed and the single-use
     # invite must not be consumed: reject without mutating anything.
     _seed_invite(db_session)
-    pre = User(
-        role=UserRole.MEMBER, pending_discord_username="alice", is_active=False
-    )
+    pre = User(role=UserRole.MEMBER, pending_discord_username="alice", is_active=False)
     db_session.add(pre)
     db_session.commit()
 
@@ -168,9 +166,7 @@ def test_register_via_invite_queues_on_ambiguous_handle(db_session):
     assert user is None
     assert err == "link_ambiguous"
     assert db_session.query(User).count() == before  # NO new account minted
-    assert (
-        db_session.query(PendingDiscordLink).filter_by(discord_id="NEW").count() == 1
-    )
+    assert db_session.query(PendingDiscordLink).filter_by(discord_id="NEW").count() == 1
     # invite NOT consumed on ambiguous
     invite = db_session.query(RegistrationInvite).filter_by(token="valid").one()
     assert invite.used_at is None

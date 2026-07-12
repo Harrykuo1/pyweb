@@ -71,9 +71,7 @@ def test_build_authorize_url_carries_params(configured):
     assert q["response_type"] == ["code"]
     assert "identify" in q["scope"][0]
     assert "guilds.members.read" in q["scope"][0]
-    assert q["redirect_uri"] == [
-        "http://localhost:8081/api/auth/discord/callback"
-    ]
+    assert q["redirect_uri"] == ["http://localhost:8081/api/auth/discord/callback"]
 
 
 # ---------- exchange_code ----------

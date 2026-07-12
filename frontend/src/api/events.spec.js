@@ -90,7 +90,9 @@ describe('eventsApi review actions', () => {
   it('POSTs the reason to /events/:id/reject', async () => {
     const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 9 } })
     await eventsApi.reject(9, '照片不足')
-    expect(post).toHaveBeenCalledWith('/events/9/reject', { reason: '照片不足' })
+    expect(post).toHaveBeenCalledWith('/events/9/reject', {
+      reason: '照片不足',
+    })
   })
 })
 

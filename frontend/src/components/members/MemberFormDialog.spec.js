@@ -158,7 +158,9 @@ describe('MemberFormDialog', () => {
 
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'institution', 'SWE')
-    await wrapper.find('[data-test="form-discord-username"]').setValue('alice.h')
+    await wrapper
+      .find('[data-test="form-discord-username"]')
+      .setValue('alice.h')
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -196,7 +198,9 @@ describe('MemberFormDialog', () => {
 
     setVmValue(wrapper, 'real_name', 'Alice')
     setVmValue(wrapper, 'institution', 'SWE')
-    await wrapper.find('[data-test="form-discord-username"]').setValue('alice.h')
+    await wrapper
+      .find('[data-test="form-discord-username"]')
+      .setValue('alice.h')
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
@@ -220,9 +224,9 @@ describe('MemberFormDialog', () => {
       },
     })
 
-    expect(
-      wrapper.find('[data-test="form-discord-username"]').exists(),
-    ).toBe(false)
+    expect(wrapper.find('[data-test="form-discord-username"]').exists()).toBe(
+      false,
+    )
   })
 
   it('admin editing a pending member sees the Discord input prefilled', async () => {
@@ -262,9 +266,9 @@ describe('MemberFormDialog', () => {
       },
     })
 
-    expect(
-      wrapper.find('[data-test="form-discord-username"]').exists(),
-    ).toBe(false)
+    expect(wrapper.find('[data-test="form-discord-username"]').exists()).toBe(
+      false,
+    )
   })
 
   it('editing an unrelated field on a pending member keeps the prefilled handle (no wipe)', async () => {

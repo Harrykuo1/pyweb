@@ -75,8 +75,7 @@ def require_completed_member(
     # Admins and the legacy viewer account have no profile and are exempt.
     if current_user.role is UserRole.MEMBER:
         has_profile = (
-            db.query(Member.id).filter_by(user_id=current_user.id).first()
-            is not None
+            db.query(Member.id).filter_by(user_id=current_user.id).first() is not None
         )
         if not has_profile:
             raise HTTPException(
@@ -98,8 +97,7 @@ def require_posting_member(
     # the viewer — viewers stay read-only.
     if current_user.role is UserRole.MEMBER:
         has_profile = (
-            db.query(Member.id).filter_by(user_id=current_user.id).first()
-            is not None
+            db.query(Member.id).filter_by(user_id=current_user.id).first() is not None
         )
         if not has_profile:
             raise HTTPException(

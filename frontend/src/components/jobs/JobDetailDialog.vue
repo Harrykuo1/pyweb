@@ -60,8 +60,7 @@ const canRevealAnon = computed(
 )
 const showRealName = computed(
   () =>
-    !!props.job?.display_name &&
-    (!props.job?.is_anonymous || revealName.value),
+    !!props.job?.display_name && (!props.job?.is_anonymous || revealName.value),
 )
 const shownName = computed(() =>
   showRealName.value ? props.job.display_name : '匿名',
@@ -222,54 +221,54 @@ function formatJobYearMonth(j) {
       </p>
 
       <el-tabs v-model="tab" class="detail-tabs">
-      <el-tab-pane label="心得" name="experience">
-        <div class="md-frame" data-test="detail-experience">
-          <MdPreview
-            :model-value="job.experience_md ?? ''"
-            theme="light"
-            preview-theme="default"
-            language="zh-TW"
-            :sanitize="sanitizeHtml"
-          />
-        </div>
-      </el-tab-pane>
-      <el-tab-pane v-if="hasTimeline" label="時程表" name="timeline">
-        <div class="md-frame" data-test="detail-timeline">
-          <TimelineDisplay
-            v-if="hasTimelineEvents"
-            :events="job.timeline_events"
-          />
-          <div v-else data-test="detail-timeline-legacy">
-            <p class="legacy-timeline-badge">
-              ⚠ 舊版時程表（編輯這筆紀錄即可升級為結構化時程）
-            </p>
+        <el-tab-pane label="心得" name="experience">
+          <div class="md-frame" data-test="detail-experience">
             <MdPreview
-              :model-value="job.timeline_md ?? ''"
+              :model-value="job.experience_md ?? ''"
               theme="light"
               preview-theme="default"
               language="zh-TW"
               :sanitize="sanitizeHtml"
             />
           </div>
-        </div>
-      </el-tab-pane>
-      <el-tab-pane
-        v-if="hasAttachments"
-        label="附件"
-        name="attachments"
-        lazy
-        data-test="detail-tab-attachments"
-      >
-        <div class="md-frame" data-test="detail-attachments">
-          <!-- :key forces a fresh component (and a fresh GET) every
+        </el-tab-pane>
+        <el-tab-pane v-if="hasTimeline" label="時程表" name="timeline">
+          <div class="md-frame" data-test="detail-timeline">
+            <TimelineDisplay
+              v-if="hasTimelineEvents"
+              :events="job.timeline_events"
+            />
+            <div v-else data-test="detail-timeline-legacy">
+              <p class="legacy-timeline-badge">
+                ⚠ 舊版時程表（編輯這筆紀錄即可升級為結構化時程）
+              </p>
+              <MdPreview
+                :model-value="job.timeline_md ?? ''"
+                theme="light"
+                preview-theme="default"
+                language="zh-TW"
+                :sanitize="sanitizeHtml"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane
+          v-if="hasAttachments"
+          label="附件"
+          name="attachments"
+          lazy
+          data-test="detail-tab-attachments"
+        >
+          <div class="md-frame" data-test="detail-attachments">
+            <!-- :key forces a fresh component (and a fresh GET) every
                time the dialog opens, so attachments uploaded in the
                edit form between opens appear without a manual F5. -->
-          <JobAttachmentsViewer
-            :key="`${job.id}-${openCounter}`"
-            :job-id="job.id"
-          />
-        </div>
-      </el-tab-pane>
+            <JobAttachmentsViewer
+              :key="`${job.id}-${openCounter}`"
+              :job-id="job.id"
+            />
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </template>
 

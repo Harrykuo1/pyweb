@@ -29,15 +29,27 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def setup(db_session):
-    admin = User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN)
+    admin = User(
+        username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN
+    )
     author_user = User(password_hash=hash_password("author-pw"), role=UserRole.MEMBER)
     other_user = User(password_hash=hash_password("other-pw"), role=UserRole.MEMBER)
     db_session.add_all([admin, author_user, other_user])
     db_session.commit()
     db_session.add_all(
         [
-            Member(graduation_year=2026, real_name="作者", institution="X", user_id=author_user.id),
-            Member(graduation_year=2026, real_name="他人", institution="Y", user_id=other_user.id),
+            Member(
+                graduation_year=2026,
+                real_name="作者",
+                institution="X",
+                user_id=author_user.id,
+            ),
+            Member(
+                graduation_year=2026,
+                real_name="他人",
+                institution="Y",
+                user_id=other_user.id,
+            ),
         ]
     )
     event = Event(
@@ -129,7 +141,9 @@ def test_admin_deleting_photo_still_needs_password(client, setup):
     pid = _author_uploads(client, eid)
     client.post("/api/auth/logout")
     _login(client, "admin-pw")
-    assert client.request("DELETE", f"/api/events/{eid}/photos/{pid}").status_code == 422
+    assert (
+        client.request("DELETE", f"/api/events/{eid}/photos/{pid}").status_code == 422
+    )
     r = client.request(
         "DELETE", f"/api/events/{eid}/photos/{pid}", json={"password": "admin-pw"}
     )

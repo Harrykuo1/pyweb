@@ -574,11 +574,15 @@ def test_stale_password_version_in_db_evicts_session(client, db_session):
 
 
 def _login_admin(client):
-    assert client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
+    )
 
 
 def test_suspend_member_succeeds(client, db_session):
-    m = User(role=UserRole.MEMBER, discord_id="m1", discord_username="m", is_active=True)
+    m = User(
+        role=UserRole.MEMBER, discord_id="m1", discord_username="m", is_active=True
+    )
     db_session.add(m)
     db_session.commit()
     _login_admin(client)
@@ -588,7 +592,9 @@ def test_suspend_member_succeeds(client, db_session):
 
 
 def test_reactivate_member_succeeds(client, db_session):
-    m = User(role=UserRole.MEMBER, discord_id="m2", discord_username="m", is_active=False)
+    m = User(
+        role=UserRole.MEMBER, discord_id="m2", discord_username="m", is_active=False
+    )
     db_session.add(m)
     db_session.commit()
     _login_admin(client)
@@ -607,11 +613,15 @@ def test_suspend_viewer_succeeds(client, db_session):
 def test_cannot_suspend_admin_role(client, db_session, monkeypatch):
     # Make sure G2 doesn't fire for this one: protect a different username.
     monkeypatch.setattr(settings, "seed_admin_username", "__none__")
-    other_admin = User(role=UserRole.ADMIN, discord_id="a2", discord_username="a2", is_active=True)
+    other_admin = User(
+        role=UserRole.ADMIN, discord_id="a2", discord_username="a2", is_active=True
+    )
     db_session.add(other_admin)
     db_session.commit()
     _login_admin(client)
-    r = client.patch(f"/api/auth/users/{other_admin.id}/active", json={"is_active": False})
+    r = client.patch(
+        f"/api/auth/users/{other_admin.id}/active", json={"is_active": False}
+    )
     assert r.status_code == 409, r.text
 
 
@@ -622,11 +632,16 @@ def test_cannot_suspend_seed_admin(client, db_session, monkeypatch):
     _login_admin(client)
     r = client.patch(f"/api/auth/users/{seed.id}/active", json={"is_active": False})
     assert r.status_code == 409, r.text
-    assert "break-glass" in r.json()["detail"].lower() or "admin" in r.json()["detail"].lower()
+    assert (
+        "break-glass" in r.json()["detail"].lower()
+        or "admin" in r.json()["detail"].lower()
+    )
 
 
 def test_non_admin_cannot_suspend(client, db_session):
-    m = User(role=UserRole.MEMBER, discord_id="m3", discord_username="m", is_active=True)
+    m = User(
+        role=UserRole.MEMBER, discord_id="m3", discord_username="m", is_active=True
+    )
     db_session.add(m)
     db_session.commit()
     client.post("/api/auth/login", json={"password": "viewer-pw"})  # viewer, not admin
@@ -682,7 +697,5 @@ def test_resolve_pending_link_rejects_already_bound_discord_id(client, db_sessio
     db_session.commit()
 
     _login_admin(client)
-    r = client.post(
-        "/api/auth/pending-links/7/resolve", json={"member_id": member.id}
-    )
+    r = client.post("/api/auth/pending-links/7/resolve", json={"member_id": member.id})
     assert r.status_code == 409, r.text

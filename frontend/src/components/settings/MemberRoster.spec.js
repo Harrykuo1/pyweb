@@ -205,7 +205,9 @@ describe('MemberRoster.vue', () => {
       expect(wrapper.find('.member-roster__table').exists()).toBe(false)
       // Row actions are still reachable inside the cards.
       expect(wrapper.find('[data-test="roster-edit-10"]').exists()).toBe(true)
-      expect(wrapper.find('[data-test="roster-suspend-10"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="roster-suspend-10"]').exists()).toBe(
+        true,
+      )
     } finally {
       window.matchMedia = original
     }
@@ -303,12 +305,12 @@ describe('MemberRoster.vue', () => {
     expect(wrapper.find('[data-test="roster-role-trigger-11"]').exists()).toBe(
       true,
     )
-    expect(wrapper.find('[data-test="roster-role-trigger-10"]').text()).toContain(
-      '成員',
-    )
-    expect(wrapper.find('[data-test="roster-role-trigger-14"]').text()).toContain(
-      '管理員',
-    )
+    expect(
+      wrapper.find('[data-test="roster-role-trigger-10"]').text(),
+    ).toContain('成員')
+    expect(
+      wrapper.find('[data-test="roster-role-trigger-14"]').text(),
+    ).toContain('管理員')
 
     // suspended / legacy: static tag only, no trigger
     expect(wrapper.find('[data-test="roster-role-trigger-12"]').exists()).toBe(

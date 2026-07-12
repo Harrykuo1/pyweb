@@ -55,7 +55,9 @@ describe('Login.vue', () => {
 
     resolveLogin()
     await flushPromises()
-    expect(wrapper.find('[data-test="login-pending-hint"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="login-pending-hint"]').exists()).toBe(
+      false,
+    )
   })
 
   it('shows the suspension message when password login returns 403 Account suspended', async () => {

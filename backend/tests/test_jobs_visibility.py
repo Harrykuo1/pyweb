@@ -36,7 +36,9 @@ def client(db_session):
 
 
 def _login(client, password):
-    assert client.post("/api/auth/login", json={"password": password}).status_code == 200
+    assert (
+        client.post("/api/auth/login", json={"password": password}).status_code == 200
+    )
 
 
 def _add_job(db, **kw):
@@ -104,7 +106,10 @@ def test_non_admin_cannot_see_anonymous_author(client, db_session):
     db_session.add(m)
     db_session.flush()
     _add_job(
-        db_session, subject_member_id=m.id, is_anonymous=True, status=PostStatus.ACCEPTED
+        db_session,
+        subject_member_id=m.id,
+        is_anonymous=True,
+        status=PostStatus.ACCEPTED,
     )
     _login(client, "mem-pw")
 

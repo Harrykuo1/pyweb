@@ -258,9 +258,7 @@ def get_event(
 ) -> EventResponse:
     obj = _get_or_404(db, event_id)
     is_admin = current_user.role is UserRole.ADMIN
-    is_owner = (
-        obj.author_user_id is not None and obj.author_user_id == current_user.id
-    )
+    is_owner = obj.author_user_id is not None and obj.author_user_id == current_user.id
     if not is_admin and obj.status is not PostStatus.ACCEPTED and not is_owner:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
@@ -312,9 +310,7 @@ def update_event(
 ) -> EventResponse:
     obj = _get_or_404(db, event_id)
     is_admin = current_user.role is UserRole.ADMIN
-    is_owner = (
-        obj.author_user_id is not None and obj.author_user_id == current_user.id
-    )
+    is_owner = obj.author_user_id is not None and obj.author_user_id == current_user.id
     if not is_admin and not is_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not your event"
@@ -329,9 +325,14 @@ def update_event(
     # Owner editing a rejected event resubmits it; editing an already
     # accepted (public) event sends it back for re-review so content can't
     # be changed out from under the approval. Admin edits stay as-is.
-    if not is_admin and is_owner and obj.status in (
-        PostStatus.REJECTED,
-        PostStatus.ACCEPTED,
+    if (
+        not is_admin
+        and is_owner
+        and obj.status
+        in (
+            PostStatus.REJECTED,
+            PostStatus.ACCEPTED,
+        )
     ):
         obj.status = PostStatus.PENDING
         # Returning to the queue drops the previous review outcome so a stale
@@ -356,9 +357,7 @@ def delete_event(
 ) -> None:
     obj = _get_or_404(db, event_id)
     is_admin = current_user.role is UserRole.ADMIN
-    is_owner = (
-        obj.author_user_id is not None and obj.author_user_id == current_user.id
-    )
+    is_owner = obj.author_user_id is not None and obj.author_user_id == current_user.id
     if not is_admin and not is_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not your event"

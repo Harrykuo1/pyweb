@@ -13,14 +13,14 @@ def ctx(db_session):
         username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN
     )
     viewer = User(
-        username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER
+        username="viewer",
+        password_hash=hash_password("viewer-pw"),
+        role=UserRole.VIEWER,
     )
     mem = User(
         username="mem", password_hash=hash_password("mem-pw"), role=UserRole.MEMBER
     )
-    np = User(
-        username="np", password_hash=hash_password("np-pw"), role=UserRole.MEMBER
-    )
+    np = User(username="np", password_hash=hash_password("np-pw"), role=UserRole.MEMBER)
     otheru = User(
         username="otheru", password_hash=hash_password("other-pw"), role=UserRole.MEMBER
     )
@@ -29,10 +29,16 @@ def ctx(db_session):
     db_session.add_all(
         [
             Member(
-                graduation_year=2024, real_name="我本人", institution="X", user_id=mem.id
+                graduation_year=2024,
+                real_name="我本人",
+                institution="X",
+                user_id=mem.id,
             ),
             Member(
-                graduation_year=2024, real_name="別人", institution="Y", user_id=otheru.id
+                graduation_year=2024,
+                real_name="別人",
+                institution="Y",
+                user_id=otheru.id,
             ),
         ]
     )
@@ -114,9 +120,7 @@ def test_non_owner_member_cannot_update_event(ctx):
     eid = _member_creates(client, login)
     client.post("/api/auth/logout")
     login("other-pw")
-    assert (
-        client.put(f"/api/events/{eid}", json={"title": "hijack"}).status_code == 403
-    )
+    assert client.put(f"/api/events/{eid}", json={"title": "hijack"}).status_code == 403
 
 
 def test_member_editing_rejected_event_resubmits(ctx, db_session):

@@ -262,10 +262,7 @@ const {
             <MemberPhotoCell :member="row" />
             <div class="roster-card__ident">
               <span class="roster-name">{{ row.real_name }}</span>
-              <span
-                v-if="row.account_discord_username"
-                class="roster-handle"
-              >
+              <span v-if="row.account_discord_username" class="roster-handle">
                 @{{ row.account_discord_username }}
               </span>
             </div>

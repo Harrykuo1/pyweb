@@ -83,7 +83,8 @@ export function useRegistrationInvites() {
     ta.focus()
     ta.select()
     try {
-      if (!document.execCommand('copy')) throw new Error('copy command rejected')
+      if (!document.execCommand('copy'))
+        throw new Error('copy command rejected')
     } finally {
       document.body.removeChild(ta)
     }
@@ -103,7 +104,11 @@ export function useRegistrationInvites() {
       await ElMessageBox.confirm(
         '確定要刪除這個邀請連結嗎？已分享出去的連結將立即失效。',
         '刪除邀請連結',
-        { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消' },
+        {
+          type: 'warning',
+          confirmButtonText: '刪除',
+          cancelButtonText: '取消',
+        },
       )
     } catch {
       return // user cancelled

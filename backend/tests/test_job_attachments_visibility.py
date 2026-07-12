@@ -27,10 +27,16 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def setup(db_session):
-    admin = User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN)
+    admin = User(
+        username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN
+    )
     author_user = User(password_hash=hash_password("author-pw"), role=UserRole.MEMBER)
     other_user = User(password_hash=hash_password("other-pw"), role=UserRole.MEMBER)
-    viewer_user = User(username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER)
+    viewer_user = User(
+        username="viewer",
+        password_hash=hash_password("viewer-pw"),
+        role=UserRole.VIEWER,
+    )
     db_session.add_all([admin, author_user, other_user, viewer_user])
     db_session.commit()
 

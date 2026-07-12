@@ -33,8 +33,7 @@ def client(db_session):
 
 def _login_admin(client):
     assert (
-        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code
-        == 200
+        client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
     )
 
 
@@ -101,9 +100,7 @@ def test_delete_invite_removes_row(client, db_session):
         client.delete(f"/api/auth/registration-invites/{created['id']}").status_code
         == 204
     )
-    assert (
-        db_session.query(RegistrationInvite).filter_by(id=created["id"]).count() == 0
-    )
+    assert db_session.query(RegistrationInvite).filter_by(id=created["id"]).count() == 0
 
 
 def test_delete_invite_404_when_missing(client):
@@ -119,18 +116,14 @@ def test_register_start_redirects_to_discord_for_valid_token(
     token = client.post("/api/auth/registration-invites").json()["token"]
     client.post("/api/auth/logout")
 
-    r = client.get(
-        f"/api/auth/discord/register?token={token}", follow_redirects=False
-    )
+    r = client.get(f"/api/auth/discord/register?token={token}", follow_redirects=False)
     assert r.status_code == 302
     assert "discord.com" in r.headers["location"]
 
 
 def test_register_start_rejects_unknown_token(client, monkeypatch):
     _configure(monkeypatch)
-    r = client.get(
-        "/api/auth/discord/register?token=nope", follow_redirects=False
-    )
+    r = client.get("/api/auth/discord/register?token=nope", follow_redirects=False)
     assert r.status_code == 302
     assert "error=invalid_invite" in r.headers["location"]
 
@@ -144,7 +137,5 @@ def test_register_start_rejects_used_token(client, db_session, monkeypatch):
     db_session.commit()
     client.post("/api/auth/logout")
 
-    r = client.get(
-        f"/api/auth/discord/register?token={token}", follow_redirects=False
-    )
+    r = client.get(f"/api/auth/discord/register?token={token}", follow_redirects=False)
     assert "error=invalid_invite" in r.headers["location"]

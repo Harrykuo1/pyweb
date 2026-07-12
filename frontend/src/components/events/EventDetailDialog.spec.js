@@ -151,8 +151,8 @@ describe('EventDetailDialog — status + author', () => {
     expect(
       wrapper.find('[data-test="detail-status-rejected"]').text(),
     ).toContain('已退回')
-    expect(
-      wrapper.find('[data-test="detail-reject-reason"]').text(),
-    ).toContain('照片不足')
+    expect(wrapper.find('[data-test="detail-reject-reason"]').text()).toContain(
+      '照片不足',
+    )
   })
 })

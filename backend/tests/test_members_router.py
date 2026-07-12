@@ -241,7 +241,9 @@ def test_create_member_without_position_returns_null(client_factory):
     assert r.json()["position"] is None
 
 
-def test_create_member_provisions_linked_account_with_handle(client_factory, db_session):
+def test_create_member_provisions_linked_account_with_handle(
+    client_factory, db_session
+):
     client, login_as = client_factory
     login_as("admin")
     r = client.post(
@@ -301,9 +303,7 @@ def test_create_member_allows_handle_matching_only_a_pending_account(
     fully registered account does."""
     client, login_as = client_factory
     login_as("admin")
-    db_session.add(
-        User(role=UserRole.MEMBER, pending_discord_username="alice.h")
-    )
+    db_session.add(User(role=UserRole.MEMBER, pending_discord_username="alice.h"))
     db_session.commit()
 
     r = client.post(
@@ -318,7 +318,9 @@ def test_create_member_allows_handle_matching_only_a_pending_account(
     assert r.status_code == 201, r.text
 
 
-def test_create_member_without_handle_still_provisions_account(client_factory, db_session):
+def test_create_member_without_handle_still_provisions_account(
+    client_factory, db_session
+):
     client, login_as = client_factory
     login_as("admin")
     r = client.post(
@@ -333,7 +335,9 @@ def test_create_member_without_handle_still_provisions_account(client_factory, d
     assert user.pending_discord_username is None
 
 
-def test_admin_provisioned_account_auto_links_on_first_login(client_factory, db_session):
+def test_admin_provisioned_account_auto_links_on_first_login(
+    client_factory, db_session
+):
     from app.core.discord_link import link_or_queue
     from app.core.discord_oauth import DiscordIdentity
 
@@ -579,7 +583,9 @@ def test_delete_member_also_deletes_linked_account(client_factory, db_session):
 def test_delete_orphan_member_without_account_still_works(client_factory, db_session):
     client, login_as = client_factory
     login_as("admin")
-    m = Member(graduation_year=2020, real_name="Legacy", institution="Old", user_id=None)
+    m = Member(
+        graduation_year=2020, real_name="Legacy", institution="Old", user_id=None
+    )
     db_session.add(m)
     db_session.commit()
     mid = m.id
@@ -630,7 +636,9 @@ def test_delete_member_reaps_upload_dir(client_factory, db_session, tmp_path):
 
     client, login_as = client_factory
     login_as("admin")
-    m = Member(graduation_year=2020, real_name="Legacy", institution="Old", user_id=None)
+    m = Member(
+        graduation_year=2020, real_name="Legacy", institution="Old", user_id=None
+    )
     db_session.add(m)
     db_session.commit()
     mid = m.id
@@ -667,14 +675,29 @@ def test_delete_claimed_member_is_blocked_with_409(client_factory, db_session):
 
 
 def _make_suspended_member(client, db_session):
-    sid = client.post("/api/members", json={"graduation_year":2024,"real_name":"S","institution":"X","discord_username":"s"}).json()["id"]
-    sacc = db_session.query(User).filter_by(id=db_session.query(Member).filter_by(id=sid).one().user_id).one()
-    sacc.discord_id = "d-s"; sacc.is_active = False
+    sid = client.post(
+        "/api/members",
+        json={
+            "graduation_year": 2024,
+            "real_name": "S",
+            "institution": "X",
+            "discord_username": "s",
+        },
+    ).json()["id"]
+    sacc = (
+        db_session.query(User)
+        .filter_by(id=db_session.query(Member).filter_by(id=sid).one().user_id)
+        .one()
+    )
+    sacc.discord_id = "d-s"
+    sacc.is_active = False
     db_session.commit()
     return sid
 
 
-def test_suspended_member_visible_to_admin_hidden_from_non_admin(client_factory, db_session):
+def test_suspended_member_visible_to_admin_hidden_from_non_admin(
+    client_factory, db_session
+):
     client, login_as = client_factory
     login_as("admin")
     sid = _make_suspended_member(client, db_session)
@@ -687,7 +710,9 @@ def test_suspended_member_visible_to_admin_hidden_from_non_admin(client_factory,
     assert client.get(f"/api/members/{sid}").status_code == 404
 
 
-def test_suspended_member_photo_and_pdf_hidden_from_non_admin(client_factory, db_session):
+def test_suspended_member_photo_and_pdf_hidden_from_non_admin(
+    client_factory, db_session
+):
     client, login_as = client_factory
     login_as("admin")
     sid = _make_suspended_member(client, db_session)
@@ -719,9 +744,11 @@ def test_member_response_reports_account_status(client_factory, db_session):
             "discord_username": "c",
         },
     ).json()["id"]
-    cacc = db_session.query(User).filter_by(
-        id=db_session.query(Member).filter_by(id=cid).one().user_id
-    ).one()
+    cacc = (
+        db_session.query(User)
+        .filter_by(id=db_session.query(Member).filter_by(id=cid).one().user_id)
+        .one()
+    )
     cacc.discord_id = "d-c"
     cacc.is_active = True
     # suspended
@@ -734,9 +761,11 @@ def test_member_response_reports_account_status(client_factory, db_session):
             "discord_username": "s",
         },
     ).json()["id"]
-    sacc = db_session.query(User).filter_by(
-        id=db_session.query(Member).filter_by(id=sid).one().user_id
-    ).one()
+    sacc = (
+        db_session.query(User)
+        .filter_by(id=db_session.query(Member).filter_by(id=sid).one().user_id)
+        .one()
+    )
     sacc.discord_id = "d-s"
     sacc.is_active = False
     # legacy: seed a member with no account

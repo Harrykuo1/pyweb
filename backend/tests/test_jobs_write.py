@@ -13,14 +13,14 @@ def ctx(db_session):
         username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN
     )
     viewer = User(
-        username="viewer", password_hash=hash_password("viewer-pw"), role=UserRole.VIEWER
+        username="viewer",
+        password_hash=hash_password("viewer-pw"),
+        role=UserRole.VIEWER,
     )
     mem = User(
         username="mem", password_hash=hash_password("mem-pw"), role=UserRole.MEMBER
     )
-    np = User(
-        username="np", password_hash=hash_password("np-pw"), role=UserRole.MEMBER
-    )
+    np = User(username="np", password_hash=hash_password("np-pw"), role=UserRole.MEMBER)
     otheru = User(
         username="otheru", password_hash=hash_password("other-pw"), role=UserRole.MEMBER
     )

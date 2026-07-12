@@ -52,9 +52,7 @@ def upgrade() -> None:
             )
         )
         batch.add_column(sa.Column("review_reason", sa.Text(), nullable=True))
-        batch.add_column(
-            sa.Column("reviewed_by_user_id", sa.Integer(), nullable=True)
-        )
+        batch.add_column(sa.Column("reviewed_by_user_id", sa.Integer(), nullable=True))
         batch.add_column(
             sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True)
         )

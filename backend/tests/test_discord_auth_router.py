@@ -227,9 +227,7 @@ def test_callback_suspended_precreated_account_mutates_nothing(
     # turned away before binding: no session, discord_id stays null.
     from app.models import Member
 
-    u = User(
-        role=UserRole.MEMBER, pending_discord_username="harry", is_active=False
-    )
+    u = User(role=UserRole.MEMBER, pending_discord_username="harry", is_active=False)
     db_session.add(u)
     db_session.flush()
     db_session.add(
@@ -306,9 +304,7 @@ def test_callback_registers_new_member_via_invite(client, db_session, monkeypatc
         ),
     )
     # Start via the register endpoint so the invite token lands in session.
-    r0 = client.get(
-        "/api/auth/discord/register?token=inv1", follow_redirects=False
-    )
+    r0 = client.get("/api/auth/discord/register?token=inv1", follow_redirects=False)
     state = parse_qs(urlparse(r0.headers["location"]).query)["state"][0]
 
     r = client.get(
@@ -365,9 +361,7 @@ def test_callback_invite_claims_already_profiled_account_goes_home(
             id="CLAIMED", username="claimed", global_name="Claimed"
         ),
     )
-    r0 = client.get(
-        "/api/auth/discord/register?token=inv3", follow_redirects=False
-    )
+    r0 = client.get("/api/auth/discord/register?token=inv3", follow_redirects=False)
     state = parse_qs(urlparse(r0.headers["location"]).query)["state"][0]
 
     r = client.get(
@@ -411,9 +405,7 @@ def test_failed_registration_does_not_hijack_a_later_login(
     monkeypatch.setattr(
         discord_oauth, "check_guild_membership", lambda tok, gid: "not_member"
     )
-    r0 = client.get(
-        "/api/auth/discord/register?token=inv2", follow_redirects=False
-    )
+    r0 = client.get("/api/auth/discord/register?token=inv2", follow_redirects=False)
     state0 = parse_qs(urlparse(r0.headers["location"]).query)["state"][0]
     r1 = client.get(
         f"/api/auth/discord/callback?code=abc&state={state0}",

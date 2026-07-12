@@ -27,7 +27,9 @@ def uploads_dir(tmp_path) -> Path:
 @pytest.fixture
 def setup(db_session):
     """author member (owns the job), a second unrelated member, and admin."""
-    admin = User(username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN)
+    admin = User(
+        username="admin", password_hash=hash_password("admin-pw"), role=UserRole.ADMIN
+    )
     author_user = User(password_hash=hash_password("author-pw"), role=UserRole.MEMBER)
     other_user = User(password_hash=hash_password("other-pw"), role=UserRole.MEMBER)
     db_session.add_all([admin, author_user, other_user])
@@ -138,7 +140,10 @@ def test_admin_deleting_attachment_still_needs_password(client, setup):
     client.post("/api/auth/logout")
     _login(client, "admin-pw")
     # No password -> rejected.
-    assert client.request("DELETE", f"/api/jobs/{jid}/attachments/{aid}").status_code == 422
+    assert (
+        client.request("DELETE", f"/api/jobs/{jid}/attachments/{aid}").status_code
+        == 422
+    )
     # Correct password -> deleted.
     r = client.request(
         "DELETE", f"/api/jobs/{jid}/attachments/{aid}", json={"password": "admin-pw"}

@@ -3,9 +3,7 @@ from app.models import Member, User, UserRole
 
 
 def _add_member(db, name, resume):
-    m = Member(
-        graduation_year=2024, real_name=name, institution="X", resume_md=resume
-    )
+    m = Member(graduation_year=2024, real_name=name, institution="X", resume_md=resume)
     db.add(m)
     db.flush()
     return m

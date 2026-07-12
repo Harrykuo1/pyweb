@@ -208,9 +208,7 @@ def discord_callback(
             return _oauth_error(err)
         # An invite can claim a pre-provisioned account that an admin already
         # gave a Member profile; such a user shouldn't be sent to fill one in.
-        has_profile = (
-            db.query(Member.id).filter_by(user_id=user.id).first() is not None
-        )
+        has_profile = db.query(Member.id).filter_by(user_id=user.id).first() is not None
         redirect_target = _HOME_PATH if has_profile else _REGISTER_PROFILE_PATH
     else:
         user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
@@ -296,9 +294,7 @@ def list_pending_links(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[PendingDiscordLink]:
-    return (
-        db.query(PendingDiscordLink).order_by(PendingDiscordLink.first_seen_at).all()
-    )
+    return db.query(PendingDiscordLink).order_by(PendingDiscordLink.first_seen_at).all()
 
 
 @router.post("/pending-links/{discord_id}/resolve", response_model=UserResponse)
@@ -343,9 +339,7 @@ def resolve_pending_link(
     return user
 
 
-@router.delete(
-    "/pending-links/{discord_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/pending-links/{discord_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pending_link(
     discord_id: str,
     db: Session = Depends(get_db),
@@ -353,9 +347,7 @@ def delete_pending_link(
 ) -> None:
     # Dismiss a queued Discord login without linking it. The person can log
     # in again to re-queue, so this is a low-stakes cleanup action.
-    row = (
-        db.query(PendingDiscordLink).filter_by(discord_id=discord_id).one_or_none()
-    )
+    row = db.query(PendingDiscordLink).filter_by(discord_id=discord_id).one_or_none()
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Pending link not found"
