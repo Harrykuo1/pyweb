@@ -109,10 +109,14 @@ SQLite 檔以 bind mount 落在 [data/pyweb.db](data/)，附件落在 `data/uplo
 |---|---|---|
 | `SESSION_SECRET` | 是 | 簽 session cookie，請用長亂數 |
 | `SESSION_MAX_AGE_SECONDS` | 否 | 預設 `86400`（一天） |
+| `SESSION_SECURE` | 否 | 預設 `false`。正式站走 HTTPS 時設 `true`，session cookie 才會帶 `Secure`（只透過 HTTPS 送）。純 HTTP 下開 `true` 會導致 cookie 不回送、登不進去 |
 | `CORS_ORIGINS` | 否 | 同源部署用不到；保留 sane default |
 | `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` | 是 | 首次啟動的 admin 帳號 |
 | `SEED_VIEWER_USERNAME` / `SEED_VIEWER_PASSWORD` | 是 | 首次啟動的 viewer 帳號 |
 | `ONLYOFFICE_JWT_SECRET` | 是 | backend 與 OnlyOffice 之間 JWT 簽章密鑰；`python -c "import secrets; print(secrets.token_urlsafe(32))"` 生 |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | 否 | Discord OAuth 應用憑證。留空則停用 Discord 登入（只剩密碼登入） |
+| `DISCORD_REDIRECT_URI` | 否 | OAuth callback，須為公開網址且與 Discord 應用設定**完全一致**，如 `https://<域名>/api/auth/discord/callback` |
+| `DISCORD_GUILD_ID` | 否 | 初始允許登入的 Discord 伺服器 ID；之後可在設定頁改（DB 值優先） |
 
 `UPLOADS_DIR`、`ONLYOFFICE_INTERNAL_URL`、`BACKEND_INTERNAL_URL` 由 `docker-compose.yml` 直接寫死，平常不用手動設。
 
@@ -166,16 +170,20 @@ print('alembic_version:', con.cursor().execute('SELECT version_num FROM alembic_
 
 `pytest` 跑的 in-memory DB **不**走 Alembic，直接用 `Base.metadata.create_all`（[backend/tests/conftest.py](backend/tests/conftest.py)）——測試只關心當下的 ORM 是不是正確、不需要驗 migration 序列。Migration 本身的正確性由 commit message 內手動 stamp / upgrade 的端到端驗證 + 產生環節的人工 review 把關。
 
-## 帳號（種子資料）
+## 帳號與登入
 
-由 `backend/app/init_db.py` 建立兩個固定角色：
+三種角色，兩條登入路徑：
 
-| 角色 | 權限 |
-|---|---|
-| `admin` | 增、刪、改、查；可在 `/settings` 修改兩個帳號的 username 與密碼，並調整系統限制 |
-| `viewer` | 僅查 |
+| 角色 | 登入方式 | 權限 |
+|---|---|---|
+| `admin` | 密碼 | 全部增刪改查；在 `/settings` 管理成員與帳號、發成員註冊邀請、設定 Discord 伺服器與系統限制 |
+| `member` | Discord OAuth | 瀏覽全部內容、發自己的求職／活動紀錄（進審核佇列）、編修自己的個資 |
+| `viewer` | 密碼 | 僅查（過渡期的舊唯讀帳號） |
 
-帳號的初始 username / 密碼來自 `.env`：
+- **admin / viewer** 由 `backend/app/init_db.py` 依 `.env` 的 `SEED_*` 建立，走密碼登入（登入只認密碼、不問 username，所以兩者密碼必須不同；UI 改密碼時會擋撞號）。
+- **member** 走 **Discord OAuth**：管理員在 `/settings` 產生一次性註冊邀請連結（48 小時、單次使用），新成員用該連結經 Discord 授權後建立 member 帳號並補完個資；之後每次登入都會即時重驗 Discord 伺服器成員資格（離開伺服器即失去存取）。Discord 相關設定見上方環境變數表，留空則停用 Discord 登入、只剩密碼登入。
+
+admin / viewer 的初始 username／密碼來自 `.env`：
 
 ```
 SEED_ADMIN_USERNAME=...
