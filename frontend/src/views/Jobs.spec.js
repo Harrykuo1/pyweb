@@ -42,7 +42,7 @@ const sample = [
     job_month: 5,
     company: 'Acme',
     kind: 'internship',
-    real_name: 'Alice',
+    display_name: 'Alice',
     timeline_md: null,
     experience_md: '## interview',
     created_at: '2024-05-01T00:00:00+00:00',
@@ -53,12 +53,18 @@ const sample = [
     job_month: 3,
     company: 'Globex',
     kind: 'fulltime',
-    real_name: null,
+    display_name: null,
     timeline_md: null,
     experience_md: 'x',
     created_at: '2025-03-15T00:00:00+00:00',
   },
 ]
+
+// The same rows as the backend would return them to someone allowed to edit
+// (admin, or the owning member): can_edit drives the edit/delete affordances.
+const ownedSample = sample.map((j) => ({ ...j, can_edit: true }))
+
+let pendingTeardowns = []
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -67,6 +73,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Unmount every Jobs instance a test mounted so their watchers, debounces
+  // and URL-sync timers don't accumulate and interfere with later tests.
+  for (const w of pendingTeardowns) w.unmount()
+  pendingTeardowns = []
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
@@ -75,11 +85,14 @@ async function mountPage(
   items = sample,
   total = items.length,
   role = 'viewer',
+  preview = false,
 ) {
   const auth = useAuthStore()
   auth.user = { id: 1, username: 'a', role }
+  if (preview) auth.previewAsMember = true
   const listSpy = vi.spyOn(jobsApi, 'list').mockResolvedValue({ items, total })
   const wrapper = mount(Jobs)
+  pendingTeardowns.push(wrapper)
   await flushPromises()
   return { wrapper, listSpy }
 }
@@ -140,11 +153,52 @@ describe('Jobs.vue — empty state', () => {
   it('renders the empty placeholder when no items come back', async () => {
     const { wrapper } = await mountPage([], 0)
     expect(wrapper.find('[data-test="empty-state"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('尚無符合條件的紀錄')
+    expect(wrapper.text()).toContain('尚無任何求職紀錄')
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(false)
+  })
+
+  it('shows a filter-specific empty state with a clear-filters action', async () => {
+    routeQuery.value = { q: 'no-such-job' }
+    const { wrapper } = await mountPage([], 0)
+    const empty = wrapper.find('[data-test="empty-state"]')
+    expect(empty.text()).toContain('找不到符合條件的紀錄')
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(true)
+  })
+})
+
+describe('Jobs.vue — role affordances', () => {
+  it('shows viewers a read-only hint instead of the add button', async () => {
+    const { wrapper } = await mountPage(sample, sample.length, 'viewer')
+    expect(wrapper.find('[data-test="add-job-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="viewer-readonly-hint"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('shows members the add button and no read-only hint', async () => {
+    const { wrapper } = await mountPage(sample, sample.length, 'member')
+    expect(wrapper.find('[data-test="add-job-button"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="viewer-readonly-hint"]').exists()).toBe(
+      false,
+    )
   })
 })
 
 describe('Jobs.vue — URL-driven state on first paint', () => {
+  it('restricts to accepted posts when an admin previews as a member', async () => {
+    const { listSpy } = await mountPage(sample, sample.length, 'admin', true)
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'accepted' }),
+    )
+  })
+
+  it('does not restrict status for a real admin (not previewing)', async () => {
+    const { listSpy } = await mountPage(sample, sample.length, 'admin', false)
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ status: undefined }),
+    )
+  })
+
   it('reads sort/order from route.query and uses them for the first fetch', async () => {
     routeQuery.value = { sort: 'company', order: 'asc' }
     const { listSpy, wrapper } = await mountPage()
@@ -425,7 +479,7 @@ describe('Jobs.vue — ?detail=<id> deep-link', () => {
       job_month: 5,
       company: 'Linked',
       kind: 'internship',
-      real_name: 'Eve',
+      display_name: 'Eve',
       timeline_md: null,
       experience_md: 'deep-linked',
       created_at: '2025-05-01T00:00:00+00:00',
@@ -464,7 +518,7 @@ describe('Jobs.vue — ?detail=<id> deep-link', () => {
       job_month: 5,
       company: 'Linked',
       kind: 'internship',
-      real_name: null,
+      display_name: null,
       timeline_md: null,
       experience_md: 'x',
       created_at: '2025-05-01T00:00:00+00:00',
@@ -492,7 +546,7 @@ describe('Jobs.vue — ?detail=<id> deep-link', () => {
       job_month: 5,
       company: 'Linked',
       kind: 'internship',
-      real_name: null,
+      display_name: null,
       timeline_md: null,
       experience_md: 'x',
       created_at: '2025-05-01T00:00:00+00:00',
@@ -525,12 +579,23 @@ describe('Jobs.vue — refresh button', () => {
   })
 })
 
-describe('Jobs.vue — admin delete flow', () => {
-  // Edit/delete moved off the card into JobDetailDialog's footer-extra
-  // slot (admin-only). These tests open the detail dialog first, then
-  // exercise the delete button there.
+describe('Jobs.vue — post affordances', () => {
+  it('hides the add button for viewers but shows it for members and admins', async () => {
+    const viewer = await mountPage(sample, sample.length, 'viewer')
+    expect(viewer.wrapper.find('[data-test="add-job-button"]').exists()).toBe(
+      false,
+    )
+    const member = await mountPage(sample, sample.length, 'member')
+    expect(member.wrapper.find('[data-test="add-job-button"]').exists()).toBe(
+      true,
+    )
+    const admin = await mountPage(sample, sample.length, 'admin')
+    expect(admin.wrapper.find('[data-test="add-job-button"]').exists()).toBe(
+      true,
+    )
+  })
 
-  it('hides delete button for viewers inside the detail dialog', async () => {
+  it('hides the delete button when the row is not editable', async () => {
     const { wrapper } = await mountPage(sample, sample.length, 'viewer')
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
@@ -539,8 +604,12 @@ describe('Jobs.vue — admin delete flow', () => {
     )
   })
 
-  it('shows delete button for admin inside the detail dialog', async () => {
-    const { wrapper } = await mountPage(sample, sample.length, 'admin')
+  it('shows the delete button when the row is editable (can_edit)', async () => {
+    const { wrapper } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="detail-delete-button"]').exists()).toBe(
@@ -548,11 +617,14 @@ describe('Jobs.vue — admin delete flow', () => {
     )
   })
 
-  it('calls jobsApi.remove with the entered password and refetches on success', async () => {
+  it('admin delete goes through the password dialog and refetches on success', async () => {
     const remove = vi.spyOn(jobsApi, 'remove').mockResolvedValue()
-    const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
+    const { wrapper, listSpy } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
 
-    // Open the first card's detail dialog, then click delete inside it.
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
     await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
@@ -564,7 +636,33 @@ describe('Jobs.vue — admin delete flow', () => {
     dialog.vm.$emit('confirm', 'admin-pw')
     await flushPromises()
 
-    expect(remove).toHaveBeenCalledWith(sample[0].id, 'admin-pw')
+    expect(remove).toHaveBeenCalledWith(ownedSample[0].id, 'admin-pw')
+    expect(listSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('member owner delete confirms then removes without a password', async () => {
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const remove = vi.spyOn(jobsApi, 'remove').mockResolvedValue()
+    const { wrapper, listSpy } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'member',
+    )
+
+    await wrapper.find('[data-test="record-card"]').trigger('click')
+    await flushPromises()
+    listSpy.mockClear()
+    await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
+    await flushPromises()
+
+    // Bodyless delete (no password) and no password dialog is mounted.
+    expect(remove).toHaveBeenCalledWith(ownedSample[0].id)
+    expect(
+      wrapper
+        .findComponent({ name: 'DeleteWithPasswordDialog' })
+        .props('modelValue'),
+    ).toBe(false)
     expect(listSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -572,7 +670,11 @@ describe('Jobs.vue — admin delete flow', () => {
     const remove = vi.spyOn(jobsApi, 'remove').mockRejectedValue({
       response: { status: 422 },
     })
-    const { wrapper, listSpy } = await mountPage(sample, sample.length, 'admin')
+    const { wrapper, listSpy } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
 
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
@@ -593,7 +695,11 @@ describe('Jobs.vue — admin delete flow', () => {
 describe('Jobs.vue — cache invalidation on mutation', () => {
   it('invalidates the jobs cache after a successful delete', async () => {
     vi.spyOn(jobsApi, 'remove').mockResolvedValue()
-    const { wrapper } = await mountPage(sample, sample.length, 'admin')
+    const { wrapper } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
     const invalidate = vi.spyOn(useJobsStore(), 'invalidate')
 
     await wrapper.find('[data-test="record-card"]').trigger('click')

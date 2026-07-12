@@ -16,11 +16,14 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
-import { useAuthStore } from '../../stores/auth'
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
 import TimelineDisplay from '../TimelineDisplay.vue'
+import { useAuthStore } from '../../stores/auth'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -29,14 +32,39 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'edit'])
 
-const auth = useAuthStore()
-
 const KIND_META = {
   internship: { label: '實習', cls: 'kind-internship' },
   fulltime: { label: '正職', cls: 'kind-fulltime' },
 }
 
+// Only non-accepted posts show a status pill (accepted = normal public
+// state). The owner/admin are the only ones the backend ever sends a
+// non-accepted post to.
+const STATUS_META = {
+  pending: { label: '審核中', cls: 'is-pending' },
+  rejected: { label: '已退回', cls: 'is-rejected' },
+}
+
 const tab = ref('experience')
+
+// Anonymous posts stay masked as 匿名 by default — even for an admin, whom
+// the backend does send the real name — so it can't leak while presenting.
+// The admin can reveal it per-open with an explicit click; it re-masks on
+// close so a revealed name never lingers.
+const revealName = ref(false)
+// Revealing an anonymous author is a real-admin power; hide it while an admin
+// is previewing as a member (auth.isAdmin is false then) so the preview can't
+// unmask names a member could never see.
+const canRevealAnon = computed(
+  () => !!(props.job?.is_anonymous && props.job?.display_name && auth.isAdmin),
+)
+const showRealName = computed(
+  () =>
+    !!props.job?.display_name && (!props.job?.is_anonymous || revealName.value),
+)
+const shownName = computed(() =>
+  showRealName.value ? props.job.display_name : '匿名',
+)
 
 // Bumped on every dialog open so the attachments viewer's :key
 // changes, forcing a fresh GET. Without this the lazy-rendered tab
@@ -72,6 +100,7 @@ watch(
     if (open) {
       tab.value = 'experience'
       openCounter.value += 1
+      revealName.value = false
     }
   },
 )
@@ -128,6 +157,14 @@ function formatJobYearMonth(j) {
           >
             {{ job.category }}
           </span>
+          <span
+            v-if="STATUS_META[job.status]"
+            class="status-pill"
+            :class="STATUS_META[job.status].cls"
+            :data-test="`detail-status-${job.status}`"
+          >
+            {{ STATUS_META[job.status].label }}
+          </span>
         </div>
         <h2 class="detail-company" data-test="detail-company">
           <el-icon class="company-icon" :size="18"><OfficeBuilding /></el-icon>
@@ -136,12 +173,28 @@ function formatJobYearMonth(j) {
         <div class="detail-meta">
           <span
             class="meta-name"
-            :class="{ 'is-anonymous': !job.real_name }"
-            :data-test="job.real_name ? 'detail-real-name' : 'detail-anonymous'"
+            :class="{ 'is-anonymous': !showRealName }"
+            :data-test="showRealName ? 'detail-real-name' : 'detail-anonymous'"
           >
             <el-icon :size="13"><User /></el-icon>
-            {{ job.real_name || '匿名' }}
+            {{ shownName }}
           </span>
+          <span
+            v-if="job.is_anonymous"
+            class="anon-badge"
+            data-test="detail-anon-badge"
+          >
+            🔒 對外匿名
+          </span>
+          <button
+            v-if="canRevealAnon"
+            type="button"
+            class="anon-reveal"
+            data-test="anon-reveal"
+            @click="revealName = !revealName"
+          >
+            {{ revealName ? '隱藏本名' : '顯示本名' }}
+          </button>
           <span class="meta-year">
             <el-icon :size="13"><School /></el-icon>
             {{ formatJobYearMonth(job) }} 求職
@@ -158,59 +211,73 @@ function formatJobYearMonth(j) {
       <el-empty description="無資料" />
     </div>
 
-    <el-tabs v-else v-model="tab" class="detail-tabs">
-      <el-tab-pane label="心得" name="experience">
-        <div class="md-frame" data-test="detail-experience">
-          <MdPreview
-            :model-value="job.experience_md ?? ''"
-            theme="light"
-            preview-theme="default"
-          />
-        </div>
-      </el-tab-pane>
-      <el-tab-pane v-if="hasTimeline" label="時程表" name="timeline">
-        <div class="md-frame" data-test="detail-timeline">
-          <TimelineDisplay
-            v-if="hasTimelineEvents"
-            :events="job.timeline_events"
-          />
-          <div v-else data-test="detail-timeline-legacy">
-            <p class="legacy-timeline-badge">
-              ⚠ 舊版時程表（編輯這筆紀錄即可升級為結構化時程）
-            </p>
+    <template v-else>
+      <p
+        v-if="job.status === 'rejected' && job.review_reason"
+        class="reject-banner"
+        data-test="detail-reject-reason"
+      >
+        退回原因：{{ job.review_reason }}
+      </p>
+
+      <el-tabs v-model="tab" class="detail-tabs">
+        <el-tab-pane label="心得" name="experience">
+          <div class="md-frame" data-test="detail-experience">
             <MdPreview
-              :model-value="job.timeline_md ?? ''"
+              :model-value="job.experience_md ?? ''"
               theme="light"
               preview-theme="default"
+              language="zh-TW"
+              :sanitize="sanitizeHtml"
             />
           </div>
-        </div>
-      </el-tab-pane>
-      <el-tab-pane
-        v-if="hasAttachments"
-        label="附件"
-        name="attachments"
-        lazy
-        data-test="detail-tab-attachments"
-      >
-        <div class="md-frame" data-test="detail-attachments">
-          <!-- :key forces a fresh component (and a fresh GET) every
+        </el-tab-pane>
+        <el-tab-pane v-if="hasTimeline" label="時程表" name="timeline">
+          <div class="md-frame" data-test="detail-timeline">
+            <TimelineDisplay
+              v-if="hasTimelineEvents"
+              :events="job.timeline_events"
+            />
+            <div v-else data-test="detail-timeline-legacy">
+              <p class="legacy-timeline-badge">
+                ⚠ 舊版時程表（編輯這筆紀錄即可升級為結構化時程）
+              </p>
+              <MdPreview
+                :model-value="job.timeline_md ?? ''"
+                theme="light"
+                preview-theme="default"
+                language="zh-TW"
+                :sanitize="sanitizeHtml"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane
+          v-if="hasAttachments"
+          label="附件"
+          name="attachments"
+          lazy
+          data-test="detail-tab-attachments"
+        >
+          <div class="md-frame" data-test="detail-attachments">
+            <!-- :key forces a fresh component (and a fresh GET) every
                time the dialog opens, so attachments uploaded in the
                edit form between opens appear without a manual F5. -->
-          <JobAttachmentsViewer
-            :key="`${job.id}-${openCounter}`"
-            :job-id="job.id"
-          />
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+            <JobAttachmentsViewer
+              :key="`${job.id}-${openCounter}`"
+              :job-id="job.id"
+            />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </template>
 
     <template #footer>
       <div class="footer-row">
         <slot name="footer-extra" />
         <div class="footer-spacer" />
         <el-button
-          v-if="auth.isAdmin && job"
+          v-if="job?.can_edit"
           :icon="Edit"
           plain
           data-test="detail-edit-button"
@@ -284,6 +351,35 @@ function formatJobYearMonth(j) {
   color: var(--ink-700);
 }
 
+.status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pill.is-pending {
+  background: var(--accent-warm-soft, #fef3c7);
+  color: var(--accent-warm-ink, #b45309);
+}
+
+.status-pill.is-rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.reject-banner {
+  margin: 4px 0 0;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
 .kind-dot {
   width: 6px;
   height: 6px;
@@ -327,6 +423,33 @@ function formatJobYearMonth(j) {
 .meta-name.is-anonymous {
   font-style: italic;
   color: var(--ink-400, #94a3b8);
+}
+
+.anon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--ink-500);
+}
+
+.anon-reveal {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--brand-primary);
+  text-decoration: underline;
+}
+
+.anon-reveal:hover {
+  opacity: 0.8;
 }
 
 .meta-year {

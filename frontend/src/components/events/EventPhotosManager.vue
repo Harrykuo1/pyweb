@@ -5,10 +5,15 @@ import { Delete, Plus, Star } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
   eventId: { type: Number, required: true },
 })
+
+// Admins re-authenticate with their password before deleting a photo; the
+// event's author (a non-admin managing their own event) deletes without one.
+const auth = useAuthStore()
 
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
 const MAX_PHOTOS = 30
@@ -230,6 +235,7 @@ onMounted(load)
       warning="將永久刪除這張照片，此操作無法復原。"
       :loading="deleteSubmitting"
       :error-message="deleteError"
+      :require-password="auth.isActuallyAdmin"
       @confirm="onDeleteConfirm"
     />
   </div>

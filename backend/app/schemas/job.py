@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MIN_JOB_YEAR = 2000
 
 JobKindLiteral = Literal["internship", "fulltime"]
+PostStatusLiteral = Literal["pending", "accepted", "rejected"]
 
 # Cap timeline length to keep the JSON payload sane and to avoid the
 # editor UI degrading on absurd inputs. 50 entries comfortably covers
@@ -13,6 +14,10 @@ JobKindLiteral = Literal["internship", "fulltime"]
 # needs more, that signals the schema needs more thought rather than
 # this number going up.
 TIMELINE_EVENTS_MAX = 50
+# Upper bound for free-text markdown bodies. Generous for real content
+# (largest existing post is < 1 KB) while capping a single authenticated
+# write from stuffing the ~256 MB nginx body limit into one text column.
+MARKDOWN_MAX_LENGTH = 100_000
 
 
 class TimelineEvent(BaseModel):
@@ -43,9 +48,14 @@ class JobCreate(BaseModel):
     company: str = Field(min_length=1, max_length=128)
     category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral
-    experience_md: str = Field(min_length=1)
+    experience_md: str = Field(min_length=1, max_length=MARKDOWN_MAX_LENGTH)
+    # Admin free-text author fallback (when not picking a member subject).
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
-    timeline_md: str | None = None
+    # Admin-only: the member this post is about. Ignored for members (their
+    # subject is always themselves).
+    subject_member_id: int | None = None
+    is_anonymous: bool = False
+    timeline_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     timeline_events: list[TimelineEvent] | None = Field(
         default=None, max_length=TIMELINE_EVENTS_MAX
     )
@@ -62,9 +72,14 @@ class JobUpdate(BaseModel):
     company: str | None = Field(default=None, min_length=1, max_length=128)
     category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral | None = None
-    experience_md: str | None = Field(default=None, min_length=1)
+    experience_md: str | None = Field(
+        default=None, min_length=1, max_length=MARKDOWN_MAX_LENGTH
+    )
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
-    timeline_md: str | None = None
+    # Admin-only on update; the router pops these for non-admin editors.
+    subject_member_id: int | None = None
+    is_anonymous: bool | None = None
+    timeline_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     timeline_events: list[TimelineEvent] | None = Field(
         default=None, max_length=TIMELINE_EVENTS_MAX
     )
@@ -77,6 +92,10 @@ class JobUpdate(BaseModel):
         return _validate_job_year(v)
 
 
+class RejectRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class JobResponse(BaseModel):
     id: int
     job_year: int
@@ -85,16 +104,25 @@ class JobResponse(BaseModel):
     category: str | None
     kind: JobKindLiteral
     experience_md: str
-    real_name: str | None
     timeline_md: str | None
     timeline_events: list[TimelineEvent] | None
     created_at: datetime
     # Populated by the jobs router via a per-call COUNT query, not an
     # ORM relationship — keeps the Job model decoupled from the
-    # attachments subsystem. Defaults to 0 so endpoints that don't
-    # need it (or paths where attachments are guaranteed empty, like
-    # immediately after create_job) don't have to pass it explicitly.
+    # attachments subsystem.
     attachment_count: int = 0
+    # --- author / visibility, role-filtered by app.core.job_serialize ---
+    # Public-safe display name. None => anonymous to this viewer (§8).
+    display_name: str | None = None
+    is_anonymous: bool = False
+    status: PostStatusLiteral = "accepted"
+    # Present only when the viewer may see identity (non-anonymous, or admin).
+    subject_member_id: int | None = None
+    # Admin-only: the real poster; None for everyone else.
+    author_user_id: int | None = None
+    # Admin or the post's owner only.
+    review_reason: str | None = None
+    can_edit: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

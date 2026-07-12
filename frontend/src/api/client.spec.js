@@ -42,6 +42,23 @@ describe('handleAuthResponseError', () => {
     })
   })
 
+  it('on a suspended 401 redirects to /login with error=account_suspended and no generic toast', async () => {
+    const ctx = makeContext({ routeName: 'members', fullPath: '/members' })
+    const err = {
+      response: { status: 401, data: { detail: 'Account suspended' } },
+      config: { url: '/members/1' },
+    }
+
+    await expect(handleAuthResponseError(err, ctx)).rejects.toBe(err)
+
+    expect(ctx.auth.clearLocal).toHaveBeenCalledOnce()
+    expect(ctx.message.warning).not.toHaveBeenCalled()
+    expect(ctx.router.push).toHaveBeenCalledWith({
+      path: '/login',
+      query: { error: 'account_suspended' },
+    })
+  })
+
   it('on 401 from /auth/login does NOT clear auth or redirect, so the form can show "wrong password"', async () => {
     const ctx = makeContext({ routeName: 'login', fullPath: '/login' })
     const err = { response: { status: 401 }, config: { url: '/auth/login' } }

@@ -20,7 +20,8 @@ const sample = {
   job_month: 4,
   company: 'Acme',
   kind: 'internship',
-  real_name: 'Alice',
+  display_name: 'Alice',
+  status: 'accepted',
   experience_md: '## interview content',
   timeline_md: '| date | event |\n|---|---|\n| 5/1 | apply |',
   created_at: '2025-05-01T00:00:00+00:00',
@@ -60,12 +61,81 @@ describe('JobDetailDialog — header', () => {
     expect(wrapper.text()).toContain('2025/04 求職')
   })
 
-  it('shows 匿名 styling when real_name is null', async () => {
+  it('shows 匿名 styling when display_name is null', async () => {
     const wrapper = await mountDialog({
-      job: { ...sample, real_name: null },
+      job: { ...sample, display_name: null },
     })
     expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
+  })
+
+  it('masks an anonymous post by default and reveals the real name on click', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, is_anonymous: true, display_name: 'Alice' },
+    })
+    // Masked by default even for admin: shows 匿名 and an "anonymous" badge,
+    // not the real name.
+    expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-anon-badge"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
+
+    // Admin has a reveal control; clicking it shows the real name.
+    await wrapper.find('[data-test="anon-reveal"]').trigger('click')
+    expect(wrapper.find('[data-test="detail-real-name"]').text()).toContain(
+      'Alice',
+    )
+  })
+
+  it('re-masks the name each time the dialog reopens', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, is_anonymous: true, display_name: 'Alice' },
+    })
+    await wrapper.find('[data-test="anon-reveal"]').trigger('click')
+    expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(true)
+
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    // Reopening resets to masked so an anonymous name never lingers revealed.
+    expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="detail-real-name"]').exists()).toBe(false)
+  })
+
+  it('hides the reveal control while an admin previews as a member', async () => {
+    const wrapper = await mountDialog({
+      job: { ...sample, is_anonymous: true, display_name: 'Alice' },
+    })
+    expect(wrapper.find('[data-test="anon-reveal"]').exists()).toBe(true)
+
+    useAuthStore().previewAsMember = true
+    await flushPromises()
+    expect(wrapper.find('[data-test="anon-reveal"]').exists()).toBe(false)
+  })
+
+  it('does not offer a reveal control to non-admins on anonymous posts', async () => {
+    const wrapper = await mountDialog(
+      { job: { ...sample, is_anonymous: true, display_name: null } },
+      'member',
+    )
+    expect(wrapper.find('[data-test="detail-anonymous"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="anon-reveal"]').exists()).toBe(false)
+  })
+
+  it('shows a status pill for non-accepted posts and the rejection reason', async () => {
+    const accepted = await mountDialog()
+    expect(accepted.find('[data-test="detail-status-pending"]').exists()).toBe(
+      false,
+    )
+
+    const rejected = await mountDialog({
+      job: { ...sample, status: 'rejected', review_reason: '內容不足' },
+    })
+    expect(
+      rejected.find('[data-test="detail-status-rejected"]').text(),
+    ).toContain('已退回')
+    expect(
+      rejected.find('[data-test="detail-reject-reason"]').text(),
+    ).toContain('內容不足')
   })
 
   it('themes header by kind', async () => {
@@ -168,18 +238,19 @@ describe('JobDetailDialog — markdown tabs', () => {
   })
 })
 
-describe('JobDetailDialog — admin edit button', () => {
-  it('emits edit with the current job and closes when admin clicks 編輯', async () => {
-    const wrapper = await mountDialog()
+describe('JobDetailDialog — edit button', () => {
+  it('emits edit and closes when can_edit and 編輯 is clicked', async () => {
+    const job = { ...sample, can_edit: true }
+    const wrapper = await mountDialog({ job })
     const btn = wrapper.find('[data-test="detail-edit-button"]')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
-    expect(wrapper.emitted('edit')?.[0]?.[0]).toEqual(sample)
+    expect(wrapper.emitted('edit')?.[0]?.[0]).toEqual(job)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })
 
-  it('hides the edit button for viewers', async () => {
-    const wrapper = await mountDialog({}, 'viewer')
+  it('hides the edit button when can_edit is false', async () => {
+    const wrapper = await mountDialog({ job: { ...sample, can_edit: false } })
     expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(
       false,
     )

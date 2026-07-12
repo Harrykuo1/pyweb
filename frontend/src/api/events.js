@@ -1,7 +1,14 @@
 import client from './client'
 
 export const eventsApi = {
-  async list({ sort = 'event_date', order = 'desc', year, tag, q } = {}) {
+  async list({
+    sort = 'event_date',
+    order = 'desc',
+    year,
+    tag,
+    q,
+    status,
+  } = {}) {
     // Build the query by hand so tag=[A,B] serializes as ?tag=A&tag=B
     // (FastAPI repeated-param style), matching jobsApi.list.
     const search = new URLSearchParams()
@@ -16,6 +23,7 @@ export const eventsApi = {
       search.append('tag', tag)
     }
     if (q) search.set('q', q)
+    if (status) search.set('status', status)
     const { data } = await client.get(`/events?${search.toString()}`)
     return data
   },
@@ -31,8 +39,20 @@ export const eventsApi = {
     const { data } = await client.put(`/events/${id}`, payload)
     return data
   },
+  // Admin review actions.
+  async accept(id) {
+    const { data } = await client.post(`/events/${id}/accept`)
+    return data
+  },
+  async reject(id, reason) {
+    const { data } = await client.post(`/events/${id}/reject`, { reason })
+    return data
+  },
+  // password is admin-only re-auth; an owning member deletes their own event
+  // with no body at all (a bodyless DELETE is "no password" for the owner).
   async remove(id, password) {
-    await client.delete(`/events/${id}`, { data: { password } })
+    const config = password === undefined ? undefined : { data: { password } }
+    await client.delete(`/events/${id}`, config)
   },
   async listTags(prefix) {
     const params = {}
@@ -62,9 +82,10 @@ export const eventsApi = {
     return data
   },
   async removePhoto(eventId, photoId, password) {
-    await client.delete(`/events/${eventId}/photos/${photoId}`, {
-      data: { password },
-    })
+    // Admins send their password to re-authenticate; the post author omits
+    // the body entirely so the backend takes the owner (no-password) path.
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/events/${eventId}/photos/${photoId}`, config)
   },
   // Content-addressed photo URL (bytes for an id never change), so no
   // cache-buster needed — see the backend's immutable Cache-Control.

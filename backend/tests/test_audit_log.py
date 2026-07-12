@@ -106,9 +106,20 @@ class _FakeRequest:
         self.client = client
 
 
-def test_client_ip_prefers_x_forwarded_for_first_hop():
-    req = _FakeRequest(headers={"x-forwarded-for": "1.1.1.1, 10.0.0.5"})
+def test_client_ip_uses_x_real_ip_and_ignores_forwarded_for():
+    # X-Real-IP is nginx-controlled (overwritten each hop); X-Forwarded-For's
+    # first token is client-forgeable and must not be trusted for attribution.
+    req = _FakeRequest(
+        headers={"x-real-ip": "1.1.1.1", "x-forwarded-for": "6.6.6.6, 10.0.0.5"}
+    )
     assert audit_log.client_ip(req) == "1.1.1.1"
+
+
+def test_client_ip_ignores_forwarded_for_without_real_ip():
+    # A client-supplied X-Forwarded-For alone must not be trusted — fall
+    # back to the direct peer instead of the spoofable header.
+    req = _FakeRequest(headers={"x-forwarded-for": "6.6.6.6"})
+    assert audit_log.client_ip(req) == "9.9.9.9"
 
 
 def test_client_ip_falls_back_to_request_client_host():

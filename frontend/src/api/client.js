@@ -37,13 +37,21 @@ export function handleAuthResponseError(error, { auth, router, message }) {
 
   auth.clearLocal()
 
+  // A suspended account gets 401 with this detail from get_current_user.
+  // Route straight to /login with the reason so Login.vue can explain why,
+  // instead of the generic "session expired" toast + Discord re-login dance.
+  const suspended = error?.response?.data?.detail === 'Account suspended'
   const currentRoute = router.currentRoute.value
   if (currentRoute.name !== 'login') {
-    message.warning('您的登入已失效，請重新登入')
-    router.push({
-      path: '/login',
-      query: { redirect: currentRoute.fullPath },
-    })
+    if (suspended) {
+      router.push({ path: '/login', query: { error: 'account_suspended' } })
+    } else {
+      message.warning('您的登入已失效，請重新登入')
+      router.push({
+        path: '/login',
+        query: { redirect: currentRoute.fullPath },
+      })
+    }
   }
   return Promise.reject(error)
 }

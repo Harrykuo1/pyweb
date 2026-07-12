@@ -21,6 +21,7 @@ import {
   ZoomIn,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import {
@@ -448,6 +449,8 @@ onBeforeUnmount(() => {
             v-else-if="isMarkdown(selected) && textMode === 'rendered'"
             :model-value="textContent"
             theme="light"
+            language="zh-TW"
+            :sanitize="sanitizeHtml"
             data-test="viewer-text-rendered"
           />
           <pre v-else class="text-source" data-test="viewer-text-source">{{

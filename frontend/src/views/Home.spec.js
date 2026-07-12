@@ -293,6 +293,8 @@ describe('Home.vue — timeline preview integration', () => {
     auth.user = { id: 1, username: 'alice', role: 'admin' }
     mount(Home)
     await flushPromises()
-    expect(timelineApi.list).toHaveBeenCalledWith({ limit: 20 })
+    expect(timelineApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 20 }),
+    )
   })
 })

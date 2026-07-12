@@ -78,7 +78,12 @@ export function useAccounts() {
     return out
   })
 
-  const totalCount = computed(() => accounts.value.length)
+  // Only the roles this surface actually lists (admin / viewer). Member
+  // accounts come back from listUsers but are managed in the roster, not
+  // here, so counting them would show a total that never matches the list.
+  const totalCount = computed(
+    () => accounts.value.filter((a) => ROLE_ORDER.includes(a.role)).length,
+  )
   const visibleCount = computed(() =>
     filteredGroups.value.reduce((n, g) => n + g.accounts.length, 0),
   )

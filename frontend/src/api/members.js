@@ -13,6 +13,11 @@ export const membersApi = {
     const { data } = await client.post('/members', payload)
     return data
   },
+  // Self-service: a freshly-registered member creates their own profile once.
+  async createMyProfile(payload) {
+    const { data } = await client.post('/members/me', payload)
+    return data
+  },
   async update(id, payload) {
     const { data } = await client.put(`/members/${id}`, payload)
     return data
@@ -37,8 +42,13 @@ export const membersApi = {
     })
     return data
   },
+  // password is admin-only re-auth; an owning member deletes their own photo
+  // with no body at all (the backend treats a bodyless DELETE as "no password
+  // required" for the owner). Sending {password: undefined} would serialize to
+  // an empty object and fail validation, so omit the body entirely.
   async deletePhoto(id, password) {
-    await client.delete(`/members/${id}/photo`, { data: { password } })
+    const config = password === undefined ? undefined : { data: { password } }
+    await client.delete(`/members/${id}/photo`, config)
   },
 
   // ---- resume pdf ----
@@ -54,8 +64,10 @@ export const membersApi = {
     })
     return data
   },
+  // See deletePhoto: owning members delete without a password body.
   async deleteResumePdf(id, password) {
-    await client.delete(`/members/${id}/resume.pdf`, { data: { password } })
+    const config = password === undefined ? undefined : { data: { password } }
+    await client.delete(`/members/${id}/resume.pdf`, config)
   },
 
   // ---- routing ----

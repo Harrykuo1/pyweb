@@ -120,17 +120,39 @@ describe('EventDetailDialog — gallery', () => {
 })
 
 describe('EventDetailDialog — edit', () => {
-  it('emits edit for admins', async () => {
-    const wrapper = await mountDialog()
+  it('emits edit when the event is editable (can_edit)', async () => {
+    const wrapper = await mountDialog({ event: { ...sample, can_edit: true } })
     expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(true)
     await wrapper.find('[data-test="detail-edit-button"]').trigger('click')
     expect(wrapper.emitted('edit')).toBeTruthy()
   })
 
-  it('hides the edit button for viewers', async () => {
-    const wrapper = await mountDialog({}, 'viewer')
+  it('hides the edit button when can_edit is false', async () => {
+    const wrapper = await mountDialog({ event: { ...sample, can_edit: false } })
     expect(wrapper.find('[data-test="detail-edit-button"]').exists()).toBe(
       false,
+    )
+  })
+})
+
+describe('EventDetailDialog — status + author', () => {
+  it('shows the author, a status pill and the rejection reason', async () => {
+    const wrapper = await mountDialog({
+      event: {
+        ...sample,
+        author_display_name: '王小明',
+        status: 'rejected',
+        review_reason: '照片不足',
+      },
+    })
+    expect(wrapper.find('[data-test="detail-author"]').text()).toContain(
+      '王小明',
+    )
+    expect(
+      wrapper.find('[data-test="detail-status-rejected"]').text(),
+    ).toContain('已退回')
+    expect(wrapper.find('[data-test="detail-reject-reason"]').text()).toContain(
+      '照片不足',
     )
   })
 })

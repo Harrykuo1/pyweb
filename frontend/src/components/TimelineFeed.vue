@@ -22,6 +22,9 @@ import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   // Page size for the cursor-paginated fetch. Each request asks the
@@ -60,7 +63,10 @@ async function loadInitial() {
   loading.value = true
   errored.value = false
   try {
-    const data = await timelineApi.list({ limit: props.pageSize })
+    const data = await timelineApi.list({
+      limit: props.pageSize,
+      preview: auth.isPreviewingAsMember,
+    })
     items.value = data.items ?? []
     hasMore.value = Boolean(data.has_more)
   } catch (err) {
@@ -91,6 +97,7 @@ async function loadMore() {
     const data = await timelineApi.list({
       limit: props.pageSize,
       before: cursor,
+      preview: auth.isPreviewingAsMember,
     })
     items.value = [...items.value, ...(data.items ?? [])]
     hasMore.value = Boolean(data.has_more)
@@ -149,6 +156,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(teardownObserver)
+
+// Reload from the top when the admin toggles preview-as-member so the feed
+// switches between the admin and member views.
+watch(
+  () => auth.isPreviewingAsMember,
+  () => loadInitial(),
+)
 
 // React to state that changes whether the observer should be running:
 // collapsing hides the sentinel, has_more flipping false retires it,

@@ -63,6 +63,43 @@ describe('Navbar.vue', () => {
     expect(targets).toContain('/events')
   })
 
+  it('shows the 審核 link for admins but hides it for viewers', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin' }
+    const admin = mount(Navbar, { global: { stubs } })
+    expect(admin.find('[data-test="nav-review"]').exists()).toBe(true)
+
+    auth.user = { id: 2, username: 'bob', role: 'viewer' }
+    const viewer = mount(Navbar, { global: { stubs } })
+    expect(viewer.find('[data-test="nav-review"]').exists()).toBe(false)
+  })
+
+  it('offers a 我的資料 shortcut deep-linking a member to their own card', async () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 4,
+      username: null,
+      role: 'member',
+      member_id: 7,
+      has_profile: true,
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+    const item = wrapper.find('[data-test="nav-my-profile"]')
+    expect(item.exists()).toBe(true)
+    await item.trigger('click')
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/members',
+      query: { focus: '7' },
+    })
+  })
+
+  it('hides 我的資料 for accounts without a member profile (admin/viewer)', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin', member_id: null }
+    const wrapper = mount(Navbar, { global: { stubs } })
+    expect(wrapper.find('[data-test="nav-my-profile"]').exists()).toBe(false)
+  })
+
   it('shows the username in the chip trigger for admin', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
@@ -92,6 +129,61 @@ describe('Navbar.vue', () => {
       'bob',
     )
     expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('檢視者')
+  })
+
+  it('renders a Discord member (null username) without crashing', () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 3,
+      username: null,
+      role: 'member',
+      discord_global_name: 'Harry',
+      discord_username: 'harrykuo1',
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const trigger = wrapper.find('[data-test="user-menu-trigger"]')
+    expect(trigger.exists()).toBe(true)
+    expect(trigger.text()).toContain('Harry')
+    // Avatar initial comes from the display name, not a crash on null.
+    expect(trigger.find('.user-chip__avatar').text()).toBe('H')
+    expect(wrapper.findComponent({ name: 'ElTag' }).text()).toBe('成員')
+    // Members get no admin-only affordances.
+    expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)
+  })
+
+  it('falls back to discord_username when global_name is absent', () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 4,
+      username: null,
+      role: 'member',
+      discord_global_name: null,
+      discord_username: 'handle_only',
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    expect(wrapper.find('[data-test="user-menu-trigger"]').text()).toContain(
+      'handle_only',
+    )
+  })
+
+  it('prefers the member real name over the Discord display name', () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 5,
+      username: null,
+      role: 'member',
+      member_name: '王小明',
+      discord_global_name: 'David',
+      discord_username: 'david123',
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+
+    const trigger = wrapper.find('[data-test="user-menu-trigger"]')
+    expect(trigger.text()).toContain('王小明')
+    expect(trigger.text()).not.toContain('David')
   })
 
   it('toggles the dropdown open and closed when the chip is clicked', async () => {
@@ -179,14 +271,14 @@ describe('Navbar.vue', () => {
     )
   })
 
-  it('preview-as-viewer toggle is shown for admin only', () => {
+  it('preview-as-member toggle is shown for admin only', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
     const wrapper = mount(Navbar, { global: { stubs } })
     expect(wrapper.find('[data-test="preview-toggle"]').exists()).toBe(true)
   })
 
-  it('preview-as-viewer toggle is hidden for viewer', () => {
+  it('preview-as-member toggle is hidden for viewer', () => {
     const auth = useAuthStore()
     auth.user = { id: 2, username: 'bob', role: 'viewer' }
     const wrapper = mount(Navbar, { global: { stubs } })
@@ -204,7 +296,7 @@ describe('Navbar.vue', () => {
   it('admin in preview mode shows the 預覽中 badge and a previewing chip', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
-    auth.setViewAsViewer(true)
+    auth.setPreviewAsMember(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.find('[data-test="preview-badge"]').exists()).toBe(true)
@@ -237,10 +329,10 @@ describe('Navbar.vue', () => {
     expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)
   })
 
-  it('admin previewing as viewer does not see the 設定 row', () => {
+  it('admin previewing as member does not see the 設定 row', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'admin', role: 'admin' }
-    auth.setViewAsViewer(true)
+    auth.setPreviewAsMember(true)
     const wrapper = mount(Navbar, { global: { stubs } })
 
     expect(wrapper.find('[data-test="nav-settings"]').exists()).toBe(false)

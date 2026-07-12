@@ -9,11 +9,12 @@ import {
   Edit,
   Location,
   Picture,
+  User,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
-import { useAuthStore } from '../../stores/auth'
 import { eventsApi } from '../../api/events'
 
 const props = defineProps({
@@ -23,7 +24,12 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'edit'])
 
-const auth = useAuthStore()
+// Only non-accepted events get a status pill; the owner / an admin are the
+// only ones the backend sends a non-accepted event to.
+const STATUS_META = {
+  pending: { label: '審核中', cls: 'is-pending' },
+  rejected: { label: '已退回', cls: 'is-rejected' },
+}
 
 const photos = ref([])
 const loadingPhotos = ref(false)
@@ -141,8 +147,28 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
             >#{{ t }}</span
           >
         </div>
-        <h2 class="detail-title" data-test="detail-title">{{ event.title }}</h2>
+        <div class="title-row">
+          <h2 class="detail-title" data-test="detail-title">
+            {{ event.title }}
+          </h2>
+          <span
+            v-if="STATUS_META[event.status]"
+            class="status-pill"
+            :class="STATUS_META[event.status].cls"
+            :data-test="`detail-status-${event.status}`"
+          >
+            {{ STATUS_META[event.status].label }}
+          </span>
+        </div>
         <div class="detail-meta">
+          <span
+            v-if="event.author_display_name"
+            class="meta-item"
+            data-test="detail-author"
+          >
+            <el-icon :size="14"><User /></el-icon>
+            {{ event.author_display_name }}
+          </span>
           <span class="meta-item meta-date">
             <el-icon :size="14"><Calendar /></el-icon>
             {{ formatDate(event.event_date) }}
@@ -164,6 +190,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
     </template>
 
     <div v-if="event" class="detail-body">
+      <p
+        v-if="event.status === 'rejected' && event.review_reason"
+        class="reject-banner"
+        data-test="detail-reject-reason"
+      >
+        退回原因：{{ event.review_reason }}
+      </p>
+
       <!-- Photo gallery -->
       <div v-if="loadingPhotos" class="gallery">
         <div
@@ -205,6 +239,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           :model-value="event.description_md"
           theme="light"
           preview-theme="default"
+          language="zh-TW"
+          :sanitize="sanitizeHtml"
         />
       </div>
 
@@ -223,7 +259,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <slot name="footer-extra" />
         <div class="footer-spacer" />
         <el-button
-          v-if="auth.isAdmin && event"
+          v-if="event?.can_edit"
           :icon="Edit"
           plain
           data-test="detail-edit-button"
@@ -314,12 +350,48 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   background: var(--accent-warm-soft);
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .detail-title {
   margin: 0;
   font-size: 23px;
   font-weight: 700;
   letter-spacing: -0.015em;
   color: var(--ink-900);
+}
+
+.status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pill.is-pending {
+  background: var(--accent-warm-soft, #fef3c7);
+  color: var(--accent-warm-ink, #b45309);
+}
+
+.status-pill.is-rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.reject-banner {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #b91c1c;
 }
 
 .detail-meta {

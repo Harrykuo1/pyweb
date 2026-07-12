@@ -16,19 +16,26 @@ import {
   ElDialog,
   ElForm,
   ElFormItem,
-  ElInput,
   ElMessage,
+  ElOption,
+  ElSelect,
+  ElSwitch,
   ElTabPane,
   ElTabs,
   ElTooltip,
 } from 'element-plus'
 import { FullScreen, Loading } from '@element-plus/icons-vue'
 import { MdEditor } from 'md-editor-v3'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/style.css'
 
 import { jobsApi } from '../../api/jobs'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import JobAttachmentsManager from './JobAttachmentsManager.vue'
 import TimelineEditor from '../TimelineEditor.vue'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -212,9 +219,52 @@ const form = reactive({
   job_month: CURRENT_MONTH,
   company: '',
   category: '',
-  real_name: '',
+  is_anonymous: false,
+  // Admin-only attribution in ONE field: a number is a picked roster member
+  // (subject_member_id); a string is a free-text name for a non-member
+  // (real_name); null is unattributed. Members can't attribute to others, so
+  // the backend ignores this for them. buildPayload splits it back out.
+  subject: null,
   experience_md: '',
   timeline_events: [],
+})
+
+// Member options for the admin's "post on behalf of" selector. Loaded once
+// per dialog open, and only for admins (members can't attribute to others).
+const members = ref([])
+async function loadMembers() {
+  if (!auth.isActuallyAdmin || members.value.length) return
+  try {
+    members.value = await membersApi.list()
+  } catch {
+    members.value = []
+  }
+}
+function memberLabel(m) {
+  // Disambiguate same-name members by their Discord handle (the permanent
+  // identity in this system) rather than graduation year; fall back to just
+  // the name for members without a linked handle.
+  return m.account_discord_username
+    ? `${m.real_name}（@${m.account_discord_username}）`
+    : m.real_name
+}
+
+// Options for the single "歸屬對象" select: roster members, plus — in edit
+// mode — the post's existing free-text name (a string not in the roster) so
+// the select can display it.
+const subjectOptions = computed(() => {
+  const opts = members.value.map((m) => ({
+    value: m.id,
+    label: memberLabel(m),
+  }))
+  if (
+    typeof form.subject === 'string' &&
+    form.subject.trim() &&
+    !opts.some((o) => o.value === form.subject)
+  ) {
+    opts.unshift({ value: form.subject, label: form.subject })
+  }
+  return opts
 })
 
 // Two-way bridge between the el-date-picker (Date) and the form's
@@ -260,7 +310,14 @@ function resetForm(job) {
     job_month: job?.job_month ?? CURRENT_MONTH,
     company: job?.company ?? '',
     category: job?.category ?? '',
-    real_name: job?.real_name ?? '',
+    is_anonymous: job?.is_anonymous ?? false,
+    // A member subject → its id (number); otherwise recover the free-text
+    // name from display_name (the response drops real_name itself); null when
+    // there's neither.
+    subject:
+      job?.subject_member_id != null
+        ? job.subject_member_id
+        : (job?.display_name ?? null),
     experience_md: job?.experience_md ?? '',
     // Structured editor bound to a copy so the user's edits don't
     // mutate the parent's job object until they actually save.
@@ -290,6 +347,7 @@ watch(
       // record doesn't inherit the previous session's createdJob.
       createdJob.value = null
       resetForm(props.job)
+      loadMembers()
       wireAllPreviewSync()
       openCounter.value += 1
     }
@@ -320,7 +378,6 @@ async function fetchCategorySuggestions(queryString, cb) {
 }
 
 function buildPayload() {
-  const trimmedRealName = form.real_name.trim()
   const trimmedCategory = form.category.trim()
   // Drop incomplete rows (missing date or blank event text) so the
   // backend's per-row validation never sees partial input. An entirely
@@ -340,20 +397,36 @@ function buildPayload() {
     }))
     .filter((e) => e.date !== null && e.event.length > 0)
     .sort((a, b) => a.date.localeCompare(b.date))
-  return {
+  const payload = {
     kind: form.kind,
     job_year: form.job_year,
     job_month: form.job_month,
     company: form.company.trim(),
     category: trimmedCategory === '' ? null : trimmedCategory,
     experience_md: form.experience_md.trim(),
-    real_name: trimmedRealName === '' ? null : trimmedRealName,
+    is_anonymous: form.is_anonymous,
     timeline_events: cleanedEvents,
     // Always null out the legacy markdown column when saving via the
     // structured editor — otherwise an old job's markdown would shadow
     // the freshly-entered structured timeline in the viewer fallback.
     timeline_md: null,
   }
+  // Attribution is admin-only; the backend ignores it for members (their
+  // subject is always themselves). Split the single field back out: a number
+  // is a roster member, a non-empty string is a free-text name.
+  if (auth.isActuallyAdmin) {
+    if (typeof form.subject === 'number') {
+      payload.subject_member_id = form.subject
+      payload.real_name = null
+    } else if (typeof form.subject === 'string' && form.subject.trim()) {
+      payload.subject_member_id = null
+      payload.real_name = form.subject.trim()
+    } else {
+      payload.subject_member_id = null
+      payload.real_name = null
+    }
+  }
+  return payload
 }
 
 async function handleSubmit() {
@@ -410,7 +483,14 @@ async function handleSubmit() {
       createdJob.value = created
       activeTab.value = 'attachments'
       emit('saved')
-      ElMessage.success('已新增，現在可上傳附件')
+      // Members' posts enter the review queue and aren't public yet; admins'
+      // are accepted immediately. Tell them which, so a pending post doesn't
+      // look like it silently vanished.
+      ElMessage.success(
+        created.status === 'accepted'
+          ? '已新增，現在可上傳附件'
+          : '已送出審核，通過後才會公開；你可以先上傳附件',
+      )
     }
   } catch (err) {
     toast.close()
@@ -463,18 +543,11 @@ async function handleSubmit() {
           </div>
         </el-form-item>
 
-        <el-form-item
-          label="本名（留空為匿名）"
-          prop="real_name"
-          class="form-real-name-item"
-        >
-          <el-input
-            v-model="form.real_name"
-            placeholder="可留空"
-            maxlength="64"
-            show-word-limit
-            data-test="form-real-name"
-          />
+        <el-form-item label="匿名發表" class="form-real-name-item">
+          <div class="anon-row">
+            <el-switch v-model="form.is_anonymous" data-test="form-anonymous" />
+            <span class="anon-hint">開啟後，非管理員看不到發表者姓名</span>
+          </div>
         </el-form-item>
 
         <el-form-item label="求職年月" prop="job_year">
@@ -489,6 +562,36 @@ async function handleSubmit() {
           />
         </el-form-item>
       </div>
+
+      <!-- Admin attribution on its own row: the allow-create select has a
+           variable width, so keeping it out of the inline row above stops it
+           from re-wrapping (and visually jumping) when it gains focus. -->
+      <el-form-item
+        v-if="auth.isActuallyAdmin"
+        label="歸屬對象（選填）"
+        class="form-subject-item"
+      >
+        <el-select
+          v-model="form.subject"
+          filterable
+          clearable
+          allow-create
+          default-first-option
+          placeholder="選名冊成員，或直接輸入姓名（可留空）"
+          class="form-subject-select"
+          data-test="form-subject-member"
+        >
+          <el-option
+            v-for="o in subjectOptions"
+            :key="o.value"
+            :value="o.value"
+            :label="o.label"
+          />
+        </el-select>
+        <p class="subject-hint">
+          選成員會連到其個人檔案；輸入非成員姓名則只顯示文字。
+        </p>
+      </el-form-item>
 
       <div class="form-row-inline form-company-row">
         <el-form-item label="公司" prop="company" class="form-company-item">
@@ -542,6 +645,7 @@ async function handleSubmit() {
               language="zh-TW"
               :preview="false"
               :toolbars="editorToolbars"
+              :sanitize="sanitizeHtml"
               data-test="form-experience-md"
             />
             <p v-if="!form.experience_md.trim()" class="md-required-hint">
@@ -665,6 +769,33 @@ async function handleSubmit() {
 .form-real-name-item {
   flex: 1;
   min-width: 200px;
+}
+
+.anon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.anon-hint {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.form-subject-item {
+  max-width: 460px;
+}
+
+.form-subject-select {
+  width: 100%;
+}
+
+.subject-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-500);
 }
 
 /* Equal-width 1:1 split for the company / category pair on desktop.

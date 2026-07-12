@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import Job, JobKind, User, UserRole
+from app.models import Job, JobKind, PostStatus, User, UserRole
 
 
 @pytest.fixture
@@ -50,7 +50,11 @@ def client_factory(db_session):
 
 
 def _seed(db_session, rows):
-    """rows = list of dicts; created_at offsets monotonically per index."""
+    """rows = list of dicts; created_at offsets monotonically per index.
+
+    Jobs default to ACCEPTED so a non-admin viewer can see them — the
+    visibility filter (accepted + own) otherwise hides pending posts.
+    """
     base = datetime(2025, 1, 1, tzinfo=UTC)
     for idx, row in enumerate(rows):
         db_session.add(
@@ -58,10 +62,14 @@ def _seed(db_session, rows):
                 job_year=row.get("job_year", 2025),
                 job_month=row.get("job_month", 6),
                 company=row["company"],
+                category=row.get("category"),
                 kind=row.get("kind", JobKind.INTERNSHIP),
                 experience_md=row.get("experience_md", "x"),
                 real_name=row.get("real_name"),
                 timeline_md=row.get("timeline_md"),
+                status=row.get("status", PostStatus.ACCEPTED),
+                is_anonymous=row.get("is_anonymous", False),
+                subject_member_id=row.get("subject_member_id"),
                 created_at=base.replace(day=1 + idx),
             )
         )
@@ -143,12 +151,12 @@ def test_list_sort_real_name_anonymous_sinks(client_factory, db_session):
     login_as("viewer")
 
     r_asc = client.get("/api/jobs?sort=real_name&order=asc")
-    names_asc = [x["real_name"] for x in r_asc.json()["items"]]
+    names_asc = [x["display_name"] for x in r_asc.json()["items"]]
     assert names_asc[:2] == ["Alice", "Bob"]
     assert names_asc[2:] == [None, None]
 
     r_desc = client.get("/api/jobs?sort=real_name&order=desc")
-    names_desc = [x["real_name"] for x in r_desc.json()["items"]]
+    names_desc = [x["display_name"] for x in r_desc.json()["items"]]
     assert names_desc[:2] == ["Bob", "Alice"]
     assert names_desc[2:] == [None, None]
 
@@ -299,7 +307,9 @@ def test_list_search_q_matches_real_name_and_experience(client_factory, db_sessi
             {"company": "Other", "experience_md": "system design"},
         ],
     )
-    login_as("viewer")
+    # Admin search covers real_name too; the §8 restriction (non-admins
+    # cannot search real_name) is asserted in test_jobs_visibility.py.
+    login_as("admin")
 
     r = client.get("/api/jobs?q=interview")
     companies = sorted(x["company"] for x in r.json()["items"])
@@ -315,7 +325,7 @@ def test_list_search_q_does_not_match_company_name(client_factory, db_session):
             {"company": "Other", "real_name": "Acme person", "experience_md": "x"},
         ],
     )
-    login_as("viewer")
+    login_as("admin")  # admin search includes real_name (see §8 test elsewhere)
 
     r = client.get("/api/jobs?q=Acme")
     companies = sorted(x["company"] for x in r.json()["items"])
@@ -365,7 +375,7 @@ def test_list_search_q_implicit_and_two_terms(client_factory, db_session):
             },
         ],
     )
-    login_as("viewer")
+    login_as("admin")  # admin search includes real_name (see §8 test elsewhere)
 
     r = client.get("/api/jobs?q=senior react")
     companies = sorted(x["company"] for x in r.json()["items"])
@@ -532,35 +542,14 @@ def test_companies_autocomplete_distinct(client_factory, db_session):
 
 def test_list_filter_by_category_single(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all(
+    _seed(
+        db_session,
         [
-            Job(
-                job_year=2025,
-                job_month=1,
-                company="A",
-                category="Backend",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=2,
-                company="B",
-                category="DevOps",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=3,
-                company="C",
-                category=None,
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-        ]
+            {"company": "A", "category": "Backend"},
+            {"company": "B", "category": "DevOps"},
+            {"company": "C", "category": None},
+        ],
     )
-    db_session.commit()
     login_as("viewer")
 
     r = client.get("/api/jobs?category=Backend")
@@ -570,35 +559,14 @@ def test_list_filter_by_category_single(client_factory, db_session):
 
 def test_list_filter_by_category_multi_or(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all(
+    _seed(
+        db_session,
         [
-            Job(
-                job_year=2025,
-                job_month=1,
-                company="A",
-                category="Backend",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=2,
-                company="B",
-                category="DevOps",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=3,
-                company="C",
-                category="R&D",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-        ]
+            {"company": "A", "category": "Backend"},
+            {"company": "B", "category": "DevOps"},
+            {"company": "C", "category": "R&D"},
+        ],
     )
-    db_session.commit()
     login_as("viewer")
 
     r = client.get("/api/jobs?category=Backend&category=DevOps")
@@ -608,27 +576,13 @@ def test_list_filter_by_category_multi_or(client_factory, db_session):
 
 def test_list_filter_by_category_excludes_null(client_factory, db_session):
     client, login_as = client_factory
-    db_session.add_all(
+    _seed(
+        db_session,
         [
-            Job(
-                job_year=2025,
-                job_month=1,
-                company="A",
-                category="Backend",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=2,
-                company="B",
-                category=None,
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-        ]
+            {"company": "A", "category": "Backend"},
+            {"company": "B", "category": None},
+        ],
     )
-    db_session.commit()
     login_as("viewer")
 
     r = client.get("/api/jobs?category=Backend")
@@ -638,35 +592,14 @@ def test_list_filter_by_category_excludes_null(client_factory, db_session):
 def test_list_filter_by_category_combined_with_company(client_factory, db_session):
     # Filters compose with AND across orthogonal facets.
     client, login_as = client_factory
-    db_session.add_all(
+    _seed(
+        db_session,
         [
-            Job(
-                job_year=2025,
-                job_month=1,
-                company="Acme",
-                category="Backend",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=2,
-                company="Acme",
-                category="DevOps",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-            Job(
-                job_year=2025,
-                job_month=3,
-                company="Globex",
-                category="Backend",
-                kind=JobKind.INTERNSHIP,
-                experience_md="x",
-            ),
-        ]
+            {"company": "Acme", "category": "Backend"},
+            {"company": "Acme", "category": "DevOps"},
+            {"company": "Globex", "category": "Backend"},
+        ],
     )
-    db_session.commit()
     login_as("viewer")
 
     r = client.get("/api/jobs?company=Acme&category=Backend")

@@ -21,18 +21,21 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core import office_convert
 from app.core.attachments import (
-    PREVIEW_INLINE_EXTENSIONS,
+    INLINE_CONTENT_TYPES,
     ext_of,
     is_junk,
     next_available_relpath,
     sanitize_relpath,
 )
 from app.core.config import settings
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import (
+    require_completed_member,
+    require_posting_member,
+)
 from app.core.runtime_config import get_int
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import Job, JobAttachment, User
+from app.models import Job, JobAttachment, Member, PostStatus, User, UserRole
 from app.schemas import (
     BulkDeleteRequest,
     BulkDeleteResponse,
@@ -110,6 +113,35 @@ def _get_job_or_404(db: Session, job_id: int) -> Job:
     return job
 
 
+def _require_job_editor(db: Session, job: Job, user: User) -> None:
+    # Same ownership rule as jobs.py update/delete: an admin, or the job's
+    # own subject member (the author), may manage the post's attachments.
+    if user.role is UserRole.ADMIN:
+        return
+    member_id = db.query(Member.id).filter_by(user_id=user.id).scalar()
+    if job.subject_member_id is None or job.subject_member_id != member_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not your post"
+        )
+
+
+def _require_job_readable(db: Session, job: Job, user: User) -> None:
+    # Mirror jobs.get_job visibility so attachments never outlive the post
+    # body's own gate: an admin, or anyone for an ACCEPTED post, may read.
+    # For a pending/rejected post only the subject owner may — everyone else
+    # gets the same 404 the post body returns, so a hidden/under-review
+    # submission's files (which routinely name an anonymous author) stay
+    # unreachable.
+    if user.role is UserRole.ADMIN or job.status is PostStatus.ACCEPTED:
+        return
+    member_id = db.query(Member.id).filter_by(user_id=user.id).scalar()
+    if job.subject_member_id is None or job.subject_member_id != member_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到求職紀錄",
+        )
+
+
 @router.post(
     "/{job_id}/attachments",
     response_model=JobAttachmentResponse,
@@ -122,9 +154,10 @@ async def upload_attachment(
     relative_path: Annotated[str | None, Form()] = None,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
 ) -> JobAttachmentResponse:
-    _get_job_or_404(db, job_id)
+    job = _get_job_or_404(db, job_id)
+    _require_job_editor(db, job, current_user)
 
     # Folder uploads send the in-folder relpath as a separate form
     # field — file.filename only has the basename, which would lose
@@ -290,9 +323,9 @@ def list_attachments(
     job_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_completed_member),
 ) -> list[JobAttachmentResponse]:
-    _get_job_or_404(db, job_id)
+    _require_job_readable(db, _get_job_or_404(db, job_id), current_user)
     rows = (
         db.query(JobAttachment)
         .filter_by(job_id=job_id)
@@ -308,8 +341,9 @@ def download_attachment(
     attachment_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_completed_member),
 ) -> FileResponse:
+    _require_job_readable(db, _get_job_or_404(db, job_id), current_user)
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     file_path = job_uploads_dir(uploads_root, job_id) / attachment.filename
@@ -321,17 +355,25 @@ def download_attachment(
             detail="附件檔案不存在",
         )
 
-    # Only the small preview-safe set gets Content-Disposition: inline
-    # — that's what the viewer's <embed>/<img> tags rely on. Everything
-    # else (Office sources, archives, source code, .html, .svg, ...) is
-    # served as an attachment, with nosniff to keep browsers from
-    # guessing the type and rendering it inline against our wishes.
+    # Never echo the stored (client-supplied) mime_type: derive the served
+    # Content-Type from the extension via a fixed allowlist. Only the small
+    # preview-safe set gets its canonical type + Content-Disposition: inline
+    # (the viewer's <embed>/<img> rely on it). Everything else (Office
+    # sources, archives, source code, .html, .svg, ...) is served as an
+    # application/octet-stream attachment, with nosniff, so a spoofed
+    # text/html can't ride the response into an inline-render XSS.
     ext = ext_of(attachment.filename)
-    disposition_mode = "inline" if ext in PREVIEW_INLINE_EXTENSIONS else "attachment"
+    inline_type = INLINE_CONTENT_TYPES.get(ext)
+    if inline_type is not None:
+        media_type = inline_type
+        disposition_mode = "inline"
+    else:
+        media_type = "application/octet-stream"
+        disposition_mode = "attachment"
 
     return FileResponse(
         file_path,
-        media_type=attachment.mime_type or "application/octet-stream",
+        media_type=media_type,
         headers={
             "Content-Disposition": _content_disposition(
                 attachment.filename, disposition_mode
@@ -347,8 +389,9 @@ def preview_attachment(
     attachment_id: int,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_completed_member),
 ) -> FileResponse:
+    _require_job_readable(db, _get_job_or_404(db, job_id), current_user)
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     preview_path = _preview_path(uploads_root, job_id, attachment.filename)
@@ -391,7 +434,7 @@ def bulk_download_attachments(
     payload: BulkDownloadRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_completed_member),
 ) -> Response:
     """Stream a zip of the selected attachments. Read-only — viewer
     permission is sufficient (anyone who can list/download individually
@@ -399,7 +442,7 @@ def bulk_download_attachments(
     foreign ID in the payload is silently filtered, mirroring
     bulk-delete's scoping. Missing on-disk files are skipped rather
     than 500-ing the whole batch."""
-    _get_job_or_404(db, job_id)
+    _require_job_readable(db, _get_job_or_404(db, job_id), current_user)
 
     rows = (
         db.query(JobAttachment)
@@ -451,7 +494,7 @@ def bulk_delete_attachments(
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
 ) -> BulkDeleteResponse:
     """Delete every attachment whose id appears in the body. Scoped
     to a single job so a malicious or buggy client can't spray
@@ -461,7 +504,15 @@ def bulk_delete_attachments(
     Used both by the multi-select bulk action and by "delete this
     whole folder" — the frontend expands the folder into its
     descendant file IDs before sending."""
-    _require_admin_password(payload.password, admin)
+    job = _get_job_or_404(db, job_id)
+    _require_job_editor(db, job, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if not payload.password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Password is required",
+            )
+        _require_admin_password(payload.password, current_user)
     rows = (
         db.query(JobAttachment)
         .filter(
@@ -502,12 +553,20 @@ def bulk_delete_attachments(
 def delete_attachment(
     job_id: int,
     attachment_id: int,
-    payload: PasswordConfirmRequest,
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_posting_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> Response:
-    _require_admin_password(payload.password, admin)
+    job = _get_job_or_404(db, job_id)
+    _require_job_editor(db, job, current_user)
+    if current_user.role is UserRole.ADMIN:
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Password is required",
+            )
+        _require_admin_password(payload.password, current_user)
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     job_dir = job_uploads_dir(uploads_root, job_id)

@@ -15,6 +15,8 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+
 ConfigType = Literal["int"]
 
 
@@ -58,3 +60,36 @@ def get_int(db: Session, key: str) -> int:
         raise ValueError(f"Config {key!r} is not an int field")
     row = db.query(AppConfig).filter_by(key=key).one_or_none()
     return int(row.value) if row is not None else int(field.default)
+
+
+# Admin-editable target Discord guild for OAuth membership checks. Stored
+# as a plain string row in app_configs (kept out of the int-only
+# CONFIG_FIELDS numeric-config UI); read here, edited via the dedicated
+# Discord-settings admin endpoint added in a later phase.
+DISCORD_GUILD_ID_KEY = "discord_guild_id"
+
+
+def get_str(db: Session, key: str, default: str = "") -> str:
+    """Read a string-valued runtime config row from app_configs, falling
+    back to `default` when the row is missing."""
+    from app.models import AppConfig
+
+    row = db.query(AppConfig).filter_by(key=key).one_or_none()
+    return row.value if row is not None else default
+
+
+def resolve_guild_id(db: Session) -> str:
+    """The effective guild ID: the DB value if an admin has set one,
+    otherwise the env-provided bootstrap default."""
+    return get_str(db, DISCORD_GUILD_ID_KEY) or settings.discord_guild_id
+
+
+def set_str(db: Session, key: str, value: str) -> None:
+    """Upsert a string-valued runtime config row. The caller commits."""
+    from app.models import AppConfig
+
+    row = db.query(AppConfig).filter_by(key=key).one_or_none()
+    if row is None:
+        db.add(AppConfig(key=key, value=value))
+    else:
+        row.value = value

@@ -8,26 +8,48 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Admin-only UI affordance: while true, isAdmin pretends to be false so
   // every v-if="auth.isAdmin" hides itself, letting an admin preview the
-  // viewer experience without losing real backend permissions.
-  const viewAsViewer = ref(false)
+  // member experience (all data visible, only your own card editable)
+  // without losing real backend permissions. Member is the going-forward
+  // non-admin role; the legacy viewer role is retired in a later phase.
+  const previewAsMember = ref(false)
+
+  // Set when the last session check failed because the account is suspended,
+  // so the guard can send the user to /login with a reason instead of the
+  // generic "please log in" redirect.
+  const suspended = ref(false)
 
   const isAuthenticated = computed(() => user.value !== null)
   const actualRole = computed(() => user.value?.role ?? null)
   const isActuallyAdmin = computed(() => actualRole.value === 'admin')
-  const isAdmin = computed(() => isActuallyAdmin.value && !viewAsViewer.value)
-  const isViewingAsViewer = computed(
-    () => isActuallyAdmin.value && viewAsViewer.value,
+  const isAdmin = computed(
+    () => isActuallyAdmin.value && !previewAsMember.value,
   )
+  const isPreviewingAsMember = computed(
+    () => isActuallyAdmin.value && previewAsMember.value,
+  )
+
+  // A member who hasn't completed their profile is gated out of the app
+  // until they do — mirrors the backend require_completed_member gate.
+  const needsProfile = computed(
+    () => actualRole.value === 'member' && user.value?.has_profile === false,
+  )
+
+  // The id of this account's own member card, or null. Drives the
+  // self-edit affordances on the Members page (edit / photo / resume of
+  // exactly this card, even for non-admins).
+  const myMemberId = computed(() => user.value?.member_id ?? null)
 
   async function login(password) {
     user.value = await authApi.login(password)
-    viewAsViewer.value = false
+    previewAsMember.value = false
+    suspended.value = false
   }
 
   async function logout() {
     await authApi.logout()
     user.value = null
-    viewAsViewer.value = false
+    previewAsMember.value = false
+    suspended.value = false
   }
 
   // Reset client-side auth state without touching the server. Used by the
@@ -35,7 +57,8 @@ export const useAuthStore = defineStore('auth', () => {
   // calling /auth/logout would just produce another 401.
   function clearLocal() {
     user.value = null
-    viewAsViewer.value = false
+    previewAsMember.value = false
+    suspended.value = false
   }
 
   // Used by router guard on first navigation to restore session from cookie.
@@ -43,18 +66,20 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchMe() {
     try {
       user.value = await authApi.getMe()
+      suspended.value = false
     } catch (err) {
       if (err?.response?.status === 401) {
         user.value = null
+        suspended.value = err.response?.data?.detail === 'Account suspended'
         return
       }
       throw err
     }
   }
 
-  function setViewAsViewer(flag) {
+  function setPreviewAsMember(flag) {
     if (!isActuallyAdmin.value) return
-    viewAsViewer.value = !!flag
+    previewAsMember.value = !!flag
   }
 
   async function updateUsername(role, username) {
@@ -73,17 +98,20 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user,
-    viewAsViewer,
+    previewAsMember,
+    suspended,
     isAuthenticated,
     isAdmin,
     isActuallyAdmin,
-    isViewingAsViewer,
+    isPreviewingAsMember,
+    needsProfile,
+    myMemberId,
     actualRole,
     login,
     logout,
     clearLocal,
     fetchMe,
-    setViewAsViewer,
+    setPreviewAsMember,
     updateUsername,
     updatePassword,
   }

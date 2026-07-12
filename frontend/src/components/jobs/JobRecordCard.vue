@@ -13,6 +13,14 @@ const KIND_META = {
   fulltime: { label: '正職' },
 }
 
+// Only non-accepted posts get a status pill — accepted is the normal public
+// state. The backend only ever sends a viewer their own pending/rejected
+// posts (or everything, to an admin), so showing it unconditionally is safe.
+const STATUS_META = {
+  pending: { label: '審核中', cls: 'is-pending' },
+  rejected: { label: '已退回', cls: 'is-rejected' },
+}
+
 // Marquee-on-hover for the category chip when its text overflows. Each
 // card owns its own state — a boolean plus a template ref to the chip —
 // instead of the parent tracking a Set keyed by id and reaching in with
@@ -49,8 +57,15 @@ function onLeave() {
   chip.style.removeProperty('--marquee-duration')
 }
 
-function realNameOrAnonymous(item) {
-  return item.real_name || '匿名'
+// Anonymous posts show 匿名 to everyone here — the backend still sends
+// admins the real name, but the list must never render it (it could leak
+// while presenting/streaming); the real name is revealable in the detail.
+function isMasked(item) {
+  return item.is_anonymous || !item.display_name
+}
+
+function displayNameOrAnonymous(item) {
+  return isMasked(item) ? '匿名' : item.display_name
 }
 
 function formatJobYearMonth(item) {
@@ -106,6 +121,14 @@ function formatDate(iso) {
           >{{ job.category }}</span
         >
       </span>
+      <span
+        v-if="STATUS_META[job.status]"
+        class="status-pill"
+        :class="STATUS_META[job.status].cls"
+        :data-test="`status-${job.status}`"
+      >
+        {{ STATUS_META[job.status].label }}
+      </span>
     </div>
 
     <h3 class="card-company">
@@ -114,11 +137,11 @@ function formatDate(iso) {
     </h3>
 
     <p
-      :class="['card-name', { 'is-anonymous': !job.real_name }]"
-      :data-test="job.real_name ? 'real-name' : 'anonymous'"
+      :class="['card-name', { 'is-anonymous': isMasked(job) }]"
+      :data-test="isMasked(job) ? 'anonymous' : 'real-name'"
     >
       <el-icon :size="12"><User /></el-icon>
-      {{ realNameOrAnonymous(job) }}
+      {{ displayNameOrAnonymous(job) }}
     </p>
 
     <div class="card-meta">
@@ -327,10 +350,25 @@ function formatDate(iso) {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .category-chip.is-marqueeing .category-chip-text {
-    animation: none;
-  }
+.status-pill {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pill.is-pending {
+  background: var(--accent-warm-soft, #fef3c7);
+  color: var(--accent-warm-ink, #b45309);
+}
+
+.status-pill.is-rejected {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .kind-dot {

@@ -2,50 +2,123 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { Picture, SetUp, User } from '@element-plus/icons-vue'
+import { Avatar, SetUp, User } from '@element-plus/icons-vue'
 
 import AccountSection from '../components/settings/AccountSection.vue'
 import AppearanceSection from '../components/settings/AppearanceSection.vue'
+import GuildConfigSection from '../components/settings/GuildConfigSection.vue'
+import InvitesSection from '../components/settings/InvitesSection.vue'
+import MemberRoster from '../components/settings/MemberRoster.vue'
+import PendingLinksSection from '../components/settings/PendingLinksSection.vue'
 import SettingsSidebar from '../components/settings/SettingsSidebar.vue'
+import SettingsSubTabs from '../components/settings/SettingsSubTabs.vue'
 import SystemLimitsSection from '../components/settings/SystemLimitsSection.vue'
+import { authApi } from '../api/auth'
 
-// Section registry — order here is the order shown in the sidebar.
-// Each entry advertises its key (used for URL hash + active state),
-// label, short description, and the icon component for the rail.
-const SECTIONS = [
+// Two-level navigation: the sidebar lists three top-level GROUPS; each group
+// opens a sub-tab bar of leaf sections. The leaf key is the single source of
+// truth synced to the URL hash — a hash resolves to (group, sub).
+const GROUPS = [
+  {
+    key: 'members',
+    label: '成員與帳號',
+    description: '成員名冊、邀請連結與待連結帳號',
+    icon: Avatar,
+    subs: [
+      { key: 'roles', label: '成員名冊', component: MemberRoster },
+      { key: 'invites', label: '邀請連結', component: InvitesSection },
+      { key: 'pending-links', label: '待連結', component: PendingLinksSection },
+    ],
+  },
+  {
+    key: 'site',
+    label: '網站設定',
+    description: 'Discord 群組、登入頁外觀與系統參數',
+    icon: SetUp,
+    subs: [
+      { key: 'discord', label: 'Discord 群組', component: GuildConfigSection },
+      { key: 'appearance', label: '登入頁外觀', component: AppearanceSection },
+      { key: 'system', label: '系統參數', component: SystemLimitsSection },
+    ],
+  },
   {
     key: 'account',
-    label: '帳號管理',
-    description: '管理員與檢視者帳號',
+    label: '我的帳號',
+    description: '更新使用者名稱與密碼',
     icon: User,
-  },
-  {
-    key: 'appearance',
-    label: '網站外觀',
-    description: '登入頁 Logo',
-    icon: Picture,
-  },
-  {
-    key: 'system',
-    label: '系統參數',
-    description: '附件數量與大小',
-    icon: SetUp,
+    subs: [{ key: 'account', label: '我的帳號', component: AccountSection }],
   },
 ]
 
-const VALID_KEYS = new Set(SECTIONS.map((s) => s.key))
-const DEFAULT_KEY = SECTIONS[0].key
+// Flatten to leaves, each tagged with its owning group for reverse lookup.
+const ALL_SUBS = GROUPS.flatMap((g) => g.subs.map((s) => ({ ...s, group: g })))
+const SUB_KEYS = new Set(ALL_SUBS.map((s) => s.key))
+const DEFAULT_SUB = 'roles'
 
 const route = useRoute()
 const router = useRouter()
 
 function keyFromHash(hash) {
-  if (!hash) return DEFAULT_KEY
+  if (!hash) return DEFAULT_SUB
   const stripped = hash.replace(/^#/, '')
-  return VALID_KEYS.has(stripped) ? stripped : DEFAULT_KEY
+  return SUB_KEYS.has(stripped) ? stripped : DEFAULT_SUB
 }
 
+// `active` is the leaf key (source of truth); it drives the group derivation.
 const active = ref(keyFromHash(route.hash))
+
+const activeSub = computed(
+  () => ALL_SUBS.find((s) => s.key === active.value) ?? ALL_SUBS[0],
+)
+const activeGroup = computed(() => activeSub.value.group)
+const activeComponent = computed(() => activeSub.value.component)
+
+// Bridge the sidebar (which selects a GROUP) to the leaf source of truth:
+// selecting a group lands on that group's first sub.
+const activeGroupKey = computed({
+  get: () => activeGroup.value.key,
+  set: (gk) => {
+    const group = GROUPS.find((g) => g.key === gk)
+    if (group) active.value = group.subs[0].key
+  },
+})
+
+// The roster's 產生邀請連結 button jumps to the invites sub-tab within the
+// members group. Harmless on other leaves, which never emit generate-invite.
+function goToInvites() {
+  active.value = 'invites'
+}
+
+const pendingCount = ref(0)
+
+function refreshPendingCount() {
+  authApi
+    .listPendingLinks()
+    .then((links) => {
+      pendingCount.value = links.length
+    })
+    .catch(() => {
+      pendingCount.value = 0
+    })
+}
+
+const subTabItems = computed(() =>
+  activeGroup.value.subs.map((s) => ({
+    key: s.key,
+    label: s.label,
+    badge: s.key === 'pending-links' ? pendingCount.value : undefined,
+  })),
+)
+
+// Refresh the badge on mount and whenever the members group is (re-)entered,
+// including sub switches within it. Never read it from the unmounted section.
+watch(
+  active,
+  () => {
+    if (activeGroup.value.key === 'members') refreshPendingCount()
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   // If the URL has no hash (or an unknown one), normalize it so deep-links
@@ -67,10 +140,6 @@ watch(active, (next) => {
     router.replace({ hash: `#${next}` })
   }
 })
-
-const activeSection = computed(
-  () => SECTIONS.find((s) => s.key === active.value) ?? SECTIONS[0],
-)
 </script>
 
 <template>
@@ -84,30 +153,37 @@ const activeSection = computed(
     </header>
 
     <div class="settings-page__body">
-      <SettingsSidebar v-model="active" :items="SECTIONS" />
+      <SettingsSidebar v-model="activeGroupKey" :items="GROUPS" />
 
       <main
         class="settings-page__content"
-        :data-test="`settings-active-${active}`"
+        :data-test="`settings-active-${activeGroup.key}`"
       >
         <header class="settings-section__header">
           <span class="settings-section__icon" aria-hidden="true">
             <el-icon :size="22">
-              <component :is="activeSection.icon" />
+              <component :is="activeGroup.icon" />
             </el-icon>
           </span>
           <div class="settings-section__heading">
-            <h2>{{ activeSection.label }}</h2>
-            <p v-if="activeSection.description">
-              {{ activeSection.description }}
+            <h2>{{ activeGroup.label }}</h2>
+            <p v-if="activeGroup.description">
+              {{ activeGroup.description }}
             </p>
           </div>
         </header>
 
-        <div class="settings-section__body">
-          <AccountSection v-if="active === 'account'" />
-          <AppearanceSection v-else-if="active === 'appearance'" />
-          <SystemLimitsSection v-else-if="active === 'system'" />
+        <SettingsSubTabs
+          v-if="activeGroup.subs.length > 1"
+          v-model="active"
+          :items="subTabItems"
+        />
+
+        <div
+          class="settings-section__body"
+          :data-test="`settings-active-sub-${active}`"
+        >
+          <component :is="activeComponent" @generate-invite="goToInvites" />
         </div>
       </main>
     </div>
@@ -116,7 +192,9 @@ const activeSection = computed(
 
 <style scoped>
 .settings-page {
-  max-width: 1080px;
+  /* Wide enough that the member roster's table fits without a horizontal
+     scroll at desktop widths; the sidebar takes 240 of it. */
+  max-width: 1240px;
   margin: 0 auto;
 }
 

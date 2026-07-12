@@ -1,6 +1,13 @@
 from app.schemas.auth import (
+    ActiveUpdateRequest,
+    GuildConfigResponse,
+    GuildConfigUpdate,
     LoginRequest,
     PasswordConfirmRequest,
+    PendingLinkResponse,
+    RegistrationInviteResponse,
+    ResolvePendingLinkRequest,
+    RoleUpdateRequest,
     UpdatePasswordRequest,
     UpdateUsernameRequest,
     UserResponse,
@@ -17,6 +24,7 @@ from app.schemas.job import (
     JobResponse,
     JobUpdate,
     ListResponse,
+    RejectRequest,
 )
 from app.schemas.job_attachment import (
     BulkDeleteRequest,
@@ -24,7 +32,12 @@ from app.schemas.job_attachment import (
     BulkDownloadRequest,
     JobAttachmentResponse,
 )
-from app.schemas.member import MemberCreate, MemberResponse, MemberUpdate
+from app.schemas.member import (
+    MemberCreate,
+    MemberResponse,
+    MemberSelfCreate,
+    MemberUpdate,
+)
 from app.schemas.setting import (
     ConfigFieldResponse,
     ConfigResponse,
@@ -39,6 +52,7 @@ from app.schemas.timeline import (
 )
 
 __all__ = [
+    "ActiveUpdateRequest",
     "BulkDeleteRequest",
     "BulkDeleteResponse",
     "BulkDownloadRequest",
@@ -50,6 +64,8 @@ __all__ = [
     "EventPhotoResponse",
     "EventResponse",
     "EventUpdate",
+    "GuildConfigResponse",
+    "GuildConfigUpdate",
     "JobAttachmentResponse",
     "JobCreate",
     "JobCreatedItem",
@@ -60,8 +76,14 @@ __all__ = [
     "MemberCreate",
     "MemberJoinedItem",
     "MemberResponse",
+    "MemberSelfCreate",
     "MemberUpdate",
     "PasswordConfirmRequest",
+    "PendingLinkResponse",
+    "RejectRequest",
+    "RegistrationInviteResponse",
+    "ResolvePendingLinkRequest",
+    "RoleUpdateRequest",
     "StatsResponse",
     "TimelineItem",
     "TimelineResponse",

@@ -23,3 +23,12 @@ def test_hash_is_salted_so_same_input_yields_different_output():
     assert a != b
     assert verify_password("same", a)
     assert verify_password("same", b)
+
+
+def test_verify_returns_false_for_null_or_malformed_hash():
+    # Login scans every user's hash; a NULL (Discord-only account) or a
+    # corrupted non-bcrypt value must return False, never raise, so one bad
+    # row can't 500 the whole login endpoint.
+    assert verify_password("anything", None) is False
+    assert verify_password("anything", "") is False
+    assert verify_password("anything", "not-a-bcrypt-hash") is False

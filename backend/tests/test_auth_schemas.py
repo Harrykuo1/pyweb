@@ -34,7 +34,15 @@ def test_login_request_ignores_unrelated_fields():
 
 
 def test_user_response_from_orm_object():
-    u = User(id=42, username="admin", password_hash="hash", role=UserRole.ADMIN)
+    # A transient (un-flushed) ORM object leaves server_default columns as
+    # None, so set is_active explicitly; queried users always carry a real bool.
+    u = User(
+        id=42,
+        username="admin",
+        password_hash="hash",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
     resp = UserResponse.model_validate(u)
     assert resp.id == 42
     assert resp.username == "admin"
@@ -42,10 +50,26 @@ def test_user_response_from_orm_object():
 
 
 def test_user_response_excludes_password_hash():
-    u = User(id=1, username="x", password_hash="secret-hash", role=UserRole.VIEWER)
+    u = User(
+        id=1,
+        username="x",
+        password_hash="secret-hash",
+        role=UserRole.VIEWER,
+        is_active=True,
+    )
     dumped = UserResponse.model_validate(u).model_dump()
     assert "password_hash" not in dumped
-    assert dumped == {"id": 1, "username": "x", "role": UserRole.VIEWER}
+    assert dumped == {
+        "id": 1,
+        "username": "x",
+        "role": UserRole.VIEWER,
+        "discord_username": None,
+        "discord_global_name": None,
+        "has_profile": False,
+        "member_id": None,
+        "member_name": None,
+        "is_active": True,
+    }
 
 
 def test_update_username_request_accepts_valid_name():

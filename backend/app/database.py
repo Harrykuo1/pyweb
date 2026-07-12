@@ -22,6 +22,11 @@ def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
     so the conversion only happens once. synchronous=NORMAL is the
     WAL-safe sweet spot — full fsync per commit isn't needed.
 
+    busy_timeout makes a connection wait (up to 5s) for a competing writer
+    to finish instead of failing instantly with SQLITE_BUSY ("database is
+    locked") — WAL still serializes writers, so under concurrent posting
+    this is what keeps writes from erroring out.
+
     Skips :memory: databases — WAL has no meaning without a file."""
     cursor = dbapi_connection.cursor()
     try:
@@ -33,6 +38,7 @@ def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
         if path:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
         cursor.execute("PRAGMA foreign_keys=ON")
     finally:
         cursor.close()

@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import MemberFormDialog from './MemberFormDialog.vue'
 
 vi.mock('element-plus', async (importOriginal) => {
@@ -149,6 +150,239 @@ describe('MemberFormDialog', () => {
     expect(create.mock.calls[0][0].position).toBe('Backend Engineer')
   })
 
+  it('create as admin sends discord_username when filled', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const create = vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'institution', 'SWE')
+    await wrapper
+      .find('[data-test="form-discord-username"]')
+      .setValue('alice.h')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ discord_username: 'alice.h' }),
+    )
+  })
+
+  it('create as admin omits discord_username when blank', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const create = vi.spyOn(membersApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'institution', 'SWE')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0].discord_username).toBeUndefined()
+  })
+
+  it('surfaces a specific message when create returns 409 (already registered)', async () => {
+    const { ElMessage } = await import('element-plus')
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    vi.spyOn(membersApi, 'create').mockRejectedValue(
+      Object.assign(new Error('409'), { response: { status: 409 } }),
+    )
+    const wrapper = await mountDialog()
+
+    setVmValue(wrapper, 'real_name', 'Alice')
+    setVmValue(wrapper, 'institution', 'SWE')
+    await wrapper
+      .find('[data-test="form-discord-username"]')
+      .setValue('alice.h')
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith(
+      '此 Discord 使用者已註冊，不需重複建檔',
+    )
+  })
+
+  it('does not render the Discord username input in edit mode', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+      },
+    })
+
+    expect(wrapper.find('[data-test="form-discord-username"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('admin editing a pending member sees the Discord input prefilled', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'pending',
+        account_discord_username: 'eve.pending',
+      },
+    })
+
+    const input = wrapper.find('[data-test="form-discord-username"]')
+    expect(input.exists()).toBe(true)
+    expect(input.element.value).toBe('eve.pending')
+  })
+
+  it('admin editing a claimed member does not see the Discord input', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'claimed',
+        account_discord_username: 'eve',
+      },
+    })
+
+    expect(wrapper.find('[data-test="form-discord-username"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('editing an unrelated field on a pending member keeps the prefilled handle (no wipe)', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'pending',
+        account_discord_username: 'coolhandle',
+      },
+    })
+
+    // Prefilled from the pending handle, not empty.
+    expect(
+      wrapper.find('[data-test="form-discord-username"]').element.value,
+    ).toBe('coolhandle')
+
+    // Touch only real_name and save: the discord field must round-trip the
+    // prefilled value, never an empty string that would wipe the pending handle.
+    setVmValue(wrapper, 'real_name', 'Eve Renamed')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({
+        real_name: 'Eve Renamed',
+        discord_username: 'coolhandle',
+      }),
+    )
+  })
+
+  it('editing a pending member includes discord_username in the update payload', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
+    const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+        account_status: 'pending',
+        account_discord_username: 'old',
+      },
+    })
+
+    await wrapper
+      .find('[data-test="form-discord-username"]')
+      .setValue('corrected.handle')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ discord_username: 'corrected.handle' }),
+    )
+  })
+
+  it('refreshes the auth session after editing your own profile', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 7, username: null, role: 'member', member_id: 9 }
+    const fetchMe = vi.spyOn(auth, 'fetchMe').mockResolvedValue()
+    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+      },
+    })
+
+    setVmValue(wrapper, 'real_name', 'Eve Renamed')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMe).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not refresh the auth session when editing someone else', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin', member_id: 3 }
+    const fetchMe = vi.spyOn(auth, 'fetchMe').mockResolvedValue()
+    vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 9 })
+    const wrapper = await mountDialog({
+      member: {
+        id: 9,
+        graduation_year: 2024,
+        real_name: 'Eve',
+        institution: 'NYCU',
+        resume_md: null,
+        joined_at: null,
+      },
+    })
+
+    setVmValue(wrapper, 'real_name', 'Eve Renamed')
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(fetchMe).not.toHaveBeenCalled()
+  })
+
   it('edit flow calls membersApi.update with the member id', async () => {
     const update = vi.spyOn(membersApi, 'update').mockResolvedValue({ id: 7 })
     const wrapper = await mountDialog({
@@ -286,6 +520,10 @@ describe('MemberFormDialog', () => {
   })
 
   it('handleDeletePdf on 422 keeps dialog open and surfaces 密碼錯誤', async () => {
+    // Admin path: askDeletePdf opens the password dialog, and a 422 leaves it
+    // open with the error message.
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'a', role: 'admin' }
     vi.spyOn(membersApi, 'deleteResumePdf').mockRejectedValue(
       Object.assign(new Error('422'), { response: { status: 422 } }),
     )
@@ -309,6 +547,32 @@ describe('MemberFormDialog', () => {
     expect(wrapper.vm.pdfDeleteError).toBe('密碼錯誤')
     expect(wrapper.vm.pdfDeleteDialogOpen).toBe(true)
     expect(wrapper.vm.pdfDeletedThisSession).toBe(false)
+  })
+
+  it('member removing own PDF confirms then deletes without a password', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 5, username: null, role: 'member', member_id: 7 }
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
+
+    const wrapper = await mountDialog({
+      member: {
+        id: 7,
+        graduation_year: 2020,
+        real_name: 'Old',
+        institution: 'Old',
+        resume_md: null,
+        has_resume_pdf: true,
+      },
+    })
+    await wrapper.vm.askDeletePdf()
+    await flushPromises()
+
+    // No password dialog; deleted with a bodyless request.
+    expect(wrapper.vm.pdfDeleteDialogOpen).toBe(false)
+    expect(del).toHaveBeenCalledWith(7, undefined)
+    expect(wrapper.vm.pdfDeletedThisSession).toBe(true)
   })
 
   it('handlePdfChange rejects oversized files without setting state', async () => {

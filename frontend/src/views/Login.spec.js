@@ -35,6 +35,45 @@ async function submitWithPassword(wrapper, password) {
 }
 
 describe('Login.vue', () => {
+  it('shows a verifying label and please-wait hint while login is pending', async () => {
+    const auth = useAuthStore()
+    let resolveLogin
+    vi.spyOn(auth, 'login').mockImplementation(
+      () => new Promise((r) => (resolveLogin = r)),
+    )
+
+    const wrapper = mount(Login)
+    const inputs = wrapper.findAll('input')
+    await inputs[0].setValue('pw')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    // Password verification can take a few seconds; the button must not look
+    // frozen — its label switches and a reassuring hint appears.
+    expect(wrapper.find('[data-test="login-pending-hint"]').exists()).toBe(true)
+    expect(wrapper.find('.submit-button').text()).toContain('驗證中')
+
+    resolveLogin()
+    await flushPromises()
+    expect(wrapper.find('[data-test="login-pending-hint"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('shows the suspension message when password login returns 403 Account suspended', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'login').mockRejectedValue(
+      Object.assign(new Error('403'), {
+        response: { status: 403, data: { detail: 'Account suspended' } },
+      }),
+    )
+
+    const wrapper = mount(Login)
+    await submitWithPassword(wrapper, 'pw')
+
+    expect(wrapper.find('[data-test="error"]').text()).toContain('停權')
+  })
+
   it('successful login pushes to / by default', async () => {
     const auth = useAuthStore()
     const loginSpy = vi.spyOn(auth, 'login').mockResolvedValue()

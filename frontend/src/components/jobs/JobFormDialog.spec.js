@@ -3,6 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { jobsApi } from '../../api/jobs'
+import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
 import JobFormDialog from './JobFormDialog.vue'
 
 // MdEditor is heavy and brings in CSS / DOM measurement; stub it to a
@@ -42,6 +44,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(jobsApi, 'listCompanies').mockResolvedValue([])
   vi.spyOn(jobsApi, 'listCategories').mockResolvedValue([])
+  vi.spyOn(membersApi, 'list').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -49,7 +52,9 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-async function mountDialog(props = {}) {
+async function mountDialog(props = {}, role = 'admin') {
+  const auth = useAuthStore()
+  auth.user = { id: 1, username: 'a', role }
   const wrapper = mount(JobFormDialog, {
     props: { modelValue: true, job: null, ...props },
   })
@@ -107,7 +112,7 @@ describe('JobFormDialog — edit mode', () => {
         job_year: 2023,
         job_month: 8,
         company: 'Acme',
-        real_name: 'Alice',
+        display_name: 'Alice',
         experience_md: '## interview',
         timeline_md: '| d | e |',
       },
@@ -142,6 +147,8 @@ describe('JobFormDialog — submit', () => {
       kind: 'internship',
       company: 'Acme',
       experience_md: '## interview',
+      is_anonymous: false,
+      subject_member_id: null,
       real_name: null,
       // The structured editor is the only timeline surface now; saving
       // always nulls out the legacy markdown column so it can't shadow
@@ -155,6 +162,36 @@ describe('JobFormDialog — submit', () => {
     expect(payload.job_month).toBeLessThanOrEqual(12)
   })
 
+  it('tells the author a pending post is awaiting review, not silently gone', async () => {
+    const { ElMessage } = await import('element-plus')
+    ElMessage.success.mockClear()
+    vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1, status: 'pending' })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), 'x')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      expect.stringContaining('審核'),
+    )
+  })
+
+  it('tells an admin an accepted post is live', async () => {
+    const { ElMessage } = await import('element-plus')
+    ElMessage.success.mockClear()
+    vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1, status: 'accepted' })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), 'x')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      expect.stringContaining('已新增'),
+    )
+  })
+
   it('PUTs to jobsApi.update on save in edit mode', async () => {
     const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
     const wrapper = await mountDialog({
@@ -164,7 +201,7 @@ describe('JobFormDialog — submit', () => {
         job_year: 2024,
         job_month: 5,
         company: 'Acme',
-        real_name: 'Alice',
+        display_name: 'Alice',
         experience_md: '## interview',
         timeline_md: null,
       },
@@ -185,7 +222,10 @@ describe('JobFormDialog — submit', () => {
         kind: 'internship',
         company: 'Acme',
         experience_md: '## updated',
+        // display_name recovered into the free-text real_name (no subject).
         real_name: 'Alice',
+        is_anonymous: false,
+        subject_member_id: null,
       }),
     )
   })
@@ -301,7 +341,7 @@ describe('JobFormDialog — submit', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('treats blank real_name as null and empty timeline as [] in the payload', async () => {
+  it('leaves attribution null when nothing is picked, and timeline []', async () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
 
@@ -310,17 +350,102 @@ describe('JobFormDialog — submit', () => {
       findMdEditorByDataTest(wrapper, 'form-experience-md'),
       '## x',
     )
-    // real_name has a placeholder of "可留空"
-    setNativeValue(findInputByDataTest(wrapper, 'form-real-name'), '   ')
     await flushPromises()
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
     const payload = create.mock.calls[0][0]
+    expect(payload.subject_member_id).toBeNull()
     expect(payload.real_name).toBeNull()
     expect(payload.timeline_md).toBeNull()
     expect(payload.timeline_events).toEqual([])
+  })
+
+  it('sends a typed free-text name in the 歸屬 field as real_name', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
+    // allow-create yields a string value for a typed, non-roster name.
+    wrapper
+      .getComponent('[data-test="form-subject-member"]')
+      .vm.$emit('update:modelValue', '外部講者小明')
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = create.mock.calls[0][0]
+    expect(payload.real_name).toBe('外部講者小明')
+    expect(payload.subject_member_id).toBeNull()
+  })
+
+  it('sends a picked roster member in the 歸屬 field as subject_member_id', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
+    // A picked member option carries the member id (a number).
+    wrapper
+      .getComponent('[data-test="form-subject-member"]')
+      .vm.$emit('update:modelValue', 7)
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = create.mock.calls[0][0]
+    expect(payload.subject_member_id).toBe(7)
+    expect(payload.real_name).toBeNull()
+  })
+
+  it('sends is_anonymous true when the toggle is on', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
+    wrapper
+      .findComponent({ name: 'ElSwitch' })
+      .vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+    expect(create.mock.calls[0][0].is_anonymous).toBe(true)
+  })
+
+  it('member context hides admin attribution and omits subject/real_name', async () => {
+    const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
+    const wrapper = await mountDialog({}, 'member')
+
+    // The whole admin attribution field is hidden for members.
+    expect(wrapper.find('[data-test="form-subject-member"]').exists()).toBe(
+      false,
+    )
+
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    const payload = create.mock.calls[0][0]
+    expect(payload.is_anonymous).toBe(false)
+    expect(payload).not.toHaveProperty('subject_member_id')
+    expect(payload).not.toHaveProperty('real_name')
   })
 
   it('round-trips timeline_events through edit mode unchanged when not modified', async () => {

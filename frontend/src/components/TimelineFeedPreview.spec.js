@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 import TimelineFeedPreview from './TimelineFeedPreview.vue'
 import { timelineApi } from '../api/timeline'
@@ -13,6 +14,7 @@ vi.mock('vue-router', () => ({
 const ONE_HOUR_AGO = '2026-05-05T11:00:00Z'
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   pushMock.mockClear()
 })
 
@@ -53,7 +55,7 @@ describe('TimelineFeedPreview.vue', () => {
     const spy = vi.spyOn(timelineApi, 'list').mockResolvedValue({ items: [] })
     mount(TimelineFeedPreview, { props: { limit: 4 } })
     await flushPromises()
-    expect(spy).toHaveBeenCalledWith({ limit: 4 })
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ limit: 4 }))
   })
 
   it('renders a member_joined row with the name and verb', async () => {

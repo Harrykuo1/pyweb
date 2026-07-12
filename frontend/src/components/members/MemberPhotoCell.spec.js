@@ -77,26 +77,25 @@ describe('MemberPhotoCell', () => {
     expect(wrapper.findComponent({ name: 'ElAvatar' }).exists()).toBe(true)
   })
 
-  it('viewer sees no admin actions', () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'v', role: 'viewer' }
+  it('hides the actions when canManage is false (viewer / other cards)', () => {
     const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithPhoto },
+      props: { member: memberWithPhoto, canManage: false },
     })
 
     expect(wrapper.find('[data-test="upload-photo"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="delete-photo"]').exists()).toBe(false)
   })
 
-  it('admin sees upload control whether or not photo exists', () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'a', role: 'admin' }
-
-    const w1 = mount(MemberPhotoCell, { props: { member: memberWithoutPhoto } })
+  it('shows upload control whether or not a photo exists when canManage', () => {
+    const w1 = mount(MemberPhotoCell, {
+      props: { member: memberWithoutPhoto, canManage: true },
+    })
     expect(w1.find('[data-test="upload-photo"]').exists()).toBe(true)
     expect(w1.find('[data-test="delete-photo"]').exists()).toBe(false)
 
-    const w2 = mount(MemberPhotoCell, { props: { member: memberWithPhoto } })
+    const w2 = mount(MemberPhotoCell, {
+      props: { member: memberWithPhoto, canManage: true },
+    })
     expect(w2.find('[data-test="upload-photo"]').exists()).toBe(true)
     expect(w2.find('[data-test="delete-photo"]').exists()).toBe(true)
   })
@@ -106,7 +105,7 @@ describe('MemberPhotoCell', () => {
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
     const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithoutPhoto },
+      props: { member: memberWithoutPhoto, canManage: true },
     })
     const file = makeFile()
 
@@ -129,7 +128,7 @@ describe('MemberPhotoCell', () => {
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
     const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithoutPhoto },
+      props: { member: memberWithoutPhoto, canManage: true },
     })
     const huge = makeFile({ size: 5 * 1024 * 1024 + 1 })
 
@@ -146,7 +145,7 @@ describe('MemberPhotoCell', () => {
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
     const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithoutPhoto },
+      props: { member: memberWithoutPhoto, canManage: true },
     })
     const gif = makeFile({ type: 'image/gif', name: 'a.gif' })
 
@@ -163,7 +162,7 @@ describe('MemberPhotoCell', () => {
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
     const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithPhoto },
+      props: { member: memberWithPhoto, canManage: true },
     })
     await wrapper.find('[data-test="delete-photo"]').trigger('click')
 
@@ -178,7 +177,7 @@ describe('MemberPhotoCell', () => {
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
     const wrapper = mount(MemberPhotoCell, {
-      props: { member: memberWithPhoto, uploading: true },
+      props: { member: memberWithPhoto, uploading: true, canManage: true },
     })
 
     expect(wrapper.find('[data-test="photo-uploading"]').exists()).toBe(true)

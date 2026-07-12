@@ -6,18 +6,17 @@ import {
   ElIcon,
   ElInput,
   ElMessage,
+  ElMessageBox,
   ElTable,
   ElTableColumn,
   ElTooltip,
 } from 'element-plus'
 import {
   Calendar,
-  Delete,
   Document,
   Edit,
   Grid,
   Menu,
-  Plus,
   Refresh,
   School,
   Search,
@@ -36,7 +35,6 @@ import { membersApi } from '../api/members'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
 import { useDeepLinkFocus } from '../composables/useDeepLinkFocus'
-import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
 import { useMediaQuery } from '../composables/useMediaQuery'
 import { useMemberFiltering } from '../composables/useMemberFiltering'
 import { useMemberPhoto } from '../composables/useMemberPhoto'
@@ -52,6 +50,10 @@ const { members, loading } = storeToRefs(membersStore)
 
 const dialogOpen = ref(false)
 const editingMember = ref(null)
+
+// Which card is hovered — drives the institution/position marquee so long
+// text only scrolls while the pointer is over that card.
+const hoveredMemberId = ref(null)
 
 const resumeOpen = ref(false)
 const resumeMember = ref(null)
@@ -78,6 +80,14 @@ const SORT_OPTIONS = [
   { key: 'real_name', label: '本名' },
   { key: 'institution', label: '學校／公司' },
 ]
+// Suspended members are hidden from EVERYONE on the public directory,
+// admins included — account lifecycle now lives in the Settings hub.
+// Pending members still show here (no badge). Feed the filtered list into
+// the search/sort helpers so both grid and table respect it.
+const visibleMembers = computed(() =>
+  members.value.filter((m) => m.account_status !== 'suspended'),
+)
+
 // Client-side filtering + sorting (grid uses sortedMembers; the el-table
 // list sorts itself off filteredMembers via the helpers below).
 const {
@@ -89,7 +99,7 @@ const {
   sortedMembers,
   memberCount,
   filteredCount,
-} = useMemberFiltering(members)
+} = useMemberFiltering(visibleMembers)
 
 // Sort orders are restricted to two states so a click cycles asc → desc →
 // asc instead of the el-table default asc → desc → none.
@@ -115,14 +125,41 @@ function reloadFresh() {
   return loadMembers()
 }
 
-function openCreate() {
-  editingMember.value = null
-  dialogOpen.value = true
-}
-
 function openEdit(member) {
   editingMember.value = { ...member }
   dialogOpen.value = true
+}
+
+// A card is self-editable by an admin (any card) or by the member who owns
+// it (their own card only).
+function canEdit(member) {
+  if (auth.isAdmin) return true
+  return auth.myMemberId != null && member?.id === auth.myMemberId
+}
+
+// Photo removal: admins re-authenticate via the password dialog; an owning
+// member just confirms (no password) and deletes directly.
+async function requestPhotoDelete(member) {
+  if (auth.isActuallyAdmin) {
+    onPhotoDeleteRequest(member)
+    return
+  }
+  try {
+    await ElMessageBox.confirm('將移除你的大頭照，確定嗎？', '移除照片', {
+      type: 'warning',
+      confirmButtonText: '移除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return // user cancelled
+  }
+  try {
+    await membersApi.deletePhoto(member.id)
+    ElMessage.success('已移除照片')
+    reloadFresh()
+  } catch {
+    ElMessage.error('移除失敗，請稍後再試')
+  }
 }
 
 // Photo crop+upload and password-confirmed remove. Single dialogs are
@@ -143,25 +180,6 @@ const {
   onDeleteRequest: onPhotoDeleteRequest,
   onDeleteConfirm: onPhotoDeleteConfirm,
 } = useMemberPhoto({ onChanged: () => reloadFresh() })
-
-// ---------- Delete *member* with admin-password confirmation ----------
-// Member delete (password-confirmed, shared with Jobs/Events). The
-// original had no specific 404 copy, so keep 404 on the generic fallback.
-const {
-  dialogOpen: deleteDialogOpen,
-  target: deleteTarget,
-  submitting: deleteSubmitting,
-  error: deleteError,
-  open: askDeleteMember,
-  confirm: handleDeleteConfirm,
-} = useDeleteWithPassword({
-  remove: (member, password) => membersApi.remove(member.id, password),
-  messages: { 404: '刪除失敗，請稍後再試' },
-  onSuccess: (member) => {
-    ElMessage.success(`已刪除「${member.real_name}」`)
-    reloadFresh()
-  },
-})
 
 function viewResume(member) {
   resumeMember.value = member
@@ -292,15 +310,6 @@ onMounted(() => {
         >
           重新整理
         </el-button>
-        <el-button
-          v-if="auth.isAdmin"
-          type="primary"
-          :icon="Plus"
-          data-test="add-member-button"
-          @click="openCreate"
-        >
-          新增成員
-        </el-button>
       </div>
     </header>
 
@@ -348,22 +357,31 @@ onMounted(() => {
           :key="m.id"
           :class="['member-card', `member-anchor-${m.id}`]"
           data-test="member-card"
+          @mouseenter="hoveredMemberId = m.id"
+          @mouseleave="hoveredMemberId = null"
         >
           <MemberPhotoCell
             :member="m"
             variant="card"
+            :can-manage="canEdit(m)"
             :uploading="uploadingPhotoMemberId === m.id"
             @request-upload="onPhotoUploadRequest"
-            @request-delete="onPhotoDeleteRequest"
+            @request-delete="requestPhotoDelete"
           />
 
           <div class="card-body">
             <h3 class="card-name">{{ m.real_name }}</h3>
             <p class="card-institution">
-              <MarqueeText :text="m.institution" />
+              <MarqueeText
+                :text="m.institution"
+                :active="hoveredMemberId === m.id"
+              />
             </p>
             <p class="card-position" :class="{ 'is-empty': !m.position }">
-              <MarqueeText :text="m.position || '—'" />
+              <MarqueeText
+                :text="m.position || '—'"
+                :active="hoveredMemberId === m.id"
+              />
             </p>
 
             <div class="card-meta">
@@ -399,7 +417,7 @@ onMounted(() => {
                 履歷
               </el-button>
 
-              <span v-if="auth.isAdmin" class="card-admin-actions">
+              <span v-if="canEdit(m)" class="card-admin-actions">
                 <el-button
                   size="small"
                   plain
@@ -407,15 +425,6 @@ onMounted(() => {
                   @click="openEdit(m)"
                 >
                   編輯
-                </el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  plain
-                  data-test="delete-button"
-                  @click="askDeleteMember(m)"
-                >
-                  刪除
                 </el-button>
               </span>
             </div>
@@ -431,14 +440,6 @@ onMounted(() => {
           找不到符合「{{ searchQuery }}」的成員
         </p>
         <p v-else class="empty-text">尚無成員資料</p>
-        <el-button
-          v-if="auth.isAdmin && memberCount === 0"
-          type="primary"
-          :icon="Plus"
-          @click="openCreate"
-        >
-          新增第一位成員
-        </el-button>
       </div>
     </div>
 
@@ -499,9 +500,10 @@ onMounted(() => {
         <template #default="{ row }">
           <MemberPhotoCell
             :member="row"
+            :can-manage="canEdit(row)"
             :uploading="uploadingPhotoMemberId === row.id"
             @request-upload="onPhotoUploadRequest"
-            @request-delete="onPhotoDeleteRequest"
+            @request-delete="requestPhotoDelete"
           />
         </template>
       </el-table-column>
@@ -577,13 +579,13 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column
-        v-if="auth.isAdmin"
+        v-if="auth.isAdmin || auth.myMemberId != null"
         label="操作"
-        width="120"
+        width="160"
         align="center"
       >
         <template #default="{ row }">
-          <el-tooltip content="編輯" placement="top">
+          <el-tooltip v-if="canEdit(row)" content="編輯" placement="top">
             <el-button
               size="small"
               plain
@@ -594,17 +596,6 @@ onMounted(() => {
               @click="openEdit(row)"
             />
           </el-tooltip>
-          <el-button
-            size="small"
-            type="danger"
-            plain
-            circle
-            :icon="Delete"
-            data-test="delete-button"
-            aria-label="刪除"
-            title="刪除"
-            @click="askDeleteMember(row)"
-          />
         </template>
       </el-table-column>
     </el-table>
@@ -618,17 +609,8 @@ onMounted(() => {
     <ResumeViewerDialog
       v-model="resumeOpen"
       :member="resumeMember"
+      :can-manage="canEdit(resumeMember)"
       @changed="reloadAndRebindResume"
-    />
-
-    <DeleteWithPasswordDialog
-      v-model="deleteDialogOpen"
-      title="刪除成員"
-      :item-name="deleteTarget?.real_name ?? ''"
-      warning="將永久刪除這位成員與其所有照片、履歷資料。此操作無法復原。"
-      :loading="deleteSubmitting"
-      :error-message="deleteError"
-      @confirm="handleDeleteConfirm"
     />
 
     <!-- Single page-level crop dialog and photo-deletion dialog —
@@ -726,13 +708,6 @@ onMounted(() => {
   gap: var(--sp-sm);
   align-items: center;
   flex-wrap: wrap;
-}
-
-/* Element Plus injects margin-left:12px between adjacent el-buttons,
-   which made the gap between 重新整理 and 新增成員 wider than the rest
-   of the row. Reset it so the flex gap is the only spacing source. */
-.actions :deep(.el-button + .el-button) {
-  margin-left: 0;
 }
 
 /* ---------- View toggle (segmented) ---------- */
@@ -1006,6 +981,7 @@ onMounted(() => {
 .card-admin-actions {
   margin-left: auto;
   display: inline-flex;
+  align-items: center;
   gap: 4px;
 }
 

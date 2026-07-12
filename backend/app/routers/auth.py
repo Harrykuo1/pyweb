@@ -1,14 +1,31 @@
+import secrets
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core import audit_log
+from app.core import audit_log, discord_link, discord_oauth, discord_register
+from app.core.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limit import limiter
+from app.core.runtime_config import (
+    DISCORD_GUILD_ID_KEY,
+    resolve_guild_id,
+    set_str,
+)
 from app.core.security import hash_password, verify_password
 from app.database import get_db
-from app.models import User, UserRole
+from app.models import Member, PendingDiscordLink, RegistrationInvite, User, UserRole
 from app.schemas import (
+    ActiveUpdateRequest,
+    GuildConfigResponse,
+    GuildConfigUpdate,
     LoginRequest,
+    PendingLinkResponse,
+    RegistrationInviteResponse,
+    ResolvePendingLinkRequest,
+    RoleUpdateRequest,
     UpdatePasswordRequest,
     UpdateUsernameRequest,
     UserResponse,
@@ -25,13 +42,26 @@ LOGIN_RATE_LIMIT = "5/minute"
 
 
 def _get_user_by_role(db: Session, role: UserRole) -> User:
-    user = db.query(User).filter_by(role=role).one_or_none()
-    if user is None:
+    users = db.query(User).filter_by(role=role).all()
+    if not users:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No user with role '{role.value}'",
         )
-    return user
+    if len(users) > 1:
+        # Identifying the target by role only works while a role maps to one
+        # account. Once two share it (e.g. a member was promoted, so there
+        # are two admins), fail cleanly with 409 instead of 500-ing from
+        # .one()'s MultipleResultsFound — and steer callers to the id-based
+        # endpoints (/users/{id}/role, /users/{id}/active).
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Multiple accounts share the '{role.value}' role; "
+                "manage credentials by user id instead"
+            ),
+        )
+    return users[0]
 
 
 @router.post("/login", response_model=UserResponse)
@@ -47,6 +77,12 @@ def login(
     # accounts means the linear scan is fine; revisit if the user count grows.
     for user in db.query(User).all():
         if verify_password(payload.password, user.password_hash):
+            if not user.is_active:
+                audit_log.record_failure(ip)
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Account suspended",
+                )
             request.session["user_id"] = user.id
             request.session["role"] = user.role.value
             request.session["password_version"] = user.password_version
@@ -60,6 +96,154 @@ def login(
     )
 
 
+# Browser lands here on any failed Discord login; the frontend login page
+# reads ?error=<reason> to show a message. "/" on success.
+_LOGIN_PATH = "/login"
+_HOME_PATH = "/"
+# New registrants land here to fill in their member profile.
+_REGISTER_PROFILE_PATH = "/register/profile"
+
+
+def _oauth_error(reason: str) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{_LOGIN_PATH}?error={reason}",
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/discord/login")
+def discord_login(request: Request) -> Response:
+    if not settings.discord_oauth_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord login is not configured",
+        )
+    state = secrets.token_urlsafe(32)
+    request.session["discord_oauth_state"] = state
+    return RedirectResponse(
+        url=discord_oauth.build_authorize_url(state),
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/discord/register")
+def discord_register_start(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
+    if not settings.discord_oauth_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord login is not configured",
+        )
+    invite = db.query(RegistrationInvite).filter_by(token=token).one_or_none()
+    if not discord_register.invite_is_valid(invite, datetime.now(UTC)):
+        return _oauth_error("invalid_invite")
+
+    state = secrets.token_urlsafe(32)
+    request.session["discord_oauth_state"] = state
+    request.session["registration_invite_token"] = token
+    return RedirectResponse(
+        url=discord_oauth.build_authorize_url(state),
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/discord/callback")
+def discord_callback(
+    request: Request,
+    db: Session = Depends(get_db),
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> Response:
+    if not settings.discord_oauth_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord login is not configured",
+        )
+
+    # User denied consent on Discord's side.
+    if error is not None:
+        return _oauth_error("discord_denied")
+
+    # Consume both single-use session values up front so any early return
+    # below leaves no stale registration intent behind — otherwise a failed
+    # registration could later hijack a normal login into a registration.
+    expected_state = request.session.pop("discord_oauth_state", None)
+    invite_token = request.session.pop("registration_invite_token", None)
+    # CSRF: the state we stored before redirecting must come back intact.
+    if not state or not expected_state or state != expected_state:
+        return _oauth_error("state_mismatch")
+    if not code:
+        return _oauth_error("missing_code")
+
+    token = discord_oauth.exchange_code(code)
+    if token is None:
+        return _oauth_error("token_exchange_failed")
+
+    identity = discord_oauth.fetch_identity(token)
+    if identity is None:
+        return _oauth_error("identity_failed")
+
+    # Re-verify guild membership on every login: leaving the guild revokes
+    # access immediately.
+    guild_id = resolve_guild_id(db)
+    if not guild_id:
+        return _oauth_error("guild_not_configured")
+    membership = discord_oauth.check_guild_membership(token, guild_id)
+    if membership == "error":
+        # Transient failure (rate limit / Discord hiccup) — not the same as
+        # "not a member", so don't wrongly turn away a real member.
+        return _oauth_error("guild_check_failed")
+    if membership != "member":
+        return _oauth_error("not_member")
+
+    # Registration (invite consumed above) takes priority over login: a
+    # fresh Discord identity coming through an invite becomes a new member.
+    if invite_token is not None:
+        user, err = discord_register.register_via_invite(db, identity, invite_token)
+        if err is not None:
+            return _oauth_error(err)
+        # An invite can claim a pre-provisioned account that an admin already
+        # gave a Member profile; such a user shouldn't be sent to fill one in.
+        has_profile = db.query(Member.id).filter_by(user_id=user.id).first() is not None
+        redirect_target = _HOME_PATH if has_profile else _REGISTER_PROFILE_PATH
+    else:
+        user = db.query(User).filter_by(discord_id=identity.id).one_or_none()
+        if user is None:
+            # First login of a pre-created account: bridge by the resume
+            # handle. On a unique match we get the now-linked user; a
+            # suspended sole match is turned away without mutating anything;
+            # otherwise the identity is queued for an admin and turned away.
+            linked = discord_link.link_or_queue(db, identity)
+            if linked == "suspended":
+                return _oauth_error("account_suspended")
+            if linked is None:
+                return _oauth_error("not_linked")
+            user = linked
+        elif (
+            user.discord_username != identity.username
+            or user.discord_global_name != identity.global_name
+        ):
+            # Discord handles are mutable; keep the stored copy in sync so
+            # admin lists don't show a stale handle after a rename.
+            user.discord_username = identity.username
+            user.discord_global_name = identity.global_name
+            db.commit()
+        redirect_target = _HOME_PATH
+
+    if not user.is_active:
+        return _oauth_error("account_suspended")
+
+    request.session["user_id"] = user.id
+    request.session["role"] = user.role.value
+    request.session["password_version"] = user.password_version
+    audit_log.record_success(audit_log.client_ip(request), role=user.role.value)
+    return RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(request: Request) -> Response:
     request.session.clear()
@@ -67,16 +251,260 @@ def logout(request: Request) -> Response:
 
 
 @router.get("/me", response_model=UserResponse)
-def me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    resp = UserResponse.model_validate(current_user)
+    row = (
+        db.query(Member.id, Member.real_name)
+        .filter_by(user_id=current_user.id)
+        .one_or_none()
+    )
+    if row is not None:
+        resp.member_id = row.id
+        resp.member_name = row.real_name
+        resp.has_profile = True
+    return resp
 
 
 @router.get("/users", response_model=list[UserResponse])
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
-) -> list[User]:
-    return db.query(User).order_by(User.id).all()
+) -> list[UserResponse]:
+    # Left-join the member profile so backfilled accounts with no username or
+    # Discord handle still surface a human name in the admin list.
+    rows = (
+        db.query(User, Member.real_name)
+        .outerjoin(Member, Member.user_id == User.id)
+        .order_by(User.id)
+        .all()
+    )
+    result: list[UserResponse] = []
+    for user, real_name in rows:
+        resp = UserResponse.model_validate(user)
+        resp.member_name = real_name
+        result.append(resp)
+    return result
+
+
+@router.get("/pending-links", response_model=list[PendingLinkResponse])
+def list_pending_links(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[PendingDiscordLink]:
+    return db.query(PendingDiscordLink).order_by(PendingDiscordLink.first_seen_at).all()
+
+
+@router.post("/pending-links/{discord_id}/resolve", response_model=UserResponse)
+def resolve_pending_link(
+    discord_id: str,
+    payload: ResolvePendingLinkRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> User:
+    pending = (
+        db.query(PendingDiscordLink).filter_by(discord_id=discord_id).one_or_none()
+    )
+    if pending is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Pending link not found"
+        )
+    member = db.query(Member).filter_by(id=payload.member_id).one_or_none()
+    if member is None or member.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member account not found"
+        )
+    user = db.query(User).filter_by(id=member.user_id).one()
+    if user.discord_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Member already linked"
+        )
+
+    taken = db.query(User.id).filter_by(discord_id=pending.discord_id).first()
+    if taken is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Discord identity is already linked to an account",
+        )
+
+    user.discord_id = pending.discord_id
+    user.discord_username = pending.discord_username
+    user.discord_global_name = pending.discord_global_name
+    user.pending_discord_username = None
+    db.delete(pending)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete("/pending-links/{discord_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_pending_link(
+    discord_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> None:
+    # Dismiss a queued Discord login without linking it. The person can log
+    # in again to re-queue, so this is a low-stakes cleanup action.
+    row = db.query(PendingDiscordLink).filter_by(discord_id=discord_id).one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Pending link not found"
+        )
+    db.delete(row)
+    db.commit()
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+def update_user_role(
+    user_id: int,
+    payload: RoleUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> User:
+    # Only admin/member are assignable; the legacy shared VIEWER role is
+    # not something we promote individuals into.
+    if payload.role not in (UserRole.ADMIN, UserRole.MEMBER):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Role must be admin or member",
+        )
+    user = db.query(User).filter_by(id=user_id).one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    # A suspended account must be reactivated before it can hold admin: an
+    # admin role must always be active, otherwise the last-admin guard (which
+    # counts admins by role) could be tricked into stranding every admin.
+    if payload.role is UserRole.ADMIN and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Reactivate this account before promoting it to admin",
+        )
+    # Lockout guard: never demote the last remaining admin.
+    if user.role is UserRole.ADMIN and payload.role is not UserRole.ADMIN:
+        admin_count = db.query(User).filter_by(role=UserRole.ADMIN).count()
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot demote the last admin",
+            )
+    user.role = payload.role
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/active", response_model=UserResponse)
+def update_user_active(
+    user_id: int,
+    payload: ActiveUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> User:
+    user = db.query(User).filter_by(id=user_id).one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    # Guards apply to suspension only; reactivation is always allowed.
+    if not payload.is_active:
+        # G2: the break-glass admin (seeded password account) can never be
+        # suspended, whatever its current role — keeps recovery login working.
+        if user.username == settings.seed_admin_username:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The break-glass admin account cannot be suspended",
+            )
+        # G1: never suspend an admin-role account; demote it to member first.
+        if user.role is UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Demote this account to member before suspending it",
+            )
+    user.is_active = payload.is_active
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.get("/discord/guild", response_model=GuildConfigResponse)
+def get_discord_guild(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> GuildConfigResponse:
+    return GuildConfigResponse(guild_id=resolve_guild_id(db))
+
+
+@router.put("/discord/guild", response_model=GuildConfigResponse)
+def update_discord_guild(
+    payload: GuildConfigUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> GuildConfigResponse:
+    set_str(db, DISCORD_GUILD_ID_KEY, payload.guild_id)
+    db.commit()
+    return GuildConfigResponse(guild_id=payload.guild_id)
+
+
+# One-time member-registration links. 48h, single-use. Shared to a new
+# member as /api/auth/discord/register?token=<token>.
+INVITE_TTL = timedelta(hours=48)
+
+
+@router.post(
+    "/registration-invites",
+    response_model=RegistrationInviteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_registration_invite(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> RegistrationInvite:
+    now = datetime.now(UTC)
+    invite = RegistrationInvite(
+        token=secrets.token_urlsafe(32),
+        created_by_user_id=admin.id,
+        created_at=now,
+        expires_at=now + INVITE_TTL,
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    return invite
+
+
+@router.get("/registration-invites", response_model=list[RegistrationInviteResponse])
+def list_registration_invites(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[RegistrationInvite]:
+    return (
+        db.query(RegistrationInvite)
+        .order_by(RegistrationInvite.created_at.desc())
+        .all()
+    )
+
+
+@router.delete(
+    "/registration-invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_registration_invite(
+    invite_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> None:
+    # Revoke an invite. Deleting a used invite only removes the record; the
+    # member account it created is untouched.
+    row = db.query(RegistrationInvite).filter_by(id=invite_id).one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found"
+        )
+    db.delete(row)
+    db.commit()
 
 
 @router.patch("/users/{role}/username", response_model=UserResponse)

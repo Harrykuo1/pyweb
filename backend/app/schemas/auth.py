@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.user import UserRole
@@ -9,10 +11,73 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
-    username: str
+    # Null for Discord-linked accounts (they have no traditional username);
+    # still set for the legacy password accounts during the transition.
+    username: str | None = None
     role: UserRole
+    # Discord display fields, so the frontend has a name/handle to show for
+    # accounts that have no username. Null for legacy password accounts.
+    discord_username: str | None = None
+    discord_global_name: str | None = None
+    # True once the account has a member profile. Members without one are
+    # gated out of all data endpoints until they complete registration.
+    has_profile: bool = False
+    # The id of this account's own member profile, or null. Lets the frontend
+    # tell which member card is "mine" so it can offer self-edit affordances.
+    member_id: int | None = None
+    # The linked member's real name, when this account has a profile. Lets the
+    # admin user list identify backfilled accounts that have no username/handle
+    # yet ("#4") by who they actually are.
+    member_name: str | None = None
+    # False when an admin has suspended the account: login and every
+    # authenticated request are rejected until it is reactivated.
+    is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PendingLinkResponse(BaseModel):
+    id: int
+    discord_id: str
+    discord_username: str | None = None
+    discord_global_name: str | None = None
+    first_seen_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RegistrationInviteResponse(BaseModel):
+    id: int
+    token: str
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None = None
+    used_by_user_id: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ResolvePendingLinkRequest(BaseModel):
+    member_id: int
+
+
+class RoleUpdateRequest(BaseModel):
+    role: UserRole
+
+
+class ActiveUpdateRequest(BaseModel):
+    is_active: bool
+
+
+class GuildConfigResponse(BaseModel):
+    # The configured Discord guild id, or "" when unset (Discord login is
+    # then effectively disabled until an admin sets it).
+    guild_id: str
+
+
+class GuildConfigUpdate(BaseModel):
+    # Discord snowflakes are 17-20 digit numeric strings.
+    guild_id: str = Field(pattern=r"^\d{17,20}$")
 
 
 class UpdateUsernameRequest(BaseModel):

@@ -21,12 +21,16 @@ def uploads_dir(tmp_path) -> Path:
 
 @pytest.fixture
 def job(db_session) -> Job:
+    # accepted: the published-post case, where a viewer/member may read a
+    # post's attachments. Pending/rejected visibility is covered separately
+    # in test_job_attachments_visibility.py.
     job = Job(
         job_year=2026,
         job_month=5,
         company="Acme",
         kind=JobKind.INTERNSHIP,
         experience_md="hello",
+        status="accepted",
     )
     db_session.add(job)
     db_session.commit()
@@ -186,6 +190,31 @@ def test_download_forces_attachment_for_non_preview_safe_types(client, job):
     assert r.status_code == 200
     cd = r.headers["content-disposition"]
     assert cd.startswith("attachment;")
+    # The served type is a fixed octet-stream, never the client mime.
+    assert r.headers["content-type"].startswith("application/octet-stream")
+    assert r.headers.get("x-content-type-options") == "nosniff"
+
+
+def test_download_normalizes_content_type_for_spoofed_inline_ext(client, job):
+    """A preview-inline extension (.png) whose stored mime is text/html
+    must be served with the canonical image type, never the attacker's
+    Content-Type — otherwise it renders inline as HTML (stored XSS)."""
+    _login_admin(client)
+    files = {
+        "file": (
+            "evil.png",
+            BytesIO(b"<script>alert(document.domain)</script>"),
+            "text/html",
+        ),
+    }
+    attachment_id = client.post(f"/api/jobs/{job.id}/attachments", files=files).json()[
+        "id"
+    ]
+
+    r = client.get(f"/api/jobs/{job.id}/attachments/{attachment_id}")
+    assert r.status_code == 200
+    # Canonical image type, NOT the spoofed text/html.
+    assert r.headers["content-type"].startswith("image/png")
     assert r.headers.get("x-content-type-options") == "nosniff"
 
 

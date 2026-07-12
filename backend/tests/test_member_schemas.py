@@ -139,6 +139,21 @@ def test_member_create_rejects_empty_position_string():
         )
 
 
+def test_member_create_accepts_discord_username():
+    m = MemberCreate(
+        graduation_year=2024,
+        real_name="Alice",
+        institution="NTU",
+        discord_username="alice.h",
+    )
+    assert m.discord_username == "alice.h"
+
+
+def test_member_create_discord_username_optional():
+    m = MemberCreate(graduation_year=2024, real_name="Alice", institution="NTU")
+    assert m.discord_username is None
+
+
 def test_member_response_exposes_position_when_set():
     m = Member(
         id=3,

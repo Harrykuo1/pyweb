@@ -32,6 +32,18 @@ describe('useAuthStore', () => {
     expect(store.isAdmin).toBe(true)
   })
 
+  it('needsProfile is true only for a member without a profile', () => {
+    const store = useAuthStore()
+    store.user = { id: 3, role: 'member', has_profile: false }
+    expect(store.needsProfile).toBe(true)
+
+    store.user = { id: 3, role: 'member', has_profile: true }
+    expect(store.needsProfile).toBe(false)
+
+    store.user = { id: 1, role: 'admin', has_profile: false }
+    expect(store.needsProfile).toBe(false)
+  })
+
   it('isAdmin is false for viewer role', async () => {
     vi.spyOn(authApi, 'login').mockResolvedValue({
       id: 2,
@@ -69,17 +81,17 @@ describe('useAuthStore', () => {
     expect(store.isAuthenticated).toBe(false)
   })
 
-  it('clearLocal() resets user and viewAsViewer without calling the api', async () => {
+  it('clearLocal() resets user and previewAsMember without calling the api', async () => {
     const logout = vi.spyOn(authApi, 'logout').mockResolvedValue()
     const store = useAuthStore()
     store.user = { id: 1, username: 'admin', role: 'admin' }
-    store.setViewAsViewer(true)
+    store.setPreviewAsMember(true)
 
     store.clearLocal()
 
     expect(store.user).toBeNull()
     expect(store.isAuthenticated).toBe(false)
-    expect(store.viewAsViewer).toBe(false)
+    expect(store.previewAsMember).toBe(false)
     expect(logout).not.toHaveBeenCalled()
   })
 
@@ -103,6 +115,28 @@ describe('useAuthStore', () => {
     expect(store.user).toBeNull()
   })
 
+  it('fetchMe() flags suspension on a 401 with an Account suspended detail', async () => {
+    vi.spyOn(authApi, 'getMe').mockRejectedValue(
+      Object.assign(new Error('401'), {
+        response: { status: 401, data: { detail: 'Account suspended' } },
+      }),
+    )
+
+    const store = useAuthStore()
+    await store.fetchMe()
+    expect(store.user).toBeNull()
+    expect(store.suspended).toBe(true)
+  })
+
+  it('fetchMe() clears the suspension flag on a valid session', async () => {
+    const store = useAuthStore()
+    store.suspended = true
+    vi.spyOn(authApi, 'getMe').mockResolvedValue({ id: 1, role: 'admin' })
+
+    await store.fetchMe()
+    expect(store.suspended).toBe(false)
+  })
+
   it('fetchMe() rethrows non-401 errors', async () => {
     vi.spyOn(authApi, 'getMe').mockRejectedValue(
       Object.assign(new Error('500'), { response: { status: 500 } }),
@@ -112,9 +146,9 @@ describe('useAuthStore', () => {
     await expect(store.fetchMe()).rejects.toThrow()
   })
 
-  // ---------- viewAsViewer (admin preview mode) ----------
+  // ---------- previewAsMember (admin preview mode) ----------
 
-  it('admin can toggle viewAsViewer; isAdmin becomes false in that mode', async () => {
+  it('admin can toggle previewAsMember; isAdmin becomes false in that mode', async () => {
     vi.spyOn(authApi, 'login').mockResolvedValue({
       id: 1,
       username: 'admin',
@@ -126,19 +160,19 @@ describe('useAuthStore', () => {
 
     expect(store.isActuallyAdmin).toBe(true)
     expect(store.isAdmin).toBe(true)
-    expect(store.isViewingAsViewer).toBe(false)
+    expect(store.isPreviewingAsMember).toBe(false)
 
-    store.setViewAsViewer(true)
+    store.setPreviewAsMember(true)
     expect(store.isActuallyAdmin).toBe(true)
     expect(store.isAdmin).toBe(false)
-    expect(store.isViewingAsViewer).toBe(true)
+    expect(store.isPreviewingAsMember).toBe(true)
 
-    store.setViewAsViewer(false)
+    store.setPreviewAsMember(false)
     expect(store.isAdmin).toBe(true)
-    expect(store.isViewingAsViewer).toBe(false)
+    expect(store.isPreviewingAsMember).toBe(false)
   })
 
-  it('non-admin call to setViewAsViewer is ignored', async () => {
+  it('non-admin call to setPreviewAsMember is ignored', async () => {
     vi.spyOn(authApi, 'login').mockResolvedValue({
       id: 2,
       username: 'viewer',
@@ -148,27 +182,27 @@ describe('useAuthStore', () => {
     const store = useAuthStore()
     await store.login('pw')
 
-    store.setViewAsViewer(true)
-    expect(store.viewAsViewer).toBe(false)
+    store.setPreviewAsMember(true)
+    expect(store.previewAsMember).toBe(false)
     expect(store.isAdmin).toBe(false)
-    expect(store.isViewingAsViewer).toBe(false)
+    expect(store.isPreviewingAsMember).toBe(false)
   })
 
-  it('login resets a stale viewAsViewer flag', async () => {
+  it('login resets a stale previewAsMember flag', async () => {
     vi.spyOn(authApi, 'login')
       .mockResolvedValueOnce({ id: 1, username: 'admin', role: 'admin' })
       .mockResolvedValueOnce({ id: 1, username: 'admin', role: 'admin' })
 
     const store = useAuthStore()
     await store.login('pw')
-    store.setViewAsViewer(true)
-    expect(store.viewAsViewer).toBe(true)
+    store.setPreviewAsMember(true)
+    expect(store.previewAsMember).toBe(true)
 
     await store.login('pw')
-    expect(store.viewAsViewer).toBe(false)
+    expect(store.previewAsMember).toBe(false)
   })
 
-  it('logout clears viewAsViewer too', async () => {
+  it('logout clears previewAsMember too', async () => {
     vi.spyOn(authApi, 'login').mockResolvedValue({
       id: 1,
       username: 'admin',
@@ -178,10 +212,10 @@ describe('useAuthStore', () => {
 
     const store = useAuthStore()
     await store.login('pw')
-    store.setViewAsViewer(true)
+    store.setPreviewAsMember(true)
     await store.logout()
 
-    expect(store.viewAsViewer).toBe(false)
+    expect(store.previewAsMember).toBe(false)
   })
 
   // ---------- updateUsername / updatePassword ----------

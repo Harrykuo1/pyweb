@@ -10,6 +10,13 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
+    // Standalone (no navbar) completion page for freshly-registered members.
+    path: '/register/profile',
+    name: 'register-profile',
+    component: () => import('../views/RegisterProfile.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/',
     component: () => import('../layouts/AuthLayout.vue'),
     meta: { requiresAuth: true },
@@ -33,6 +40,12 @@ const routes = [
         path: 'events',
         name: 'events',
         component: () => import('../views/Events.vue'),
+      },
+      {
+        path: 'review',
+        name: 'review',
+        component: () => import('../views/Review.vue'),
+        meta: { requiresAdmin: true },
       },
       {
         path: 'settings',
@@ -64,6 +77,12 @@ export function createAuthGuard() {
     }
 
     if (to.meta.requiresAuth && !auth.isAuthenticated) {
+      // A suspended session (the /auth/me check above 401'd with that reason)
+      // gets sent to /login with the reason so it can be explained, not the
+      // generic "log in again" redirect.
+      if (auth.suspended) {
+        return { path: '/login', query: { error: 'account_suspended' } }
+      }
       return { path: '/login', query: { redirect: to.fullPath } }
     }
 
@@ -71,8 +90,25 @@ export function createAuthGuard() {
       return { path: '/' }
     }
 
+    // Members must finish their profile before using the rest of the app.
+    if (
+      auth.isAuthenticated &&
+      auth.needsProfile &&
+      to.path !== '/register/profile'
+    ) {
+      return { path: '/register/profile' }
+    }
+    // Don't linger on the completion page once a profile exists.
+    if (
+      to.path === '/register/profile' &&
+      auth.isAuthenticated &&
+      !auth.needsProfile
+    ) {
+      return { path: '/' }
+    }
+
     // Admin-only routes use isAdmin (not isActuallyAdmin) so the
-    // preview-as-viewer toggle also hides them, matching how other
+    // preview-as-member toggle also hides them, matching how other
     // admin affordances (CRUD buttons) behave.
     if (to.meta.requiresAdmin && !auth.isAdmin) {
       return { path: '/' }

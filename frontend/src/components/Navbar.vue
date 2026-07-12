@@ -8,6 +8,7 @@ import {
   MoreFilled,
   Setting,
   SwitchButton,
+  User,
   View,
 } from '@element-plus/icons-vue'
 
@@ -17,11 +18,38 @@ import { useOutsideClick } from '../composables/useOutsideClick'
 const auth = useAuthStore()
 const router = useRouter()
 
+// Prefer the member's real name; fall back to the Discord display name /
+// handle (accounts without a completed profile), then the legacy username.
+// Keeps the chip from crashing on a null username.
+const displayName = computed(() => {
+  const u = auth.user
+  if (!u) return ''
+  return (
+    u.member_name ||
+    u.discord_global_name ||
+    u.discord_username ||
+    u.username ||
+    '成員'
+  )
+})
+
+const avatarInitial = computed(() => {
+  const name = displayName.value
+  return name ? name.charAt(0).toUpperCase() : '?'
+})
+
+const roleLabel = computed(() => {
+  const role = auth.user?.role
+  if (role === 'admin') return '管理員'
+  if (role === 'member') return '成員'
+  return '檢視者'
+})
+
 // el-switch's v-model needs a writable ref-like — bridge the store action
 // through a computed setter.
-const previewAsViewer = computed({
-  get: () => auth.viewAsViewer,
-  set: (v) => auth.setViewAsViewer(v),
+const previewAsMember = computed({
+  get: () => auth.previewAsMember,
+  set: (v) => auth.setPreviewAsMember(v),
 })
 
 const mobileMenuOpen = ref(false)
@@ -40,6 +68,13 @@ function closeUserMenu() {
 function gotoSettings() {
   closeUserMenu()
   router.push('/settings')
+}
+
+function gotoMyProfile() {
+  closeUserMenu()
+  // Deep-link to the member's own card in the directory (focus scrolls +
+  // flashes it), so a member has a one-click path to view/edit their data.
+  router.push({ path: '/members', query: { focus: String(auth.myMemberId) } })
 }
 
 async function handleLogout() {
@@ -76,6 +111,13 @@ useOutsideClick({
         <router-link to="/members" class="nav-link">成員</router-link>
         <router-link to="/jobs" class="nav-link">求職</router-link>
         <router-link to="/events" class="nav-link">活動</router-link>
+        <router-link
+          v-if="auth.isAdmin"
+          to="/review"
+          class="nav-link"
+          data-test="nav-review"
+          >審核</router-link
+        >
       </nav>
 
       <el-button
@@ -97,7 +139,7 @@ useOutsideClick({
              previewing. Sits to the left of the chip so the "you're not
              really a viewer" cue is impossible to miss. -->
         <span
-          v-if="auth.isViewingAsViewer"
+          v-if="auth.isPreviewingAsMember"
           class="preview-badge"
           data-test="preview-badge"
         >
@@ -115,7 +157,7 @@ useOutsideClick({
             class="user-chip"
             :class="{
               'is-open': userMenuOpen,
-              'is-previewing': auth.isViewingAsViewer,
+              'is-previewing': auth.isPreviewingAsMember,
             }"
             :aria-expanded="userMenuOpen"
             aria-haspopup="menu"
@@ -123,14 +165,14 @@ useOutsideClick({
             @click="toggleUserMenu"
           >
             <span class="user-chip__avatar" aria-hidden="true">
-              {{ auth.user.username.charAt(0).toUpperCase() }}
+              {{ avatarInitial }}
             </span>
-            <span class="user-chip__name">{{ auth.user.username }}</span>
+            <span class="user-chip__name">{{ displayName }}</span>
             <span
               class="user-chip__role"
               :data-role="auth.isActuallyAdmin ? 'admin' : 'viewer'"
             >
-              {{ auth.isActuallyAdmin ? '管理員' : '檢視者' }}
+              {{ roleLabel }}
             </span>
             <el-icon class="user-chip__caret">
               <ArrowDown />
@@ -147,10 +189,10 @@ useOutsideClick({
             >
               <header class="user-menu__header">
                 <span class="user-menu__avatar" aria-hidden="true">
-                  {{ auth.user.username.charAt(0).toUpperCase() }}
+                  {{ avatarInitial }}
                 </span>
                 <div class="user-menu__profile">
-                  <div class="user-menu__name">{{ auth.user.username }}</div>
+                  <div class="user-menu__name">{{ displayName }}</div>
                   <div class="user-menu__role-row">
                     <el-tag
                       :type="auth.isActuallyAdmin ? 'danger' : 'info'"
@@ -158,7 +200,7 @@ useOutsideClick({
                       effect="light"
                       round
                     >
-                      {{ auth.isActuallyAdmin ? '管理員' : '檢視者' }}
+                      {{ roleLabel }}
                     </el-tag>
                   </div>
                 </div>
@@ -166,14 +208,26 @@ useOutsideClick({
 
               <div class="user-menu__divider" />
 
+              <button
+                v-if="auth.myMemberId"
+                type="button"
+                class="user-menu__row user-menu__action"
+                role="menuitem"
+                data-test="nav-my-profile"
+                @click="gotoMyProfile"
+              >
+                <el-icon class="user-menu__icon"><User /></el-icon>
+                <span class="user-menu__label">我的資料</span>
+              </button>
+
               <label
                 v-if="auth.isActuallyAdmin"
                 class="user-menu__row user-menu__toggle"
                 data-test="preview-toggle"
               >
                 <el-icon class="user-menu__icon"><View /></el-icon>
-                <span class="user-menu__label">預覽為檢視者</span>
-                <el-switch v-model="previewAsViewer" size="small" />
+                <span class="user-menu__label">預覽為成員</span>
+                <el-switch v-model="previewAsMember" size="small" />
               </label>
 
               <button

@@ -32,6 +32,14 @@ describe('parseQuery', () => {
     it('collapses multiple spaces', () => {
       expect(parseQuery('react   vue')).toEqual([[t('react'), t('vue')]])
     })
+    it('treats uppercase AND as a redundant no-op', () => {
+      expect(parseQuery('react AND vue')).toEqual([[t('react'), t('vue')]])
+    })
+    it('leaves lowercase and as a normal term', () => {
+      expect(parseQuery('react and vue')).toEqual([
+        [t('react'), t('and'), t('vue')],
+      ])
+    })
   })
 
   describe('OR (Google-style low precedence)', () => {

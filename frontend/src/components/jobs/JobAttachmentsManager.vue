@@ -37,10 +37,15 @@ import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { useAttachmentDelete } from '../../composables/useAttachmentDelete'
 import { useAttachmentDragDrop } from '../../composables/useAttachmentDragDrop'
 import { useAttachmentUpload } from '../../composables/useAttachmentUpload'
+import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
   jobId: { type: Number, required: true },
 })
+
+// Admins re-authenticate with their password before deleting; the post
+// author (a non-admin managing their own job) deletes without a password.
+const auth = useAuthStore()
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
@@ -759,6 +764,7 @@ async function handleBulkDownload() {
       :warning="pendingDelete?.warning ?? '此操作無法復原。'"
       :loading="deleteSubmitting"
       :error-message="deleteError"
+      :require-password="auth.isActuallyAdmin"
       @confirm="onDeleteConfirm"
     />
   </section>

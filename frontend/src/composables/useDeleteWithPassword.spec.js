@@ -74,6 +74,16 @@ describe('useDeleteWithPassword', () => {
     expect(flow.error.value).toBe('紀錄已不存在')
   })
 
+  it('surfaces a caller-supplied 409 message', async () => {
+    const flow = useDeleteWithPassword({
+      remove: () => reject(409),
+      messages: { 409: '此成員已啟用帳號，請至 設定 → 成員角色 停權' },
+    })
+    flow.open({ id: 1 })
+    await flow.confirm('pw')
+    expect(flow.error.value).toBe('此成員已啟用帳號，請至 設定 → 成員角色 停權')
+  })
+
   it('does not call onSuccess when remove rejects', async () => {
     const onSuccess = vi.fn()
     const flow = useDeleteWithPassword({

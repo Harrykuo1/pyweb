@@ -66,9 +66,9 @@ const memberNeither = {
   has_resume_pdf: false,
 }
 
-async function open(member) {
+async function open(member, canManage = false) {
   const wrapper = mount(ResumeViewerDialog, {
-    props: { modelValue: true, member },
+    props: { modelValue: true, member, canManage },
   })
   await flushPromises()
   return wrapper
@@ -107,24 +107,18 @@ describe('ResumeViewerDialog', () => {
     expect(wrapper.find('[data-test="md-preview-stub"]').exists()).toBe(false)
   })
 
-  it('admin sees upload button regardless of existing PDF', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 1, username: 'a', role: 'admin' }
-
-    const w1 = await open(memberPdfOnly)
+  it('shows the upload button regardless of existing PDF when canManage', async () => {
+    const w1 = await open(memberPdfOnly, true)
     expect(w1.find('[data-test="upload-pdf"]').exists()).toBe(true)
     expect(w1.find('[data-test="delete-pdf"]').exists()).toBe(true)
 
-    const w2 = await open(memberMdOnly)
+    const w2 = await open(memberMdOnly, true)
     expect(w2.find('[data-test="upload-pdf"]').exists()).toBe(true)
     expect(w2.find('[data-test="delete-pdf"]').exists()).toBe(false)
   })
 
-  it('viewer sees no admin actions', async () => {
-    const auth = useAuthStore()
-    auth.user = { id: 2, username: 'v', role: 'viewer' }
-
-    const wrapper = await open(memberPdfOnly)
+  it('hides the manage actions when canManage is false', async () => {
+    const wrapper = await open(memberPdfOnly, false)
     expect(wrapper.find('[data-test="upload-pdf"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="delete-pdf"]').exists()).toBe(false)
   })
@@ -196,17 +190,34 @@ describe('ResumeViewerDialog', () => {
     expect(wrapper.emitted('changed')).toBeTruthy()
   })
 
-  it('clicking delete-pdf opens the password dialog', async () => {
+  it('admin clicking delete-pdf opens the password dialog', async () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'a', role: 'admin' }
 
-    const wrapper = await open(memberPdfOnly)
+    const wrapper = await open(memberPdfOnly, true)
     expect(wrapper.vm.deletePdfDialogOpen).toBe(false)
 
     await wrapper.find('[data-test="delete-pdf"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.vm.deletePdfDialogOpen).toBe(true)
+  })
+
+  it('member deletes own PDF via confirm (no password dialog)', async () => {
+    const auth = useAuthStore()
+    auth.user = { id: 5, username: null, role: 'member', member_id: 1 }
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    const del = vi.spyOn(membersApi, 'deleteResumePdf').mockResolvedValue()
+
+    const wrapper = await open(memberPdfOnly, true)
+    await wrapper.find('[data-test="delete-pdf"]').trigger('click')
+    await flushPromises()
+
+    // No password: the owning member deletes with a bodyless request.
+    expect(del).toHaveBeenCalledWith(1, undefined)
+    expect(wrapper.vm.deletePdfDialogOpen).toBe(false)
+    expect(wrapper.emitted('changed')).toBeTruthy()
   })
 
   it('pdfSrc embeds resume_pdf_updated_at as cache-busting version stamp', async () => {

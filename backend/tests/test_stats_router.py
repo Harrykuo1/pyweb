@@ -68,6 +68,7 @@ def _add_job(
     job_year=2025,
     job_month=6,
     kind=JobKind.INTERNSHIP,
+    status="accepted",
 ):
     db_session.add(
         Job(
@@ -76,6 +77,7 @@ def _add_job(
             company=company,
             kind=kind,
             experience_md="x",
+            status=status,
         )
     )
 
@@ -121,8 +123,8 @@ def test_stats_counts_events(client_factory, db_session):
     client, login_as = client_factory
     db_session.add_all(
         [
-            Event(title="春酒", event_date=date(2026, 3, 1)),
-            Event(title="溪頭兩日遊", event_date=date(2026, 1, 15)),
+            Event(title="春酒", event_date=date(2026, 3, 1), status="accepted"),
+            Event(title="溪頭兩日遊", event_date=date(2026, 1, 15), status="accepted"),
         ]
     )
     db_session.commit()
@@ -130,6 +132,47 @@ def test_stats_counts_events(client_factory, db_session):
 
     r = client.get("/api/stats")
     assert r.json()["total_events"] == 2
+
+
+def test_stats_hides_pending_and_suspended_from_non_admin(client_factory, db_session):
+    # Non-admin totals must count only visible content, so the numbers can't
+    # betray the existence of hidden posts or suspended members.
+    client, login_as = client_factory
+    _add_job(db_session, company="Public", status="accepted")
+    _add_job(db_session, company="Hidden", status="pending")
+    db_session.add_all(
+        [
+            Event(title="Public", event_date=date(2026, 3, 1), status="accepted"),
+            Event(title="Hidden", event_date=date(2026, 3, 2), status="pending"),
+        ]
+    )
+    _add_member(db_session, real_name="Active")
+    suspended = User(
+        role=UserRole.MEMBER, is_active=False, discord_id="susp", discord_username="s"
+    )
+    db_session.add(suspended)
+    db_session.commit()
+    db_session.add(
+        Member(
+            graduation_year=2025,
+            real_name="Suspended",
+            institution="X",
+            user_id=suspended.id,
+        )
+    )
+    db_session.commit()
+
+    login_as("admin")
+    a = client.get("/api/stats").json()
+    assert (a["total_jobs"], a["total_events"], a["total_members"]) == (2, 2, 2)
+
+    client.post("/api/auth/logout")
+    login_as("viewer")
+    v = client.get("/api/stats").json()
+    assert v["total_jobs"] == 1
+    assert v["total_events"] == 1
+    assert v["total_members"] == 1
+    assert v["total_companies"] == 1
 
 
 def test_stats_counts_companies_distinct(client_factory, db_session):

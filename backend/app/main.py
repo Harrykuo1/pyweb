@@ -17,7 +17,52 @@ from app.routers import settings as settings_router
 from app.routers import stats as stats_router
 from app.routers import timeline as timeline_router
 
+# Security headers for every backend response. script-src 'none' neutralizes
+# any HTML/JS that reaches the browser as a document (e.g. a spoofed
+# attachment opened top-level) without restricting image/PDF rendering or
+# same-origin embedding (frame-ancestors 'self' keeps the in-app PDF <embed>
+# working). Defense-in-depth on top of the per-endpoint content-type
+# normalization.
+_SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
+    (
+        b"content-security-policy",
+        b"script-src 'none'; object-src 'none'; base-uri 'none'; "
+        b"frame-ancestors 'self'",
+    ),
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"SAMEORIGIN"),
+    (b"referrer-policy", b"no-referrer"),
+]
+
+
+class SecurityHeadersMiddleware:
+    """Pure-ASGI so it never buffers streaming FileResponse downloads
+    (which BaseHTTPMiddleware would). Adds each header only if the response
+    didn't already set it."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                present = {k.lower() for k, _ in headers}
+                for key, value in _SECURITY_HEADERS:
+                    if key not in present:
+                        headers.append((key, value))
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
 app = FastAPI(title="pyweb backend")
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Wire the per-IP limiter into FastAPI. slowapi reads `app.state.limiter`
 # so its decorators can find the same instance the handler is configured
@@ -30,7 +75,7 @@ app.add_middleware(
     secret_key=settings.session_secret,
     max_age=settings.session_max_age_seconds,
     same_site="lax",
-    https_only=False,
+    https_only=settings.session_secure,
 )
 
 app.add_middleware(

@@ -9,6 +9,7 @@ import {
   ElInput,
   ElInputNumber,
   ElMessage,
+  ElMessageBox,
   ElUpload,
 } from 'element-plus'
 import { Delete, Document, Loading, Upload } from '@element-plus/icons-vue'
@@ -16,6 +17,9 @@ import { Delete, Document, Loading, Upload } from '@element-plus/icons-vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 
 import { membersApi } from '../../api/members'
+import { useAuthStore } from '../../stores/auth'
+
+const auth = useAuthStore()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -27,6 +31,19 @@ const emit = defineEmits(['update:modelValue', 'saved'])
 const isEdit = computed(() => props.member !== null)
 const title = computed(() => (isEdit.value ? '編輯成員' : '新增成員'))
 
+// Admin can set the Discord handle when creating, or fix the pending handle of
+// an unclaimed member (linked account not yet bound). A claimed account's
+// handle is authoritative and left alone.
+const canEditPendingHandle = computed(
+  () =>
+    isEdit.value &&
+    auth.isActuallyAdmin &&
+    props.member?.account_status === 'pending',
+)
+const showDiscordField = computed(
+  () => (!isEdit.value && auth.isActuallyAdmin) || canEditPendingHandle.value,
+)
+
 const formRef = ref(null)
 const submitting = ref(false)
 const form = reactive({
@@ -36,6 +53,7 @@ const form = reactive({
   position: '',
   resume_md: '',
   joined_at: null,
+  discord_username: '',
 })
 
 // PDF state lives outside the el-form because the upload is a separate
@@ -89,6 +107,8 @@ function resetForm(member) {
     position: member?.position ?? '',
     resume_md: member?.resume_md ?? '',
     joined_at: member?.joined_at ?? null,
+    discord_username:
+      member?.account_discord_username ?? member?.discord_username ?? '',
   })
   pdfFile.value = null
   pdfDeletedThisSession.value = false
@@ -129,9 +149,23 @@ function clearPdfChange() {
   pdfFile.value = null
 }
 
-function askDeletePdf() {
+async function askDeletePdf() {
   pdfDeleteError.value = ''
-  pdfDeleteDialogOpen.value = true
+  // Admins re-authenticate with a password; an owning member just confirms.
+  if (auth.isActuallyAdmin) {
+    pdfDeleteDialogOpen.value = true
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '將永久移除你的 PDF 履歷檔，此操作無法復原。',
+      '移除 PDF 履歷',
+      { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // user cancelled
+  }
+  await handleDeletePdf()
 }
 
 async function handleDeletePdf(password) {
@@ -171,6 +205,12 @@ function buildPayload() {
       form.joined_at instanceof Date ? form.joined_at : new Date(form.joined_at)
     payload.joined_at = d.toISOString()
   }
+  if (!isEdit.value) {
+    const dh = form.discord_username.trim()
+    if (dh) payload.discord_username = dh
+  } else if (canEditPendingHandle.value) {
+    payload.discord_username = form.discord_username.trim()
+  }
   return payload
 }
 
@@ -202,6 +242,16 @@ async function handleSubmit() {
     if (isEdit.value) {
       const updated = await membersApi.update(props.member.id, payload)
       memberId = updated.id
+      // The navbar shows the member's real name from the auth session; if a
+      // member just renamed their own profile, refresh it so the chip updates
+      // without a page reload. Best-effort — never let it break the save flow.
+      if (auth.user && props.member.id === auth.user.member_id) {
+        try {
+          await auth.fetchMe()
+        } catch (err) {
+          // Navbar will catch up on the next natural reload.
+        }
+      }
     } else {
       const created = await membersApi.create(payload)
       memberId = created.id
@@ -225,6 +275,8 @@ async function handleSubmit() {
       else ElMessage.error('成員已儲存，但 PDF 處理失敗')
       emit('saved')
       close()
+    } else if (status === 409) {
+      ElMessage.error('此 Discord 使用者已註冊，不需重複建檔')
     } else if (status === 422) {
       ElMessage.error('輸入格式不正確')
     } else if (status === 403) {
@@ -276,7 +328,7 @@ defineExpose({ handlePdfChange, clearPdfChange })
           data-test="form-position"
         />
       </el-form-item>
-      <el-form-item label="入群時間">
+      <el-form-item v-if="auth.isActuallyAdmin" label="入群時間">
         <el-date-picker
           v-model="form.joined_at"
           type="date"
@@ -290,6 +342,18 @@ defineExpose({ handlePdfChange, clearPdfChange })
           type="textarea"
           :rows="6"
           placeholder="可留空。Phase 7 將升級為 Markdown 編輯器"
+        />
+      </el-form-item>
+      <el-form-item
+        v-if="showDiscordField"
+        label="Discord 使用者名稱（選填，成員登入後自動綁定）"
+      >
+        <el-input
+          v-model="form.discord_username"
+          maxlength="64"
+          show-word-limit
+          placeholder="例如 alice.h"
+          data-test="form-discord-username"
         />
       </el-form-item>
       <el-form-item label="履歷 PDF">

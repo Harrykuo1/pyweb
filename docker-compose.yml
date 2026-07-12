@@ -1,3 +1,11 @@
+# Cap every container's json-file log so it can't grow unbounded and fill
+# the host disk. Anchored here and reused by each service via `logging:`.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
     build:
@@ -8,10 +16,15 @@ services:
       # Where the backend reaches OnlyOffice's conversion API. Hostname
       # is the compose-network DNS name of the onlyoffice service.
       ONLYOFFICE_INTERNAL_URL: http://onlyoffice
-      # Reverse direction: where OnlyOffice fetches source files from
-      # when backend asks it to convert. The /internal/convert-source
-      # endpoint is token-gated, so even though there's no session auth
-      # the URL itself is unguessable (256-bit random per request).
+      # Reverse direction: where OnlyOffice fetches source files from when
+      # backend asks it to convert. OnlyOffice GETs
+      # /internal/source/<job_id>/<filename>, which the backend serves
+      # straight off disk with NO token or session — access is gated only by
+      # network isolation: nginx proxies /api/* to the backend, /internal/*
+      # is unreachable from the host, and backend's 8000 is expose-only
+      # (compose-internal). (An earlier per-request token was dropped because
+      # OnlyOffice's async queue lagged past its TTL — see
+      # app/routers/internal.py.)
       BACKEND_INTERNAL_URL: http://backend:8000
     # SQLite path is fixed by the Dockerfile (DATABASE_URL=/data/pyweb.db).
     # Bind-mount ./data on the host so the file is editable / inspectable
@@ -22,6 +35,19 @@ services:
       - ./data:/data
     expose:
       - "8000"
+    logging: *default-logging
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else sys.exit(1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
     depends_on:
       - onlyoffice
@@ -42,6 +68,11 @@ services:
       JWT_HEADER: Authorization
     expose:
       - "80"
+    logging: *default-logging
+    # OnlyOffice is memory-hungry. Uncomment and tune to your host so a
+    # runaway conversion can't OOM the whole box (2g is a sane floor for
+    # light use; give it more if conversions are large/frequent).
+    # mem_limit: 2g
     restart: unless-stopped
 
   frontend:
@@ -51,6 +82,17 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "8081:8080"
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Wait until the backend is actually healthy (not just started) before
+    # the SPA is served, so nginx doesn't proxy /api/* to a booting backend
+    # and hand users a 502 right after a restart.
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped

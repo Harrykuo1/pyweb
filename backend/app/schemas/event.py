@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.job import MARKDOWN_MAX_LENGTH, PostStatusLiteral
+
 # Keep the tag set per event small enough to render as a tidy chip row
 # and to bound the association-table fan-out. A genuine need for more
 # than this many labels on one event signals the taxonomy wants rethinking.
@@ -32,7 +34,7 @@ class EventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=128)
     event_date: date
     location: str | None = Field(default=None, min_length=1, max_length=128)
-    description_md: str | None = None
+    description_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     tags: list[str] = Field(default_factory=list, max_length=EVENT_TAGS_MAX)
 
     @field_validator("tags")
@@ -49,7 +51,7 @@ class EventUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=128)
     event_date: date | None = None
     location: str | None = Field(default=None, max_length=128)
-    description_md: str | None = None
+    description_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     tags: list[str] | None = Field(default=None, max_length=EVENT_TAGS_MAX)
 
     @field_validator("tags")
@@ -95,5 +97,11 @@ class EventResponse(BaseModel):
     # The cover thumbnail shown on the timeline — the earliest photo by id.
     # None when the event has no photos yet.
     cover_photo_id: int | None = None
+    # Author / approval (events are never anonymous; author is the creator).
+    author_display_name: str | None = None
+    status: PostStatusLiteral = "accepted"
+    review_reason: str | None = None
+    can_edit: bool = False
+    author_user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
