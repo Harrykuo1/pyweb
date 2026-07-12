@@ -29,11 +29,11 @@ from app.core.attachments import (
 )
 from app.core.config import settings
 from app.core.deps import (
+    require_admin_password,
     require_completed_member,
     require_posting_member,
 )
 from app.core.runtime_config import get_int
-from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, JobAttachment, Member, PostStatus, User, UserRole
 from app.schemas import (
@@ -43,21 +43,6 @@ from app.schemas import (
     JobAttachmentResponse,
     PasswordConfirmRequest,
 )
-
-
-def _require_admin_password(password: str, admin: User) -> None:
-    """Re-authenticate the admin before a destructive attachment action.
-
-    Returns 422 (not 401) on mismatch so the global axios auth-interceptor
-    doesn't read a typo'd confirmation password as an expired session and
-    bounce the user back to /login. Same rationale as members.py /
-    jobs.py — keep the local request-validation failure local.
-    """
-    if not verify_password(password, admin.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Password is incorrect",
-        )
 
 
 def job_uploads_dir(uploads_root: Path, job_id: int) -> Path:
@@ -512,7 +497,7 @@ def bulk_delete_attachments(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Password is required",
             )
-        _require_admin_password(payload.password, current_user)
+        require_admin_password(db, payload.password)
     rows = (
         db.query(JobAttachment)
         .filter(
@@ -566,7 +551,7 @@ def delete_attachment(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Password is required",
             )
-        _require_admin_password(payload.password, current_user)
+        require_admin_password(db, payload.password)
     attachment = _get_attachment_or_404(db, job_id, attachment_id)
 
     job_dir = job_uploads_dir(uploads_root, job_id)

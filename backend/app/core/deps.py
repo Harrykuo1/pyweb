@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.security import verify_password
 from app.database import get_db
 from app.models import Member, User, UserRole
 
@@ -105,3 +106,36 @@ def require_posting_member(
                 detail="profile_incomplete",
             )
     return current_user
+
+
+def admin_password_account(db: Session) -> User | None:
+    """The break-glass password admin — the one admin-role account that still
+    has a password (Discord-linked admins have none). Its password is the
+    shared confirmation credential for destructive/account actions, so any
+    admin — even a Discord-linked one with no password of their own — can
+    confirm by entering the admin password."""
+    return (
+        db.query(User)
+        .filter(User.role == UserRole.ADMIN, User.password_hash.isnot(None))
+        .order_by(User.id)
+        .first()
+    )
+
+
+def verify_admin_password(db: Session, password: str) -> bool:
+    """True if `password` matches THE admin account's password (not the acting
+    user's own). Confirmation flows verify against this so a Discord-linked
+    admin can still re-authenticate destructive actions."""
+    account = admin_password_account(db)
+    return account is not None and verify_password(password, account.password_hash)
+
+
+def require_admin_password(db: Session, password: str) -> None:
+    """Raise 422 unless `password` matches the admin account's password. 422
+    (not 401) so the axios auth-interceptor doesn't treat a typo'd
+    confirmation password as an expired session."""
+    if not verify_admin_password(db, password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Password is incorrect",
+        )

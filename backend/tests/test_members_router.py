@@ -530,6 +530,34 @@ def test_delete_member_missing_password_422(client_factory, db_session):
     assert r.status_code == 422
 
 
+def test_delete_member_discord_admin_confirms_with_break_glass_password(
+    client_factory, db_session
+):
+    # A Discord-linked admin has no password of their own (password_hash is
+    # null), so before the shared-helper fix they could never confirm a
+    # destructive action. They now re-authenticate with the break-glass admin
+    # account's password instead — the exact production lockout this fixes.
+    from app.core.deps import get_current_user
+
+    client, _ = client_factory  # seeds "admin"/"admin-pw" (the break-glass account)
+    _seed_members(db_session, count=1)
+    discord_admin = User(role=UserRole.ADMIN, discord_id="da-1", discord_username="da")
+    db_session.add(discord_admin)
+    db_session.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: discord_admin
+    try:
+        r = client.request("DELETE", "/api/members/1", json={"password": "admin-pw"})
+        assert r.status_code == 204, r.text
+
+        # A wrong password still fails closed with 422 (the password check
+        # runs before the member lookup, so the id here is irrelevant).
+        r2 = client.request("DELETE", "/api/members/999", json={"password": "nope"})
+        assert r2.status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_delete_member_viewer_403(client_factory, db_session):
     client, login_as = client_factory
     _seed_members(db_session, count=1)

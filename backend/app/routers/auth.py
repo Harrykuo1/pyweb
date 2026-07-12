@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core import audit_log, discord_link, discord_oauth, discord_register
 from app.core.config import settings
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import (
+    admin_password_account,
+    get_current_user,
+    require_admin,
+    verify_admin_password,
+)
 from app.core.rate_limit import limiter
 from app.core.runtime_config import (
     DISCORD_GUILD_ID_KEY,
@@ -62,20 +67,6 @@ def _get_user_by_role(db: Session, role: UserRole) -> User:
             ),
         )
     return users[0]
-
-
-def _admin_password_account(db: Session) -> User | None:
-    """The break-glass password admin — the one admin-role account that still
-    has a password (Discord-linked admins have none). Its password is the
-    shared confirmation credential for account changes, so any admin — even a
-    Discord-linked one with no password of their own — can manage accounts by
-    entering the admin password."""
-    return (
-        db.query(User)
-        .filter(User.role == UserRole.ADMIN, User.password_hash.isnot(None))
-        .order_by(User.id)
-        .first()
-    )
 
 
 @router.post("/login", response_model=UserResponse)
@@ -440,9 +431,9 @@ def update_user_active(
     # Guards apply to suspension only; reactivation is always allowed.
     if not payload.is_active:
         # G2: never suspend the break-glass admin — the password-login recovery
-        # account. Identified by role + password (via _admin_password_account),
+        # account. Identified by role + password (via admin_password_account),
         # NOT by username, so renaming the admin doesn't strip this protection.
-        break_glass = _admin_password_account(db)
+        break_glass = admin_password_account(db)
         if break_glass is not None and user.id == break_glass.id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -584,10 +575,7 @@ def update_password(
     # their own) can manage accounts by entering the shared admin password.
     # 422 (not 401) so the axios auth-interceptor doesn't treat a typo'd
     # password as an expired session; the session is still valid here.
-    admin_account = _admin_password_account(db)
-    if admin_account is None or not verify_password(
-        payload.current_password, admin_account.password_hash
-    ):
+    if not verify_admin_password(db, payload.current_password):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Current password is incorrect",

@@ -17,9 +17,13 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import require_admin, require_completed_member, require_member
+from app.core.deps import (
+    require_admin,
+    require_admin_password,
+    require_completed_member,
+    require_member,
+)
 from app.core.discord_link import normalize_discord_handle
-from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, Member, User, UserRole
 from app.schemas import (
@@ -86,22 +90,6 @@ def _owned_member_or_403(db: Session, member_id: int, user: User) -> Member:
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail="Not your profile"
     )
-
-
-def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
-    """Re-authenticate the admin before a destructive action.
-
-    Returns 422 (not 401) on mismatch so the global axios auth-interceptor
-    doesn't treat a typo'd confirmation password as an expired session and
-    bounce the user back to /login. Session is still valid here — only
-    the body-supplied password is wrong, which is a request-validation
-    failure, not an auth failure.
-    """
-    if not verify_password(payload.password, admin.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Password is incorrect",
-        )
 
 
 def _member_response(member: Member, user: User | None) -> MemberResponse:
@@ -286,7 +274,7 @@ def delete_member(
     admin: User = Depends(require_admin),
     uploads_root: Path = Depends(get_uploads_root),
 ) -> None:
-    _require_admin_password(payload, admin)
+    require_admin_password(db, payload.password)
     member = _get_member_or_404(db, member_id)
     linked_user = (
         db.query(User).filter_by(id=member.user_id).one_or_none()
@@ -421,7 +409,7 @@ def delete_member_photo(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Password is required",
             )
-        _require_admin_password(payload, current_user)
+        require_admin_password(db, payload.password)
     if member.photo_path:
         file_path = uploads_root / member.photo_path
         if file_path.exists():
@@ -518,7 +506,7 @@ def delete_member_resume_pdf(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Password is required",
             )
-        _require_admin_password(payload, current_user)
+        require_admin_password(db, payload.password)
     if member.resume_pdf_path:
         file_path = uploads_root / member.resume_pdf_path
         if file_path.exists():
