@@ -68,6 +68,24 @@ describe('AccountSection.vue', () => {
     )
   })
 
+  it('excludes Discord-linked members (no username) from the password-account list', async () => {
+    authApi.listUsers.mockResolvedValue([
+      { id: 1, username: 'admin', role: 'admin' },
+      { id: 2, username: 'viewer', role: 'viewer' },
+      // A Discord member promoted to admin: no username/password, managed
+      // in the roster — must not appear here as a nameless "?" row.
+      { id: 7, username: null, discord_username: 'dave', role: 'admin' },
+    ])
+    await mountSection()
+
+    expect(document.querySelector('[data-test="account-row-1"]')).not.toBeNull()
+    expect(document.querySelector('[data-test="account-row-2"]')).not.toBeNull()
+    expect(document.querySelector('[data-test="account-row-7"]')).toBeNull()
+    expect(
+      document.querySelector('[data-test="account-total"]').textContent.trim(),
+    ).toBe('2')
+  })
+
   it('selects admin by default with is-active styling', async () => {
     await mountSection()
     const adminRow = document.querySelector('[data-test="account-row-1"]')

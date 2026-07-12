@@ -92,11 +92,16 @@ export function useAccounts() {
     loadingUsers.value = true
     try {
       const list = await authApi.listUsers()
-      // Key by id so two accounts in the same role highlight independently.
-      // Form state is still keyed by role because the backend update
-      // endpoints route by role today — a known limitation when multiple
-      // accounts share a role.
-      accounts.value = list.map((u) => ({ ...u, key: String(u.id) }))
+      // This surface manages the seeded PASSWORD accounts (admin/viewer)
+      // only. Discord-linked members can hold admin/viewer role too, but
+      // they have no username or password and are managed in the member
+      // roster — including them here would render nameless "?" rows with
+      // nothing editable. Key by id so two accounts in one role highlight
+      // independently; form state stays keyed by role (backend updates by
+      // role today).
+      accounts.value = list
+        .filter((u) => u.username)
+        .map((u) => ({ ...u, key: String(u.id) }))
       for (const a of accounts.value) {
         usernameForm[a.role] = a.username
       }
