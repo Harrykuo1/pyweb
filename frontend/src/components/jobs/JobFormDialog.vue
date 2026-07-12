@@ -16,7 +16,6 @@ import {
   ElDialog,
   ElForm,
   ElFormItem,
-  ElInput,
   ElMessage,
   ElOption,
   ElSelect,
@@ -484,7 +483,14 @@ async function handleSubmit() {
       createdJob.value = created
       activeTab.value = 'attachments'
       emit('saved')
-      ElMessage.success('已新增，現在可上傳附件')
+      // Members' posts enter the review queue and aren't public yet; admins'
+      // are accepted immediately. Tell them which, so a pending post doesn't
+      // look like it silently vanished.
+      ElMessage.success(
+        created.status === 'accepted'
+          ? '已新增，現在可上傳附件'
+          : '已送出審核，通過後才會公開；你可以先上傳附件',
+      )
     }
   } catch (err) {
     toast.close()

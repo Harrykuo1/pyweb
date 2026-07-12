@@ -252,7 +252,12 @@ async function handleSubmit() {
       createdEvent.value = created
       activeTab.value = 'photos'
       emit('saved')
-      ElMessage.success('已新增，現在可上傳照片')
+      // Members' events enter the review queue; admins' are live at once.
+      ElMessage.success(
+        created.status === 'accepted'
+          ? '已新增，現在可上傳照片'
+          : '已送出審核，通過後才會公開；你可以先上傳照片',
+      )
     }
   } catch (err) {
     const status = err?.response?.status

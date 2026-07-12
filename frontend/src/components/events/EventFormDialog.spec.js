@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
+import { ElMessage } from 'element-plus'
+
 import EventFormDialog from './EventFormDialog.vue'
 import { eventsApi } from '../../api/events'
 
@@ -78,6 +80,24 @@ describe('EventFormDialog — create', () => {
     expect(payload.title).toBe('春酒聚餐')
     expect(payload.event_date).toBe('2026-03-15')
     expect(wrapper.emitted('saved')).toBeTruthy()
+  })
+
+  it('tells the author a pending event awaits review, not silently gone', async () => {
+    const spy = vi.spyOn(ElMessage, 'success').mockImplementation(() => {})
+    vi.spyOn(eventsApi, 'create').mockResolvedValue({
+      id: 9,
+      title: 'x',
+      event_date: '2026-03-01',
+      tags: [],
+      status: 'pending',
+    })
+    const wrapper = mountForm()
+    await flushPromises()
+    setNativeValue(findInputByDataTest(wrapper, 'form-title'), 'x')
+    wrapper.vm.form.event_date = '2026-03-15'
+    await wrapper.find('[data-test="save-event-button"]').trigger('click')
+    await flushPromises()
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('審核'))
   })
 
   it('blocks submit when title is empty', async () => {

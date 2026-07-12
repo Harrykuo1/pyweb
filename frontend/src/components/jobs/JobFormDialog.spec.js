@@ -162,6 +162,36 @@ describe('JobFormDialog — submit', () => {
     expect(payload.job_month).toBeLessThanOrEqual(12)
   })
 
+  it('tells the author a pending post is awaiting review, not silently gone', async () => {
+    const { ElMessage } = await import('element-plus')
+    ElMessage.success.mockClear()
+    vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1, status: 'pending' })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), 'x')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      expect.stringContaining('審核'),
+    )
+  })
+
+  it('tells an admin an accepted post is live', async () => {
+    const { ElMessage } = await import('element-plus')
+    ElMessage.success.mockClear()
+    vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1, status: 'accepted' })
+    const wrapper = await mountDialog()
+    setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
+    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), 'x')
+    await flushPromises()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      expect.stringContaining('已新增'),
+    )
+  })
+
   it('PUTs to jobsApi.update on save in edit mode', async () => {
     const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
     const wrapper = await mountDialog({
@@ -316,7 +346,10 @@ describe('JobFormDialog — submit', () => {
     const wrapper = await mountDialog()
 
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
     await flushPromises()
 
     await wrapper.find('[data-test="save-button"]').trigger('click')
@@ -333,7 +366,10 @@ describe('JobFormDialog — submit', () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
     // allow-create yields a string value for a typed, non-roster name.
     wrapper
       .getComponent('[data-test="form-subject-member"]')
@@ -352,7 +388,10 @@ describe('JobFormDialog — submit', () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
     // A picked member option carries the member id (a number).
     wrapper
       .getComponent('[data-test="form-subject-member"]')
@@ -371,7 +410,10 @@ describe('JobFormDialog — submit', () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
     wrapper
       .findComponent({ name: 'ElSwitch' })
       .vm.$emit('update:modelValue', true)
@@ -392,7 +434,10 @@ describe('JobFormDialog — submit', () => {
     )
 
     setNativeValue(findInputByDataTest(wrapper, 'form-company'), 'Acme')
-    setNativeValue(findMdEditorByDataTest(wrapper, 'form-experience-md'), '## x')
+    setNativeValue(
+      findMdEditorByDataTest(wrapper, 'form-experience-md'),
+      '## x',
+    )
     await flushPromises()
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
