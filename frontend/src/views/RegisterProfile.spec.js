@@ -36,6 +36,7 @@ describe('RegisterProfile.vue', () => {
     const fetchSpy = vi.spyOn(auth, 'fetchMe').mockResolvedValue()
 
     const wrapper = mount(RegisterProfile)
+    wrapper.vm.form.graduation_year = 2025
     wrapper.vm.form.real_name = '新人'
     wrapper.vm.form.institution = 'NYCU'
     await wrapper.vm.handleSubmit()
@@ -45,6 +46,11 @@ describe('RegisterProfile.vue', () => {
     )
     expect(fetchSpy).toHaveBeenCalled()
     expect(pushMock).toHaveBeenCalledWith('/')
+  })
+
+  it('starts with a blank graduation year so the member must enter it', () => {
+    const wrapper = mount(RegisterProfile)
+    expect(wrapper.vm.form.graduation_year).toBe(null)
   })
 
   it('logout escape hatch clears the session and returns to /login', async () => {

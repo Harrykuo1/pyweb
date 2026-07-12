@@ -18,7 +18,10 @@ const router = useRouter()
 
 const formRef = ref(null)
 const form = reactive({
-  graduation_year: new Date().getFullYear(),
+  // Left blank on purpose: prefilling the current year reads as an answered
+  // field and pollutes the data with a wrong-but-plausible default. The
+  // required rule forces the member to enter their real graduation year.
+  graduation_year: null,
   real_name: '',
   institution: '',
   position: '',
@@ -26,7 +29,9 @@ const form = reactive({
 const submitting = ref(false)
 
 const rules = {
-  graduation_year: [{ required: true, message: '請輸入畢業年', trigger: 'blur' }],
+  graduation_year: [
+    { required: true, message: '請輸入畢業年', trigger: 'blur' },
+  ],
   real_name: [{ required: true, message: '請輸入姓名', trigger: 'blur' }],
   institution: [
     { required: true, message: '請輸入目前工作 / 學校', trigger: 'blur' },
@@ -106,7 +111,10 @@ async function handleSubmit() {
           />
         </el-form-item>
         <el-form-item label="職稱 / 系級（選填）" prop="position">
-          <el-input v-model="form.position" placeholder="例如：Software Engineer" />
+          <el-input
+            v-model="form.position"
+            placeholder="例如：Software Engineer"
+          />
         </el-form-item>
 
         <el-button
