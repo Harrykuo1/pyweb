@@ -350,12 +350,6 @@ function formatDate(iso) {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .category-chip.is-marqueeing .category-chip-text {
-    animation: none;
-  }
-}
-
 .status-pill {
   flex-shrink: 0;
   margin-left: auto;
