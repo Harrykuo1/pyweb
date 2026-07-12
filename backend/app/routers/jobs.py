@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import (
     require_admin,
+    require_admin_password,
     require_completed_member,
     require_posting_member,
 )
 from app.core.job_serialize import serialize_job
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
-from app.core.security import verify_password
 from app.database import get_db
 from app.models import Job, JobAttachment, JobKind, Member, PostStatus, User, UserRole
 from app.routers.job_attachments import get_uploads_root, job_uploads_dir
@@ -114,20 +114,6 @@ def _order_by(sort: str, order: str, is_admin: bool) -> list:
     col = _SORT_COLUMNS[sort]
     primary = col.asc() if order == "asc" else col.desc()
     return [primary, Job.created_at.desc()]
-
-
-def _require_admin_password(payload: PasswordConfirmRequest, admin: User) -> None:
-    """Re-authenticate the admin before a destructive action.
-
-    See members.py's matching helper for why this returns 422 — same
-    rationale: don't let a typo here trigger the global session-expired
-    redirect.
-    """
-    if not verify_password(payload.password, admin.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Password is incorrect",
-        )
 
 
 @router.get("", response_model=ListResponse[JobResponse])
@@ -422,7 +408,7 @@ def delete_job(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Password is required",
             )
-        _require_admin_password(payload, current_user)
+        require_admin_password(db, payload.password)
     db.delete(obj)
     db.commit()
     # DB rows for job_attachments cascade-delete via the FK, but the

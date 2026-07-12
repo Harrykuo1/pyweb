@@ -16,10 +16,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import (
+    require_admin_password,
     require_completed_member,
     require_posting_member,
 )
-from app.core.security import verify_password
 from app.database import get_db
 from app.models import Event, EventPhoto, User, UserRole
 from app.schemas import (
@@ -53,18 +53,6 @@ def get_uploads_root() -> Path:
 def event_uploads_dir(uploads_root: Path, event_id: int) -> Path:
     """Per-event photo directory under the shared uploads tree."""
     return uploads_root / "events" / str(event_id)
-
-
-def _require_admin_password(password: str, admin: User) -> None:
-    """Re-authenticate the admin before a destructive action. Returns 422
-    (not 401) on mismatch so the axios auth-interceptor doesn't read a
-    typo'd confirmation password as an expired session — same rationale
-    as members.py / jobs.py."""
-    if not verify_password(password, admin.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Password is incorrect",
-        )
 
 
 def _get_event_or_404(db: Session, event_id: int) -> Event:
@@ -234,7 +222,7 @@ def delete_photo(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Password is required",
             )
-        _require_admin_password(payload.password, current_user)
+        require_admin_password(db, payload.password)
     photo = _get_photo_or_404(db, event_id, photo_id)
 
     event_dir = event_uploads_dir(uploads_root, event_id)

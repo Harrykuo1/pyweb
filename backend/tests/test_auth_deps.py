@@ -1,8 +1,17 @@
-from fastapi import Depends, FastAPI, Request
+import pytest
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.core.deps import get_current_user, require_admin, require_member
+from app.core.deps import (
+    admin_password_account,
+    get_current_user,
+    require_admin,
+    require_admin_password,
+    require_member,
+    verify_admin_password,
+)
+from app.core.security import hash_password
 from app.database import get_db
 from app.models import User, UserRole
 
@@ -221,3 +230,105 @@ def test_get_current_user_evicts_session_after_password_version_bump(db_session)
 
     # Dependency cleared the cookie, so a second call is still 401.
     assert client.get("/test/me").status_code == 401
+
+
+# ---------- admin-password confirmation (shared destructive-action gate) ----------
+
+
+def _seed(db_session, *users: User) -> None:
+    db_session.add_all(users)
+    db_session.commit()
+
+
+def test_admin_password_account_is_lowest_id_password_admin(db_session):
+    # Two password admins plus a Discord admin (no password). The break-glass
+    # account is the lowest-id ADMIN that still has a password.
+    _seed(
+        db_session,
+        User(
+            id=1,
+            username="a1",
+            password_hash=hash_password("first"),
+            role=UserRole.ADMIN,
+        ),
+        User(
+            id=2,
+            username="a2",
+            password_hash=hash_password("second"),
+            role=UserRole.ADMIN,
+        ),
+        User(id=3, role=UserRole.ADMIN, discord_id="d1", discord_username="d"),
+    )
+    account = admin_password_account(db_session)
+    assert account is not None
+    assert account.id == 1
+
+
+def test_admin_password_account_ignores_discord_admin(db_session):
+    # A Discord-linked admin has no password_hash, so it can never be the
+    # break-glass confirmation account.
+    _seed(
+        db_session,
+        User(id=5, role=UserRole.ADMIN, discord_id="d2", discord_username="d2"),
+    )
+    assert admin_password_account(db_session) is None
+
+
+def test_verify_admin_password_checks_the_account_not_the_actor(db_session):
+    # The confirmation credential is the admin ACCOUNT's password. A second
+    # admin's own password must NOT pass — only the break-glass one's does.
+    _seed(
+        db_session,
+        User(
+            id=1,
+            username="a1",
+            password_hash=hash_password("break-glass"),
+            role=UserRole.ADMIN,
+        ),
+        User(
+            id=2,
+            username="a2",
+            password_hash=hash_password("other-admin"),
+            role=UserRole.ADMIN,
+        ),
+    )
+    assert verify_admin_password(db_session, "break-glass") is True
+    assert verify_admin_password(db_session, "other-admin") is False
+    assert verify_admin_password(db_session, "wrong") is False
+
+
+def test_verify_admin_password_false_when_no_password_admin(db_session):
+    _seed(
+        db_session,
+        User(id=9, role=UserRole.ADMIN, discord_id="d3", discord_username="d3"),
+    )
+    assert verify_admin_password(db_session, "anything") is False
+
+
+def test_require_admin_password_raises_422_on_mismatch(db_session):
+    _seed(
+        db_session,
+        User(
+            id=1,
+            username="a1",
+            password_hash=hash_password("correct"),
+            role=UserRole.ADMIN,
+        ),
+    )
+    with pytest.raises(HTTPException) as exc:
+        require_admin_password(db_session, "wrong")
+    assert exc.value.status_code == 422
+
+
+def test_require_admin_password_passes_on_match(db_session):
+    _seed(
+        db_session,
+        User(
+            id=1,
+            username="a1",
+            password_hash=hash_password("correct"),
+            role=UserRole.ADMIN,
+        ),
+    )
+    # No exception == success.
+    require_admin_password(db_session, "correct")
