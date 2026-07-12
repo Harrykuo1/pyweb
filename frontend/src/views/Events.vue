@@ -275,9 +275,19 @@ const {
 
 // Admins and members can post (viewers can't). Based on the real role so an
 // admin previewing as a member still sees the affordance a member has.
-const canPost = computed(() =>
-  ['admin', 'member'].includes(auth.actualRole),
+const canPost = computed(() => ['admin', 'member'].includes(auth.actualRole))
+
+// A year/tag/search filter is active (sort order doesn't count) — used to
+// tell "no events at all" apart from "none match this filter".
+const hasActiveFilter = computed(
+  () => !!year.value || tag.value.length > 0 || !!q.value,
 )
+
+function clearFilters() {
+  year.value = null
+  tag.value = []
+  q.value = ''
+}
 
 // Admins re-authenticate with a password (backend requires it); an owning
 // member deletes their own event after a plain confirm, with no password body.
@@ -357,6 +367,16 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
             >
               新增活動
             </el-button>
+            <el-tag
+              v-else-if="auth.actualRole === 'viewer'"
+              type="info"
+              size="small"
+              effect="plain"
+              round
+              data-test="viewer-readonly-hint"
+            >
+              檢視者帳號（唯讀）
+            </el-tag>
           </div>
         </div>
       </div>
@@ -625,15 +645,27 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
       <div class="empty-icon" aria-hidden="true">
         <el-icon :size="32"><Camera /></el-icon>
       </div>
-      <p class="empty-text">還沒有任何活動紀錄</p>
-      <el-button
-        v-if="canPost && total === 0"
-        type="primary"
-        :icon="Plus"
-        @click="openCreate"
-      >
-        記錄第一場活動
-      </el-button>
+      <template v-if="hasActiveFilter">
+        <p class="empty-text">找不到符合條件的活動</p>
+        <el-button
+          :icon="Refresh"
+          data-test="clear-filters"
+          @click="clearFilters"
+        >
+          清除篩選
+        </el-button>
+      </template>
+      <template v-else>
+        <p class="empty-text">還沒有任何活動紀錄</p>
+        <el-button
+          v-if="canPost"
+          type="primary"
+          :icon="Plus"
+          @click="openCreate"
+        >
+          記錄第一場活動
+        </el-button>
+      </template>
     </div>
 
     <EventDetailDialog

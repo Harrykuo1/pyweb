@@ -153,7 +153,34 @@ describe('Jobs.vue — empty state', () => {
   it('renders the empty placeholder when no items come back', async () => {
     const { wrapper } = await mountPage([], 0)
     expect(wrapper.find('[data-test="empty-state"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('尚無符合條件的紀錄')
+    expect(wrapper.text()).toContain('尚無任何求職紀錄')
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(false)
+  })
+
+  it('shows a filter-specific empty state with a clear-filters action', async () => {
+    routeQuery.value = { q: 'no-such-job' }
+    const { wrapper } = await mountPage([], 0)
+    const empty = wrapper.find('[data-test="empty-state"]')
+    expect(empty.text()).toContain('找不到符合條件的紀錄')
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(true)
+  })
+})
+
+describe('Jobs.vue — role affordances', () => {
+  it('shows viewers a read-only hint instead of the add button', async () => {
+    const { wrapper } = await mountPage(sample, sample.length, 'viewer')
+    expect(wrapper.find('[data-test="add-job-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="viewer-readonly-hint"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('shows members the add button and no read-only hint', async () => {
+    const { wrapper } = await mountPage(sample, sample.length, 'member')
+    expect(wrapper.find('[data-test="add-job-button"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="viewer-readonly-hint"]').exists()).toBe(
+      false,
+    )
   })
 })
 
@@ -578,7 +605,11 @@ describe('Jobs.vue — post affordances', () => {
   })
 
   it('shows the delete button when the row is editable (can_edit)', async () => {
-    const { wrapper } = await mountPage(ownedSample, ownedSample.length, 'admin')
+    const { wrapper } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
     await wrapper.find('[data-test="record-card"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="detail-delete-button"]').exists()).toBe(
@@ -628,9 +659,9 @@ describe('Jobs.vue — post affordances', () => {
     // Bodyless delete (no password) and no password dialog is mounted.
     expect(remove).toHaveBeenCalledWith(ownedSample[0].id)
     expect(
-      wrapper.findComponent({ name: 'DeleteWithPasswordDialog' }).props(
-        'modelValue',
-      ),
+      wrapper
+        .findComponent({ name: 'DeleteWithPasswordDialog' })
+        .props('modelValue'),
     ).toBe(false)
     expect(listSpy).toHaveBeenCalledTimes(1)
   })
@@ -664,7 +695,11 @@ describe('Jobs.vue — post affordances', () => {
 describe('Jobs.vue — cache invalidation on mutation', () => {
   it('invalidates the jobs cache after a successful delete', async () => {
     vi.spyOn(jobsApi, 'remove').mockResolvedValue()
-    const { wrapper } = await mountPage(ownedSample, ownedSample.length, 'admin')
+    const { wrapper } = await mountPage(
+      ownedSample,
+      ownedSample.length,
+      'admin',
+    )
     const invalidate = vi.spyOn(useJobsStore(), 'invalidate')
 
     await wrapper.find('[data-test="record-card"]').trigger('click')

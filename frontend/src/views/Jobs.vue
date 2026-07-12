@@ -104,9 +104,26 @@ const {
 
 // Admins and members can post (viewers can't). Based on the real role so an
 // admin previewing as a member still sees the affordance a member would have.
-const canPost = computed(() =>
-  ['admin', 'member'].includes(auth.actualRole),
+const canPost = computed(() => ['admin', 'member'].includes(auth.actualRole))
+
+// A year/company/category/kind/search filter is active (sort doesn't count) —
+// tells "no records at all" apart from "none match this filter".
+const hasActiveFilter = computed(
+  () =>
+    !!year.value ||
+    company.value.length > 0 ||
+    category.value.length > 0 ||
+    !!kind.value ||
+    !!q.value,
 )
+
+function clearFilters() {
+  year.value = null
+  company.value = []
+  category.value = []
+  kind.value = null
+  q.value = ''
+}
 
 function openCreate() {
   editingJob.value = null
@@ -250,6 +267,16 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
         >
           新增紀錄
         </el-button>
+        <el-tag
+          v-else-if="auth.actualRole === 'viewer'"
+          type="info"
+          size="small"
+          effect="plain"
+          round
+          data-test="viewer-readonly-hint"
+        >
+          檢視者帳號（唯讀）
+        </el-tag>
       </div>
     </header>
 
@@ -285,15 +312,27 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
       <div class="empty-icon" aria-hidden="true">
         <el-icon :size="32"><Briefcase /></el-icon>
       </div>
-      <p class="empty-text">尚無符合條件的紀錄</p>
-      <el-button
-        v-if="canPost && total === 0"
-        type="primary"
-        :icon="Plus"
-        @click="openCreate"
-      >
-        新增第一筆紀錄
-      </el-button>
+      <template v-if="hasActiveFilter">
+        <p class="empty-text">找不到符合條件的紀錄</p>
+        <el-button
+          :icon="Refresh"
+          data-test="clear-filters"
+          @click="clearFilters"
+        >
+          清除篩選
+        </el-button>
+      </template>
+      <template v-else>
+        <p class="empty-text">尚無任何求職紀錄</p>
+        <el-button
+          v-if="canPost"
+          type="primary"
+          :icon="Plus"
+          @click="openCreate"
+        >
+          新增第一筆紀錄
+        </el-button>
+      </template>
     </div>
 
     <JobDetailDialog v-model="detailOpen" :job="detailJob" @edit="onDetailEdit">

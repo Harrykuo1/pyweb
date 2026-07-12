@@ -150,6 +150,23 @@ describe('Events — timeline', () => {
     const wrapper = await mountPage([], 0)
     expect(wrapper.find('[data-test="empty-state"]').exists()).toBe(true)
   })
+
+  it('shows a filter-specific empty state with a clear-filters action', async () => {
+    routeQuery.value = { q: 'no-such-event' }
+    const wrapper = await mountPage([], 0)
+    const empty = wrapper.find('[data-test="empty-state"]')
+    expect(empty.text()).toContain('找不到符合條件的活動')
+    expect(empty.text()).not.toContain('還沒有任何活動')
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(true)
+  })
+
+  it('shows the no-data empty state (no clear-filters) when nothing is filtered', async () => {
+    routeQuery.value = {}
+    const wrapper = await mountPage([], 0)
+    const empty = wrapper.find('[data-test="empty-state"]')
+    expect(empty.text()).toContain('還沒有任何活動紀錄')
+    expect(wrapper.find('[data-test="clear-filters"]').exists()).toBe(false)
+  })
 })
 
 describe('Events — filters', () => {
@@ -170,9 +187,16 @@ describe('Events — admin', () => {
   it('hides the add button for viewers but shows it for members and admins', async () => {
     const viewer = await mountPage(sample, 2, 'viewer')
     expect(viewer.find('[data-test="add-event-button"]').exists()).toBe(false)
+    // Viewers get a read-only hint in place of the add button.
+    expect(viewer.find('[data-test="viewer-readonly-hint"]').exists()).toBe(
+      true,
+    )
 
     const member = await mountPage(sample, 2, 'member')
     expect(member.find('[data-test="add-event-button"]').exists()).toBe(true)
+    expect(member.find('[data-test="viewer-readonly-hint"]').exists()).toBe(
+      false,
+    )
 
     const admin = await mountPage(sample, 2, 'admin')
     expect(admin.find('[data-test="add-event-button"]').exists()).toBe(true)
