@@ -210,6 +210,34 @@ def test_assign_role_blocks_demoting_the_last_admin(client, db_session):
     assert r.status_code == 409
 
 
+def test_cannot_demote_the_last_password_admin(client, db_session):
+    # A Discord-only admin also exists, so the "last admin" guard passes — but
+    # demoting the password admin would leave only OAuth admins with no
+    # password-login recovery, so it must still be blocked.
+    db_session.add(
+        User(role=UserRole.ADMIN, discord_id="da", discord_username="d", is_active=True)
+    )
+    db_session.commit()
+    admin = db_session.query(User).filter_by(username="admin").one()
+    _login_admin(client)
+
+    r = client.patch(f"/api/auth/users/{admin.id}/role", json={"role": "member"})
+    assert r.status_code == 409, r.text
+    assert "password" in r.json()["detail"].lower()
+
+
+def test_can_demote_a_discord_admin_while_a_password_admin_remains(client, db_session):
+    # Demoting a Discord-only admin is fine as long as the password recovery
+    # admin stays admin.
+    d = User(role=UserRole.ADMIN, discord_id="da", discord_username="d", is_active=True)
+    db_session.add(d)
+    db_session.commit()
+    _login_admin(client)
+
+    r = client.patch(f"/api/auth/users/{d.id}/role", json={"role": "member"})
+    assert r.status_code == 200, r.text
+
+
 def test_assign_role_rejects_viewer_target_role(client, db_session):
     u, _ = _seed_member_account(db_session)
     _login_admin(client)

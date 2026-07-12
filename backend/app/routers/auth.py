@@ -405,6 +405,20 @@ def update_user_role(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot demote the last admin",
             )
+        # Keep a password-login recovery path alive: never demote the last
+        # admin that can log in with a password. Demoting it would leave only
+        # Discord-linked admins, who get locked out if their OAuth ever breaks.
+        if user.password_hash is not None:
+            password_admins = (
+                db.query(User)
+                .filter(User.role == UserRole.ADMIN, User.password_hash.isnot(None))
+                .count()
+            )
+            if password_admins <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot demote the last password-capable admin",
+                )
     user.role = payload.role
     db.commit()
     db.refresh(user)
@@ -425,9 +439,11 @@ def update_user_active(
         )
     # Guards apply to suspension only; reactivation is always allowed.
     if not payload.is_active:
-        # G2: the break-glass admin (seeded password account) can never be
-        # suspended, whatever its current role — keeps recovery login working.
-        if user.username == settings.seed_admin_username:
+        # G2: never suspend the break-glass admin — the password-login recovery
+        # account. Identified by role + password (via _admin_password_account),
+        # NOT by username, so renaming the admin doesn't strip this protection.
+        break_glass = _admin_password_account(db)
+        if break_glass is not None and user.id == break_glass.id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="The break-glass admin account cannot be suspended",
