@@ -9,24 +9,26 @@ uploads of executables that lie about being PDFs.
 
 from pathlib import Path
 
-# Extensions whose bytes the browser can safely render in place: the
-# download endpoint serves these with Content-Disposition: inline so
-# <embed src> / <img src> in the viewer pick them up. Office formats
-# don't appear here — they're previewed via the OnlyOffice-converted
-# .preview.pdf served from a separate route. Everything outside this
-# set gets forced down as an attachment plus X-Content-Type-Options:
-# nosniff, so HTML / SVG / scripts can't ride the same response to
-# get an inline-render XSS foothold.
-PREVIEW_INLINE_EXTENSIONS: frozenset[str] = frozenset(
-    {
-        ".pdf",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".webp",
-    }
-)
+# Extensions whose bytes the browser can safely render in place, mapped to
+# the CANONICAL Content-Type the download endpoint must serve. The browser
+# sets the stored mime_type at upload time and it is attacker-controlled, so
+# the download must never echo it — a file named "x.png" carrying a
+# text/html mime would otherwise be served inline as HTML (stored XSS). We
+# key the served type off the (sanitized) extension instead. Office formats
+# aren't here — they're previewed via the OnlyOffice-converted .preview.pdf
+# on a separate route. Everything outside this map is forced down as an
+# application/octet-stream attachment plus X-Content-Type-Options: nosniff,
+# so HTML / SVG / scripts can't ride the same response into an inline render.
+INLINE_CONTENT_TYPES: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+PREVIEW_INLINE_EXTENSIONS: frozenset[str] = frozenset(INLINE_CONTENT_TYPES)
 
 
 # OS-spat metadata files that show up in folder uploads but the
