@@ -32,6 +32,25 @@ def invite_is_valid(invite: RegistrationInvite | None, now: datetime) -> bool:
     return now < expires
 
 
+def _consume_invite(db: Session, token: str, now: datetime, user_id: int) -> bool:
+    """Atomic compare-and-set on the invite. Two OAuth callbacks racing the
+    same token can both pass invite_is_valid()'s read, so consumption must be
+    a guarded UPDATE — only the caller whose statement still sees
+    ``used_at IS NULL`` wins (rowcount 1); the loser gets 0."""
+    claimed = (
+        db.query(RegistrationInvite)
+        .filter(
+            RegistrationInvite.token == token,
+            RegistrationInvite.used_at.is_(None),
+        )
+        .update(
+            {"used_at": now, "used_by_user_id": user_id},
+            synchronize_session=False,
+        )
+    )
+    return claimed == 1
+
+
 def register_via_invite(
     db: Session, identity: DiscordIdentity, token: str
 ) -> tuple[User | None, str | None]:
@@ -59,8 +78,9 @@ def register_via_invite(
             return None, "account_suspended"
         bind_identity(user, identity)
         clear_pending_link(db, identity.id)
-        invite.used_at = now
-        invite.used_by_user_id = user.id
+        if not _consume_invite(db, token, now, user.id):
+            db.rollback()
+            return None, "invalid_invite"
         db.commit()
         db.refresh(user)
         return user, None
@@ -81,8 +101,9 @@ def register_via_invite(
     db.add(user)
     db.flush()
     clear_pending_link(db, identity.id)
-    invite.used_at = now
-    invite.used_by_user_id = user.id
+    if not _consume_invite(db, token, now, user.id):
+        db.rollback()
+        return None, "invalid_invite"
     db.commit()
     db.refresh(user)
     return user, None

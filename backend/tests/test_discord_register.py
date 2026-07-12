@@ -65,6 +65,27 @@ def test_register_creates_member_account_and_consumes_invite(db_session):
     assert invite.used_by_user_id == user.id
 
 
+def test_consume_invite_is_a_guarded_compare_and_set(db_session):
+    # The single-use guarantee is a DB-level compare-and-set, not just the
+    # earlier read-check, so two callers racing the same token can't both
+    # consume it. Once one claims used_at, a second claim matches 0 rows.
+    from app.core.discord_register import _consume_invite
+
+    _seed_invite(db_session)
+    u1 = User(role=UserRole.MEMBER, discord_id="A", discord_username="a")
+    u2 = User(role=UserRole.MEMBER, discord_id="B", discord_username="b")
+    db_session.add_all([u1, u2])
+    db_session.commit()
+    now = datetime.now(UTC)
+
+    assert _consume_invite(db_session, "valid", now, u1.id) is True
+    db_session.commit()
+    assert _consume_invite(db_session, "valid", now, u2.id) is False
+
+    invite = db_session.query(RegistrationInvite).filter_by(token="valid").one()
+    assert invite.used_by_user_id == u1.id
+
+
 def test_register_rejects_invalid_token(db_session):
     ident = DiscordIdentity(id="NEW", username="x", global_name=None)
     user, err = register_via_invite(db_session, ident, "nope")
