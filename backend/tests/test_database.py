@@ -28,12 +28,15 @@ def test_sqlite_pragma_listener_enables_wal_on_file_db():
             journal_mode = conn.execute(text("PRAGMA journal_mode")).scalar()
             synchronous = conn.execute(text("PRAGMA synchronous")).scalar()
             foreign_keys = conn.execute(text("PRAGMA foreign_keys")).scalar()
+            busy_timeout = conn.execute(text("PRAGMA busy_timeout")).scalar()
         engine.dispose()
 
     assert journal_mode.lower() == "wal"
     # synchronous=NORMAL maps to integer 1 in SQLite.
     assert synchronous == 1
     assert foreign_keys == 1
+    # Writers wait up to 5s for a competing writer instead of erroring.
+    assert busy_timeout == 5000
 
 
 def test_sqlite_pragma_listener_is_safe_for_memory_db():
