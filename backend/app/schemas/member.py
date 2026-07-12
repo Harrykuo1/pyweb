@@ -2,13 +2,18 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Upper bound for the free-text resume markdown. Generous for real content
+# while capping a single authenticated write from stuffing the ~256 MB nginx
+# body limit into one text column.
+MARKDOWN_MAX_LENGTH = 100_000
+
 
 class MemberCreate(BaseModel):
     graduation_year: int = Field(ge=1900, le=2100)
     real_name: str = Field(min_length=1, max_length=64)
     institution: str = Field(min_length=1, max_length=128)
     position: str | None = Field(default=None, min_length=1, max_length=128)
-    resume_md: str | None = None
+    resume_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     discord_username: str | None = Field(default=None, max_length=64)
     joined_at: datetime | None = None
 
@@ -18,7 +23,7 @@ class MemberSelfCreate(BaseModel):
     real_name: str = Field(min_length=1, max_length=64)
     institution: str = Field(min_length=1, max_length=128)
     position: str | None = Field(default=None, min_length=1, max_length=128)
-    resume_md: str | None = None
+    resume_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
 
 
 class MemberUpdate(BaseModel):
@@ -26,7 +31,7 @@ class MemberUpdate(BaseModel):
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
     institution: str | None = Field(default=None, min_length=1, max_length=128)
     position: str | None = Field(default=None, min_length=1, max_length=128)
-    resume_md: str | None = None
+    resume_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     joined_at: datetime | None = None
     discord_username: str | None = Field(default=None, max_length=64)
 

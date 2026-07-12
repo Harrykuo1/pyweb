@@ -92,6 +92,23 @@ def test_admin_create_with_unknown_subject_404(ctx):
     assert r.status_code == 404
 
 
+def test_create_rejects_oversized_experience_md(ctx):
+    # Free-text markdown is length-bounded so one authenticated write can't
+    # stuff the ~256 MB body limit into a text column.
+    from app.schemas.job import MARKDOWN_MAX_LENGTH
+
+    client, login, _ = ctx
+    login("admin-pw")
+    over = client.post(
+        "/api/jobs", json=_payload(experience_md="x" * (MARKDOWN_MAX_LENGTH + 1))
+    )
+    assert over.status_code == 422, over.text
+    at_limit = client.post(
+        "/api/jobs", json=_payload(experience_md="x" * MARKDOWN_MAX_LENGTH)
+    )
+    assert at_limit.status_code == 201, at_limit.text
+
+
 # ---------- create: member ----------
 
 

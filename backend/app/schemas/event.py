@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.job import PostStatusLiteral
+from app.schemas.job import MARKDOWN_MAX_LENGTH, PostStatusLiteral
 
 # Keep the tag set per event small enough to render as a tidy chip row
 # and to bound the association-table fan-out. A genuine need for more
@@ -34,7 +34,7 @@ class EventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=128)
     event_date: date
     location: str | None = Field(default=None, min_length=1, max_length=128)
-    description_md: str | None = None
+    description_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     tags: list[str] = Field(default_factory=list, max_length=EVENT_TAGS_MAX)
 
     @field_validator("tags")
@@ -51,7 +51,7 @@ class EventUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=128)
     event_date: date | None = None
     location: str | None = Field(default=None, max_length=128)
-    description_md: str | None = None
+    description_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     tags: list[str] | None = Field(default=None, max_length=EVENT_TAGS_MAX)
 
     @field_validator("tags")

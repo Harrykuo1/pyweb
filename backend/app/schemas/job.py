@@ -14,6 +14,10 @@ PostStatusLiteral = Literal["pending", "accepted", "rejected"]
 # needs more, that signals the schema needs more thought rather than
 # this number going up.
 TIMELINE_EVENTS_MAX = 50
+# Upper bound for free-text markdown bodies. Generous for real content
+# (largest existing post is < 1 KB) while capping a single authenticated
+# write from stuffing the ~256 MB nginx body limit into one text column.
+MARKDOWN_MAX_LENGTH = 100_000
 
 
 class TimelineEvent(BaseModel):
@@ -44,14 +48,14 @@ class JobCreate(BaseModel):
     company: str = Field(min_length=1, max_length=128)
     category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral
-    experience_md: str = Field(min_length=1)
+    experience_md: str = Field(min_length=1, max_length=MARKDOWN_MAX_LENGTH)
     # Admin free-text author fallback (when not picking a member subject).
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
     # Admin-only: the member this post is about. Ignored for members (their
     # subject is always themselves).
     subject_member_id: int | None = None
     is_anonymous: bool = False
-    timeline_md: str | None = None
+    timeline_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     timeline_events: list[TimelineEvent] | None = Field(
         default=None, max_length=TIMELINE_EVENTS_MAX
     )
@@ -68,12 +72,14 @@ class JobUpdate(BaseModel):
     company: str | None = Field(default=None, min_length=1, max_length=128)
     category: str | None = Field(default=None, min_length=1, max_length=64)
     kind: JobKindLiteral | None = None
-    experience_md: str | None = Field(default=None, min_length=1)
+    experience_md: str | None = Field(
+        default=None, min_length=1, max_length=MARKDOWN_MAX_LENGTH
+    )
     real_name: str | None = Field(default=None, min_length=1, max_length=64)
     # Admin-only on update; the router pops these for non-admin editors.
     subject_member_id: int | None = None
     is_anonymous: bool | None = None
-    timeline_md: str | None = None
+    timeline_md: str | None = Field(default=None, max_length=MARKDOWN_MAX_LENGTH)
     timeline_events: list[TimelineEvent] | None = Field(
         default=None, max_length=TIMELINE_EVENTS_MAX
     )
