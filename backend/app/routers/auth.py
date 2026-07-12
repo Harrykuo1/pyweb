@@ -64,6 +64,20 @@ def _get_user_by_role(db: Session, role: UserRole) -> User:
     return users[0]
 
 
+def _admin_password_account(db: Session) -> User | None:
+    """The break-glass password admin — the one admin-role account that still
+    has a password (Discord-linked admins have none). Its password is the
+    shared confirmation credential for account changes, so any admin — even a
+    Discord-linked one with no password of their own — can manage accounts by
+    entering the admin password."""
+    return (
+        db.query(User)
+        .filter(User.role == UserRole.ADMIN, User.password_hash.isnot(None))
+        .order_by(User.id)
+        .first()
+    )
+
+
 @router.post("/login", response_model=UserResponse)
 @limiter.limit(LOGIN_RATE_LIMIT)
 def login(
@@ -549,11 +563,15 @@ def update_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Response:
-    if not verify_password(payload.current_password, current_user.password_hash):
-        # 422, not 401, so the global axios auth-interceptor doesn't
-        # treat a typo'd current password as an expired session — the
-        # session is still valid here, only the body-supplied password
-        # didn't validate.
+    # Confirm against THE admin account's password, not the acting admin's
+    # own — so any admin (including a Discord-linked one with no password of
+    # their own) can manage accounts by entering the shared admin password.
+    # 422 (not 401) so the axios auth-interceptor doesn't treat a typo'd
+    # password as an expired session; the session is still valid here.
+    admin_account = _admin_password_account(db)
+    if admin_account is None or not verify_password(
+        payload.current_password, admin_account.password_hash
+    ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Current password is incorrect",

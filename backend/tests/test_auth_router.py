@@ -446,6 +446,38 @@ def test_update_admin_password_then_relogin(client):
     assert ok.json()["role"] == "admin"
 
 
+def test_password_change_confirms_against_the_admin_account_not_the_actor(
+    client, db_session
+):
+    # A second admin whose own password differs must confirm password changes
+    # with THE admin account's password — so a Discord-linked admin (no
+    # password of their own) can manage accounts using the shared admin one.
+    db_session.add(
+        User(
+            username="admin2",
+            password_hash=hash_password("admin2-pw"),
+            role=UserRole.ADMIN,
+        )
+    )
+    db_session.commit()
+    assert (
+        client.post("/api/auth/login", json={"password": "admin2-pw"}).status_code
+        == 200
+    )
+    # The actor's OWN password is not accepted as confirmation.
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin2-pw", "new_password": "vfresh-pw"},
+    )
+    assert r.status_code == 422, r.text
+    # THE admin account's password is.
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": "vfresh-pw"},
+    )
+    assert r.status_code == 204, r.text
+
+
 def test_update_password_wrong_current_returns_422(client):
     # 422 (not 401) so the frontend's global session-expired interceptor
     # doesn't bounce a typo'd current password back to /login while the
