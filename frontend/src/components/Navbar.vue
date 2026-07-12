@@ -8,6 +8,7 @@ import {
   MoreFilled,
   Setting,
   SwitchButton,
+  User,
   View,
 } from '@element-plus/icons-vue'
 
@@ -67,6 +68,13 @@ function closeUserMenu() {
 function gotoSettings() {
   closeUserMenu()
   router.push('/settings')
+}
+
+function gotoMyProfile() {
+  closeUserMenu()
+  // Deep-link to the member's own card in the directory (focus scrolls +
+  // flashes it), so a member has a one-click path to view/edit their data.
+  router.push({ path: '/members', query: { focus: String(auth.myMemberId) } })
 }
 
 async function handleLogout() {
@@ -199,6 +207,18 @@ useOutsideClick({
               </header>
 
               <div class="user-menu__divider" />
+
+              <button
+                v-if="auth.myMemberId"
+                type="button"
+                class="user-menu__row user-menu__action"
+                role="menuitem"
+                data-test="nav-my-profile"
+                @click="gotoMyProfile"
+              >
+                <el-icon class="user-menu__icon"><User /></el-icon>
+                <span class="user-menu__label">我的資料</span>
+              </button>
 
               <label
                 v-if="auth.isActuallyAdmin"

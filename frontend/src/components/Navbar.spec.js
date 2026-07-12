@@ -74,6 +74,32 @@ describe('Navbar.vue', () => {
     expect(viewer.find('[data-test="nav-review"]').exists()).toBe(false)
   })
 
+  it('offers a 我的資料 shortcut deep-linking a member to their own card', async () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 4,
+      username: null,
+      role: 'member',
+      member_id: 7,
+      has_profile: true,
+    }
+    const wrapper = mount(Navbar, { global: { stubs } })
+    const item = wrapper.find('[data-test="nav-my-profile"]')
+    expect(item.exists()).toBe(true)
+    await item.trigger('click')
+    expect(pushMock).toHaveBeenCalledWith({
+      path: '/members',
+      query: { focus: '7' },
+    })
+  })
+
+  it('hides 我的資料 for accounts without a member profile (admin/viewer)', () => {
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', role: 'admin', member_id: null }
+    const wrapper = mount(Navbar, { global: { stubs } })
+    expect(wrapper.find('[data-test="nav-my-profile"]').exists()).toBe(false)
+  })
+
   it('shows the username in the chip trigger for admin', () => {
     const auth = useAuthStore()
     auth.user = { id: 1, username: 'alice', role: 'admin' }
