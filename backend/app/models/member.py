@@ -11,9 +11,10 @@ class Member(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # 1:1 link to the auth account. Nullable so legacy rows exist before the
-    # migration wires them up; unique so a user maps to at most one member.
+    # migration wires them up; a unique index (matching migration 0017's
+    # ix_members_user_id) so a user maps to at most one member.
     user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id"), unique=True, nullable=True
+        ForeignKey("users.id"), index=True, unique=True, nullable=True
     )
     graduation_year: Mapped[int] = mapped_column(Integer, nullable=False)
     real_name: Mapped[str] = mapped_column(String(64), nullable=False)

@@ -36,6 +36,8 @@ class Event(Base):
         ),
         nullable=False,
         default=PostStatus.PENDING,
+        # Matches migration 0019's ix_events_status (list filters by status).
+        index=True,
     )
     review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by_user_id: Mapped[int | None] = mapped_column(
