@@ -657,17 +657,25 @@ def test_cannot_suspend_admin_role(client, db_session, monkeypatch):
     assert r.status_code == 409, r.text
 
 
-def test_cannot_suspend_seed_admin(client, db_session, monkeypatch):
-    # G2: the seeded 'admin' account is the break-glass account; protect it.
-    monkeypatch.setattr(settings, "seed_admin_username", "admin")
+def test_cannot_suspend_seed_admin(client, db_session):
+    # G2: the password-login recovery admin can't be suspended.
     seed = db_session.query(User).filter_by(username="admin").one()
     _login_admin(client)
     r = client.patch(f"/api/auth/users/{seed.id}/active", json={"is_active": False})
     assert r.status_code == 409, r.text
-    assert (
-        "break-glass" in r.json()["detail"].lower()
-        or "admin" in r.json()["detail"].lower()
-    )
+    assert "break-glass" in r.json()["detail"].lower()
+
+
+def test_break_glass_protection_survives_admin_rename(client, db_session):
+    # The protection is keyed on role+password, not username, so renaming the
+    # admin must not strip it (the whole point of the rename-safe fix).
+    admin = db_session.query(User).filter_by(username="admin").one()
+    admin.username = "boss"
+    db_session.commit()
+    _login_admin(client)  # password login still finds the same account
+    r = client.patch(f"/api/auth/users/{admin.id}/active", json={"is_active": False})
+    assert r.status_code == 409, r.text
+    assert "break-glass" in r.json()["detail"].lower()
 
 
 def test_non_admin_cannot_suspend(client, db_session):
