@@ -135,6 +135,17 @@ function openEdit(job) {
   formOpen.value = true
 }
 
+// The detail dialog toggled the heart; patch the matching list row in place so
+// the card count/sort stays in step without a refetch. (Card-level likes mutate
+// the row directly, so they need no handler here.)
+function onLikeChanged({ id, liked, likeCount }) {
+  const item = items.value.find((j) => j.id === id)
+  if (item) {
+    item.liked_by_me = liked
+    item.like_count = likeCount
+  }
+}
+
 function onDetailEdit(job) {
   // Close detail dialog (handled by detail itself) and open the form
   // for the same record. The detail dialog closes synchronously via
@@ -305,6 +316,7 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
         :key="i.id"
         :job="i"
         @open="openDetail"
+        @like-changed="onLikeChanged"
       />
     </div>
 
@@ -335,7 +347,12 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
       </template>
     </div>
 
-    <JobDetailDialog v-model="detailOpen" :job="detailJob" @edit="onDetailEdit">
+    <JobDetailDialog
+      v-model="detailOpen"
+      :job="detailJob"
+      @edit="onDetailEdit"
+      @like-changed="onLikeChanged"
+    >
       <template #footer-extra>
         <el-button
           v-if="detailJob?.can_edit"

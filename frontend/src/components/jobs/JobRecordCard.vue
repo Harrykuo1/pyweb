@@ -1,12 +1,47 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ElIcon } from 'element-plus'
 import { Calendar, OfficeBuilding, School, User } from '@element-plus/icons-vue'
 
-defineProps({
+import LikeButton from '../LikeButton.vue'
+import { jobsApi } from '../../api/jobs'
+import { useLikeToggle } from '../../composables/useLikeToggle'
+
+const props = defineProps({
   job: { type: Object, required: true },
 })
-defineEmits(['open'])
+const emit = defineEmits(['open', 'like-changed'])
+
+// Like straight from the card. Local optimistic state (never mutate the prop);
+// after it settles we emit like-changed so the parent patches the list row.
+const {
+  isLiked,
+  likeCount,
+  pending: likePending,
+  toggle: toggleLike,
+  sync: syncLike,
+} = useLikeToggle({
+  liked: props.job.liked_by_me,
+  count: props.job.like_count,
+  like: () => jobsApi.like(props.job.id),
+  unlike: () => jobsApi.unlike(props.job.id),
+})
+
+// Keep in step if the parent updates the row (e.g. liked from the detail
+// dialog) — the parent patches props.job, we re-sync local state.
+watch(
+  () => [props.job.liked_by_me, props.job.like_count],
+  ([liked, count]) => syncLike(liked, count),
+)
+
+async function onLike() {
+  await toggleLike()
+  emit('like-changed', {
+    id: props.job.id,
+    liked: isLiked.value,
+    likeCount: likeCount.value,
+  })
+}
 
 const KIND_META = {
   internship: { label: '實習' },
@@ -145,6 +180,15 @@ function formatDate(iso) {
     </p>
 
     <div class="card-meta">
+      <div class="card-like" data-test="card-like" @click.stop @keydown.stop>
+        <LikeButton
+          :liked="isLiked"
+          :count="likeCount"
+          :pending="likePending"
+          @toggle="onLike"
+          @show-likers="emit('open', job)"
+        />
+      </div>
       <span class="meta-year">
         <el-icon :size="12"><School /></el-icon>
         {{ formatJobYearMonth(job) }} 求職
@@ -432,10 +476,17 @@ function formatDate(iso) {
 .card-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
   margin-top: auto;
   padding-top: var(--sp-sm);
   border-top: 1px dashed rgba(15, 23, 42, 0.08);
+}
+
+.card-like {
+  display: inline-flex;
+  align-items: center;
+  margin-left: -4px;
 }
 
 .meta-year,

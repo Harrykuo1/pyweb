@@ -91,6 +91,8 @@ async function mountPage(
   auth.user = { id: 1, username: 'a', role }
   if (preview) auth.previewAsMember = true
   const listSpy = vi.spyOn(jobsApi, 'list').mockResolvedValue({ items, total })
+  // The detail dialog's comment thread fetches on open; stub it out.
+  vi.spyOn(jobsApi, 'listComments').mockResolvedValue([])
   const wrapper = mount(Jobs)
   pendingTeardowns.push(wrapper)
   await flushPromises()
@@ -630,7 +632,11 @@ describe('Jobs.vue — post affordances', () => {
     await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
     await flushPromises()
 
-    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
+    // The comment thread also mounts a DeleteWithPasswordDialog; pick the one
+    // that's actually open (the job-delete flow just opened it).
+    const dialog = wrapper
+      .findAllComponents({ name: 'DeleteWithPasswordDialog' })
+      .find((d) => d.props('modelValue'))
     expect(dialog.exists()).toBe(true)
     listSpy.mockClear()
     dialog.vm.$emit('confirm', 'admin-pw')
@@ -656,13 +662,13 @@ describe('Jobs.vue — post affordances', () => {
     await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
     await flushPromises()
 
-    // Bodyless delete (no password) and no password dialog is mounted.
+    // Bodyless delete (no password) — no password dialog is opened.
     expect(remove).toHaveBeenCalledWith(ownedSample[0].id)
     expect(
       wrapper
-        .findComponent({ name: 'DeleteWithPasswordDialog' })
-        .props('modelValue'),
-    ).toBe(false)
+        .findAllComponents({ name: 'DeleteWithPasswordDialog' })
+        .every((d) => !d.props('modelValue')),
+    ).toBe(true)
     expect(listSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -680,7 +686,11 @@ describe('Jobs.vue — post affordances', () => {
     await flushPromises()
     await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
     await flushPromises()
-    const dialog = wrapper.findComponent({ name: 'DeleteWithPasswordDialog' })
+    // The comment thread also mounts a DeleteWithPasswordDialog; pick the one
+    // that's actually open (the job-delete flow just opened it).
+    const dialog = wrapper
+      .findAllComponents({ name: 'DeleteWithPasswordDialog' })
+      .find((d) => d.props('modelValue'))
 
     listSpy.mockClear()
     dialog.vm.$emit('confirm', 'wrong')
@@ -707,7 +717,8 @@ describe('Jobs.vue — cache invalidation on mutation', () => {
     await wrapper.find('[data-test="detail-delete-button"]').trigger('click')
     await flushPromises()
     wrapper
-      .findComponent({ name: 'DeleteWithPasswordDialog' })
+      .findAllComponents({ name: 'DeleteWithPasswordDialog' })
+      .find((d) => d.props('modelValue'))
       .vm.$emit('confirm', 'admin-pw')
     await flushPromises()
 

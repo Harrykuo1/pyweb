@@ -21,7 +21,12 @@ import 'md-editor-v3/lib/preview.css'
 
 import JobAttachmentsViewer from './JobAttachmentsViewer.vue'
 import TimelineDisplay from '../TimelineDisplay.vue'
+import CommentThread from '../CommentThread.vue'
+import LikeButton from '../LikeButton.vue'
+import LikersDialog from '../LikersDialog.vue'
 import { useAuthStore } from '../../stores/auth'
+import { useLikeToggle } from '../../composables/useLikeToggle'
+import { jobsApi } from '../../api/jobs'
 
 const auth = useAuthStore()
 
@@ -30,7 +35,65 @@ const props = defineProps({
   job: { type: Object, default: null },
 })
 
-const emit = defineEmits(['update:modelValue', 'edit'])
+const emit = defineEmits(['update:modelValue', 'edit', 'like-changed'])
+
+// Comment API bound to jobs, handed to the generic CommentThread.
+const commentApi = {
+  list: (id) => jobsApi.listComments(id),
+  create: (id, body) => jobsApi.createComment(id, body),
+  update: (id, cid, body) => jobsApi.updateComment(id, cid, body),
+  remove: (id, cid, password) => jobsApi.removeComment(id, cid, password),
+}
+
+// ---- likes ----
+const {
+  isLiked,
+  likeCount,
+  pending: likePending,
+  toggle: toggleLike,
+  sync: syncLike,
+} = useLikeToggle({
+  liked: props.job?.liked_by_me,
+  count: props.job?.like_count,
+  like: () => jobsApi.like(props.job.id),
+  unlike: () => jobsApi.unlike(props.job.id),
+})
+
+const likersOpen = ref(false)
+const likers = ref([])
+const likersLoading = ref(false)
+
+watch(
+  () => props.job,
+  (job) => {
+    syncLike(job?.liked_by_me, job?.like_count)
+    likersOpen.value = false
+    likers.value = []
+  },
+)
+
+async function onToggleLike() {
+  if (!props.job) return
+  await toggleLike()
+  emit('like-changed', {
+    id: props.job.id,
+    liked: isLiked.value,
+    likeCount: likeCount.value,
+  })
+}
+
+async function openLikers() {
+  if (!props.job) return
+  likersOpen.value = true
+  likersLoading.value = true
+  try {
+    likers.value = await jobsApi.listLikers(props.job.id)
+  } catch {
+    likers.value = []
+  } finally {
+    likersLoading.value = false
+  }
+}
 
 const KIND_META = {
   internship: { label: '實習', cls: 'kind-internship' },
@@ -270,10 +333,19 @@ function formatJobYearMonth(j) {
           </div>
         </el-tab-pane>
       </el-tabs>
+
+      <CommentThread :post-id="job.id" :api="commentApi" :active="modelValue" />
     </template>
 
     <template #footer>
       <div class="footer-row">
+        <LikeButton
+          :liked="isLiked"
+          :count="likeCount"
+          :pending="likePending"
+          @toggle="onToggleLike"
+          @show-likers="openLikers"
+        />
         <slot name="footer-extra" />
         <div class="footer-spacer" />
         <el-button
@@ -289,6 +361,12 @@ function formatJobYearMonth(j) {
       </div>
     </template>
   </el-dialog>
+
+  <LikersDialog
+    v-model="likersOpen"
+    :likers="likers"
+    :loading="likersLoading"
+  />
 </template>
 
 <style scoped>
