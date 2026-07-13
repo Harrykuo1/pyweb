@@ -183,6 +183,30 @@ describe('eventsApi comments', () => {
   })
 })
 
+describe('eventsApi likes', () => {
+  it('POSTs a like and returns the status', async () => {
+    const post = vi
+      .spyOn(client, 'post')
+      .mockResolvedValue({ data: { like_count: 1, liked: true } })
+    expect(await eventsApi.like(2)).toEqual({ like_count: 1, liked: true })
+    expect(post).toHaveBeenCalledWith('/events/2/like')
+  })
+
+  it('DELETEs a like and returns the status', async () => {
+    const del = vi
+      .spyOn(client, 'delete')
+      .mockResolvedValue({ data: { like_count: 0, liked: false } })
+    expect(await eventsApi.unlike(2)).toEqual({ like_count: 0, liked: false })
+    expect(del).toHaveBeenCalledWith('/events/2/like')
+  })
+
+  it('GETs the likers list', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
+    await eventsApi.listLikers(2)
+    expect(get).toHaveBeenCalledWith('/events/2/likes')
+  })
+})
+
 describe('eventsApi.detailRoute', () => {
   it('returns a router location pointing at /events with detail=<id>', () => {
     expect(eventsApi.detailRoute(12)).toEqual({

@@ -116,6 +116,20 @@ export const eventsApi = {
     await client.delete(`/events/${eventId}/comments/${commentId}`, config)
   },
 
+  // ---- likes (愛心) ----
+  async like(eventId) {
+    const { data } = await client.post(`/events/${eventId}/like`)
+    return data // { like_count, liked }
+  },
+  async unlike(eventId) {
+    const { data } = await client.delete(`/events/${eventId}/like`)
+    return data // { like_count, liked }
+  },
+  async listLikers(eventId) {
+    const { data } = await client.get(`/events/${eventId}/likes`)
+    return data
+  },
+
   // ---- routing ----
   // Single source of truth for the "open this event's detail dialog" URL
   // shape, mirroring jobsApi.detailRoute.
