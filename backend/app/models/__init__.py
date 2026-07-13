@@ -1,5 +1,5 @@
 from app.models.app_config import AppConfig
-from app.models.event import Event, EventComment, EventPhoto, EventTag
+from app.models.event import Event, EventComment, EventLike, EventPhoto, EventTag
 from app.models.job import Job, JobKind
 from app.models.job_attachment import JobAttachment
 from app.models.member import Member
@@ -13,6 +13,7 @@ __all__ = [
     "AppConfig",
     "Event",
     "EventComment",
+    "EventLike",
     "EventPhoto",
     "EventTag",
     "Job",
