@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -26,6 +26,7 @@ import {
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import EventDetailDialog from '../components/events/EventDetailDialog.vue'
 import EventFormDialog from '../components/events/EventFormDialog.vue'
+import LikeButton from '../components/LikeButton.vue'
 import {
   TAG_FILTER_LIMIT,
   YEAR_OPTIONS,
@@ -150,6 +151,29 @@ function onLikeChanged({ id, liked, likeCount }) {
   if (item) {
     item.liked_by_me = liked
     item.like_count = likeCount
+  }
+}
+
+// Like straight from a timeline card (no need to open the post). Optimistic
+// flip on the list row, reconciled with — or reverted to — the server truth.
+const likePending = reactive({})
+async function onCardLike(ev) {
+  if (likePending[ev.id]) return
+  likePending[ev.id] = true
+  const wasLiked = ev.liked_by_me
+  ev.liked_by_me = !wasLiked
+  ev.like_count = Math.max(0, (ev.like_count || 0) + (wasLiked ? -1 : 1))
+  try {
+    const res = wasLiked
+      ? await eventsApi.unlike(ev.id)
+      : await eventsApi.like(ev.id)
+    ev.liked_by_me = res.liked
+    ev.like_count = res.like_count
+  } catch {
+    ev.liked_by_me = wasLiked
+    ev.like_count = Math.max(0, (ev.like_count || 0) + (wasLiked ? 1 : -1))
+  } finally {
+    delete likePending[ev.id]
   }
 }
 
@@ -649,19 +673,20 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                 <span class="tl-more" aria-hidden="true">
                   閱讀活動 <span class="tl-more-arrow">→</span>
                 </span>
-                <span
-                  v-if="ev.like_count"
-                  class="tl-likes"
+                <div
+                  class="tl-like"
                   data-test="entry-likes"
+                  @click.stop
+                  @keydown.stop
                 >
-                  <svg viewBox="0 0 24 24" width="13" height="13">
-                    <path
-                      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  {{ ev.like_count }}
-                </span>
+                  <LikeButton
+                    :liked="ev.liked_by_me"
+                    :count="ev.like_count || 0"
+                    :pending="!!likePending[ev.id]"
+                    @toggle="onCardLike(ev)"
+                    @show-likers="openDetail(ev)"
+                  />
+                </div>
               </div>
 
               <!-- Zone 3: right meta-rail (the journal date-stamp) -->
@@ -1640,15 +1665,10 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
   order: 5;
 }
 
-.tl-likes {
+.tl-like {
   order: 6;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-top: 4px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: #ef4444;
+  margin-top: 2px;
+  margin-left: -4px;
 }
 
 .sort-mode {

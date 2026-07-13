@@ -110,6 +110,24 @@ async function mountPage(
   return wrapper
 }
 
+describe('Events — card likes', () => {
+  it('likes an event straight from its card without opening it', async () => {
+    const items = [{ ...sample[0], like_count: 2, liked_by_me: false }]
+    const likeSpy = vi
+      .spyOn(eventsApi, 'like')
+      .mockResolvedValue({ like_count: 3, liked: true })
+    const wrapper = await mountPage(items, 1, 'member')
+
+    const card = wrapper.findAll('[data-test="timeline-entry"]')[0]
+    expect(card.find('[data-test="like-count"]').text()).toBe('2')
+    await card.find('[data-test="like-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(likeSpy).toHaveBeenCalledWith(1)
+    expect(card.find('[data-test="like-count"]').text()).toBe('3')
+  })
+})
+
 describe('Events — timeline', () => {
   it('renders one entry per event', async () => {
     const wrapper = await mountPage()
