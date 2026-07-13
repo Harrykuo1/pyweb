@@ -6,6 +6,7 @@ import { eventsApi } from '../../api/events'
 import { useAuthStore } from '../../stores/auth'
 import { useDeleteWithPassword } from '../../composables/useDeleteWithPassword'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import MemberAvatar from '../members/MemberAvatar.vue'
 
 const props = defineProps({
   eventId: { type: Number, default: null },
@@ -153,10 +154,6 @@ function formatTime(iso) {
     minute: '2-digit',
   })
 }
-
-function initial(name) {
-  return (name || '?').trim().charAt(0) || '?'
-}
 </script>
 
 <template>
@@ -193,9 +190,13 @@ function initial(name) {
         class="comment-item"
         data-test="comment-item"
       >
-        <div class="avatar" aria-hidden="true">
-          {{ initial(c.author_display_name) }}
-        </div>
+        <MemberAvatar
+          :member-id="c.author_member_id"
+          :name="c.author_display_name"
+          :has-photo="c.author_has_photo"
+          :photo-updated-at="c.author_photo_updated_at"
+          :size="36"
+        />
         <div class="comment-main">
           <div class="comment-head">
             <span class="comment-author" data-test="comment-author">
@@ -347,25 +348,6 @@ function initial(name) {
 .comment-item {
   display: flex;
   gap: 10px;
-}
-
-.avatar {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(
-    135deg,
-    var(--brand-primary, #6366f1),
-    var(--brand-accent, #7c3aed)
-  );
-  text-transform: uppercase;
 }
 
 .comment-main {

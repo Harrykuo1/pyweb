@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import EventComments from './EventComments.vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
+import MemberAvatar from '../members/MemberAvatar.vue'
 import { eventsApi } from '../../api/events'
 import { useAuthStore } from '../../stores/auth'
 
@@ -24,7 +25,7 @@ vi.mock('element-plus', async (importOriginal) => {
   }
 })
 
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 
 function comment(overrides = {}) {
   return {
@@ -35,6 +36,9 @@ function comment(overrides = {}) {
     edited_at: null,
     author_display_name: '我本人',
     author_user_id: null,
+    author_member_id: null,
+    author_has_photo: false,
+    author_photo_updated_at: null,
     can_edit: false,
     can_delete: false,
     ...overrides,
@@ -78,6 +82,25 @@ describe('EventComments', () => {
     // The second one was edited → shows the marker.
     expect(items[1].find('[data-test="comment-edited"]').exists()).toBe(true)
     expect(items[0].find('[data-test="comment-edited"]').exists()).toBe(false)
+  })
+
+  it('passes the author member id and photo info to MemberAvatar', async () => {
+    const wrapper = await mountComments({
+      comments: [
+        comment({
+          id: 1,
+          author_display_name: '王子銜',
+          author_member_id: 7,
+          author_has_photo: true,
+          author_photo_updated_at: '2026-01-01',
+        }),
+      ],
+    })
+    const avatar = wrapper.findComponent(MemberAvatar)
+    expect(avatar.props('memberId')).toBe(7)
+    expect(avatar.props('hasPhoto')).toBe(true)
+    expect(avatar.props('photoUpdatedAt')).toBe('2026-01-01')
+    expect(avatar.props('name')).toBe('王子銜')
   })
 
   it('shows the empty state when there are no comments', async () => {
