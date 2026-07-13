@@ -12,9 +12,9 @@ from app.core.member_display import member_display_map
 from app.database import get_db
 from app.models import Event, EventComment, PostStatus, User, UserRole
 from app.schemas import (
-    EventCommentCreate,
-    EventCommentResponse,
-    EventCommentUpdate,
+    CommentCreate,
+    CommentResponse,
+    CommentUpdate,
     PasswordConfirmRequest,
 )
 
@@ -50,14 +50,13 @@ def _to_response(
     is_admin: bool,
     viewer_user_id: int,
     author: dict | None,
-) -> EventCommentResponse:
+) -> CommentResponse:
     is_author = (
         comment.author_user_id is not None and comment.author_user_id == viewer_user_id
     )
     author = author or {}
-    return EventCommentResponse(
+    return CommentResponse(
         id=comment.id,
-        event_id=comment.event_id,
         body=comment.body,
         created_at=comment.created_at,
         edited_at=comment.edited_at,
@@ -71,12 +70,12 @@ def _to_response(
     )
 
 
-@router.get("/{event_id}/comments", response_model=list[EventCommentResponse])
+@router.get("/{event_id}/comments", response_model=list[CommentResponse])
 def list_comments(
     event_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_completed_member),
-) -> list[EventCommentResponse]:
+) -> list[CommentResponse]:
     _visible_event_or_404(db, event_id, current_user)
     comments = (
         db.query(EventComment)
@@ -99,15 +98,15 @@ def list_comments(
 
 @router.post(
     "/{event_id}/comments",
-    response_model=EventCommentResponse,
+    response_model=CommentResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def create_comment(
     event_id: int,
-    payload: EventCommentCreate,
+    payload: CommentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
-) -> EventCommentResponse:
+) -> CommentResponse:
     _visible_event_or_404(db, event_id, current_user)
     # Comments publish immediately — no review queue, unlike events themselves.
     comment = EventComment(
@@ -127,14 +126,14 @@ def create_comment(
     )
 
 
-@router.put("/{event_id}/comments/{comment_id}", response_model=EventCommentResponse)
+@router.put("/{event_id}/comments/{comment_id}", response_model=CommentResponse)
 def update_comment(
     event_id: int,
     comment_id: int,
-    payload: EventCommentUpdate,
+    payload: CommentUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
-) -> EventCommentResponse:
+) -> CommentResponse:
     comment = _comment_or_404(db, event_id, comment_id)
     # Only the author edits their own words — not even an admin rewrites
     # someone else's comment (admins moderate by deleting, not editing).
