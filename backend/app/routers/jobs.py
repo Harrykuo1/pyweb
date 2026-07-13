@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case, func
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -17,7 +17,16 @@ from app.core.job_serialize import serialize_job
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.database import get_db
-from app.models import Job, JobAttachment, JobKind, Member, PostStatus, User, UserRole
+from app.models import (
+    Job,
+    JobAttachment,
+    JobKind,
+    JobLike,
+    Member,
+    PostStatus,
+    User,
+    UserRole,
+)
 from app.routers.job_attachments import get_uploads_root, job_uploads_dir
 from app.schemas import (
     JobCreate,
@@ -31,7 +40,7 @@ from app.schemas.job import JobKindLiteral, PostStatusLiteral
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-SortField = Literal["created_at", "job_year", "company", "real_name", "kind"]
+SortField = Literal["created_at", "job_year", "company", "real_name", "kind", "likes"]
 SortOrder = Literal["asc", "desc"]
 
 _SORT_COLUMNS = {
@@ -90,7 +99,38 @@ def _subject_names(db: Session, member_ids: list[int | None]) -> dict[int, str]:
     return dict(rows)
 
 
+def _likes_map(
+    db: Session, job_ids: list[int], viewer_user_id: int
+) -> dict[int, tuple[int, bool]]:
+    """Return {job_id: (like_count, liked_by_viewer)} in two grouped queries."""
+    if not job_ids:
+        return {}
+    counts = dict(
+        db.query(JobLike.job_id, func.count(JobLike.id))
+        .filter(JobLike.job_id.in_(job_ids))
+        .group_by(JobLike.job_id)
+        .all()
+    )
+    mine = {
+        jid
+        for (jid,) in db.query(JobLike.job_id).filter(
+            JobLike.job_id.in_(job_ids),
+            JobLike.user_id == viewer_user_id,
+        )
+    }
+    return {jid: (counts.get(jid, 0), jid in mine) for jid in job_ids}
+
+
 def _order_by(sort: str, order: str, is_admin: bool) -> list:
+    if sort == "likes":
+        like_count = (
+            select(func.count(JobLike.id))
+            .where(JobLike.job_id == Job.id)
+            .correlate(Job)
+            .scalar_subquery()
+        )
+        primary = like_count.asc() if order == "asc" else like_count.desc()
+        return [primary, Job.created_at.desc()]
     if sort == "kind":
         primary = _KIND_PRIORITY.asc() if order == "asc" else _KIND_PRIORITY.desc()
         return [primary, Job.created_at.desc()]
@@ -169,6 +209,7 @@ def list_jobs(
     items = query.order_by(*_order_by(sort, order, is_admin)).all()
     counts = _attachment_counts(db, [i.id for i in items])
     names = _subject_names(db, [i.subject_member_id for i in items])
+    likes = _likes_map(db, [i.id for i in items], current_user.id)
     return ListResponse[JobResponse](
         items=[
             serialize_job(
@@ -177,6 +218,8 @@ def list_jobs(
                 viewer_member_id=viewer_member_id,
                 attachment_count=counts.get(i.id, 0),
                 subject_name=names.get(i.subject_member_id),
+                like_count=likes.get(i.id, (0, False))[0],
+                liked_by_me=likes.get(i.id, (0, False))[1],
             )
             for i in items
         ],
@@ -231,12 +274,15 @@ def get_job(
         )
     counts = _attachment_counts(db, [obj.id])
     names = _subject_names(db, [obj.subject_member_id])
+    like_count, liked_by_me = _likes_map(db, [obj.id], current_user.id)[obj.id]
     return serialize_job(
         obj,
         is_admin=is_admin,
         viewer_member_id=viewer_member_id,
         attachment_count=counts.get(obj.id, 0),
         subject_name=names.get(obj.subject_member_id),
+        like_count=like_count,
+        liked_by_me=liked_by_me,
     )
 
 
@@ -373,12 +419,15 @@ def update_job(
     db.refresh(obj)
     counts = _attachment_counts(db, [obj.id])
     names = _subject_names(db, [obj.subject_member_id])
+    like_count, liked_by_me = _likes_map(db, [obj.id], current_user.id)[obj.id]
     return serialize_job(
         obj,
         is_admin=is_admin,
         viewer_member_id=viewer_member_id,
         attachment_count=counts.get(obj.id, 0),
         subject_name=names.get(obj.subject_member_id),
+        like_count=like_count,
+        liked_by_me=liked_by_me,
     )
 
 
@@ -430,12 +479,15 @@ def _review(db: Session, job_id: int, admin: User, new_status, reason) -> JobRes
     db.refresh(obj)
     counts = _attachment_counts(db, [obj.id])
     names = _subject_names(db, [obj.subject_member_id])
+    like_count, liked_by_me = _likes_map(db, [obj.id], admin.id)[obj.id]
     return serialize_job(
         obj,
         is_admin=True,
         viewer_member_id=None,
         attachment_count=counts.get(obj.id, 0),
         subject_name=names.get(obj.subject_member_id),
+        like_count=like_count,
+        liked_by_me=liked_by_me,
     )
 
 

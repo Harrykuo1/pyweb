@@ -37,6 +37,8 @@ def serialize_job(
     viewer_member_id: int | None,
     attachment_count: int,
     subject_name: str | None,
+    like_count: int = 0,
+    liked_by_me: bool = False,
 ) -> JobResponse:
     is_owner = (
         viewer_member_id is not None
@@ -65,4 +67,6 @@ def serialize_job(
         author_user_id=job.author_user_id if is_admin else None,
         review_reason=job.review_reason if (is_admin or is_owner) else None,
         can_edit=is_admin or is_owner,
+        like_count=like_count,
+        liked_by_me=liked_by_me,
     )
