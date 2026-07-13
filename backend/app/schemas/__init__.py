@@ -35,6 +35,7 @@ from app.schemas.job_attachment import (
     BulkDownloadRequest,
     JobAttachmentResponse,
 )
+from app.schemas.like import LikerResponse, LikeStatusResponse
 from app.schemas.member import (
     MemberCreate,
     MemberResponse,
@@ -77,6 +78,8 @@ __all__ = [
     "JobCreatedItem",
     "JobResponse",
     "JobUpdate",
+    "LikeStatusResponse",
+    "LikerResponse",
     "ListResponse",
     "LoginRequest",
     "MemberCreate",

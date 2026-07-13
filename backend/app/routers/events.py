@@ -16,7 +16,16 @@ from app.core.deps import (
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.database import get_db
-from app.models import Event, EventPhoto, EventTag, Member, PostStatus, User, UserRole
+from app.models import (
+    Event,
+    EventLike,
+    EventPhoto,
+    EventTag,
+    Member,
+    PostStatus,
+    User,
+    UserRole,
+)
 from app.routers.event_photos import event_uploads_dir, get_uploads_root
 from app.schemas import (
     EventCreate,
@@ -30,9 +39,10 @@ from app.schemas.job import PostStatusLiteral
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
-SortField = Literal["event_date", "created_at", "title"]
+SortField = Literal["event_date", "created_at", "title", "likes"]
 SortOrder = Literal["asc", "desc"]
 
+# "likes" is not a column — it's ordered by a correlated count subquery below.
 _SORT_COLUMNS = {
     "event_date": Event.event_date,
     "created_at": Event.created_at,
@@ -100,6 +110,29 @@ def _author_names(db: Session, author_ids: list[int | None]) -> dict[int, str]:
     return dict(rows)
 
 
+def _likes_map(
+    db: Session, event_ids: list[int], viewer_user_id: int
+) -> dict[int, tuple[int, bool]]:
+    """Return {event_id: (like_count, liked_by_viewer)} in two grouped
+    queries — no per-row lookup during list serialization."""
+    if not event_ids:
+        return {}
+    counts = dict(
+        db.query(EventLike.event_id, func.count(EventLike.id))
+        .filter(EventLike.event_id.in_(event_ids))
+        .group_by(EventLike.event_id)
+        .all()
+    )
+    mine = {
+        eid
+        for (eid,) in db.query(EventLike.event_id).filter(
+            EventLike.event_id.in_(event_ids),
+            EventLike.user_id == viewer_user_id,
+        )
+    }
+    return {eid: (counts.get(eid, 0), eid in mine) for eid in event_ids}
+
+
 def _to_response(
     event: Event,
     *,
@@ -109,6 +142,8 @@ def _to_response(
     tags: list[str],
     photo_count: int,
     cover_photo_id: int | None,
+    like_count: int,
+    liked_by_me: bool,
 ) -> EventResponse:
     # Build explicitly rather than model_validate(event): the response's
     # `tags: list[str]` field would otherwise try to coerce the ORM
@@ -131,6 +166,8 @@ def _to_response(
         review_reason=event.review_reason if (is_admin or is_owner) else None,
         can_edit=is_admin or is_owner,
         author_user_id=event.author_user_id if is_admin else None,
+        like_count=like_count,
+        liked_by_me=liked_by_me,
     )
 
 
@@ -141,9 +178,11 @@ def _serialize_many(
     tags = _tags_map(db, ids)
     aggregates = _photo_aggregates(db, ids)
     authors = _author_names(db, [e.author_user_id for e in events])
+    likes = _likes_map(db, ids, viewer_user_id)
     out = []
     for e in events:
         count, cover = aggregates.get(e.id, (0, None))
+        like_count, liked_by_me = likes.get(e.id, (0, False))
         out.append(
             _to_response(
                 e,
@@ -153,6 +192,8 @@ def _serialize_many(
                 tags=tags.get(e.id, []),
                 photo_count=count,
                 cover_photo_id=cover,
+                like_count=like_count,
+                liked_by_me=liked_by_me,
             )
         )
     return out
@@ -211,14 +252,25 @@ def list_events(
         if expr is not None:
             query = query.filter(expr)
 
-    column = _SORT_COLUMNS[sort]
-    primary = column.asc() if order == "asc" else column.desc()
-    if sort == "event_date":
-        # created_at as a stable tiebreaker so same-day events keep a
-        # deterministic order (most recently recorded first within a day).
+    if sort == "likes":
+        like_count = (
+            db.query(func.count(EventLike.id))
+            .filter(EventLike.event_id == Event.id)
+            .correlate(Event)
+            .scalar_subquery()
+        )
+        primary = like_count.asc() if order == "asc" else like_count.desc()
+        # created_at as a stable tiebreaker among equally-hearted events.
         order_by = [primary, Event.created_at.desc()]
     else:
-        order_by = [primary, Event.id.desc()]
+        column = _SORT_COLUMNS[sort]
+        primary = column.asc() if order == "asc" else column.desc()
+        if sort == "event_date":
+            # created_at as a stable tiebreaker so same-day events keep a
+            # deterministic order (most recently recorded first within a day).
+            order_by = [primary, Event.created_at.desc()]
+        else:
+            order_by = [primary, Event.id.desc()]
 
     items = query.order_by(*order_by).all()
     return ListResponse[EventResponse](
@@ -290,6 +342,8 @@ def create_event(
         tags=payload.tags,
         photo_count=0,
         cover_photo_id=None,
+        like_count=0,
+        liked_by_me=False,
     )
 
 

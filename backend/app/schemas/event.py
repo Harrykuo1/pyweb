@@ -147,6 +147,10 @@ class EventResponse(BaseModel):
     # The cover thumbnail shown on the timeline — the earliest photo by id.
     # None when the event has no photos yet.
     cover_photo_id: int | None = None
+    # Heart count + whether the current viewer has hearted it, stamped by the
+    # router with grouped queries (no per-row lookup).
+    like_count: int = 0
+    liked_by_me: bool = False
     # Author / approval (events are never anonymous; author is the creator).
     author_display_name: str | None = None
     status: PostStatusLiteral = "accepted"
