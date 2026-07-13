@@ -115,6 +115,13 @@ class EventCommentResponse(BaseModel):
     # Set once the author edits; the UI shows a "已編輯" marker when present.
     edited_at: datetime | None = None
     author_display_name: str | None = None
+    # The author's member profile, so the UI can show their photo as an
+    # avatar. Null when the author has no profile (e.g. an admin); the two
+    # photo fields then mirror the member-photo contract (has_photo gate +
+    # updated-at cache-buster) used elsewhere.
+    author_member_id: int | None = None
+    author_has_photo: bool = False
+    author_photo_updated_at: datetime | None = None
     # Only surfaced to admins (for moderation); None for everyone else.
     author_user_id: int | None = None
     # Per-viewer affordances stamped by the router: only the author edits,
