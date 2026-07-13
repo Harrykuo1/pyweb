@@ -14,6 +14,7 @@ import {
 
 import { useAuthStore } from '../stores/auth'
 import { useOutsideClick } from '../composables/useOutsideClick'
+import MemberAvatar from './members/MemberAvatar.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -31,11 +32,6 @@ const displayName = computed(() => {
     u.username ||
     '成員'
   )
-})
-
-const avatarInitial = computed(() => {
-  const name = displayName.value
-  return name ? name.charAt(0).toUpperCase() : '?'
 })
 
 const roleLabel = computed(() => {
@@ -164,9 +160,12 @@ useOutsideClick({
             data-test="user-menu-trigger"
             @click="toggleUserMenu"
           >
-            <span class="user-chip__avatar" aria-hidden="true">
-              {{ avatarInitial }}
-            </span>
+            <MemberAvatar
+              class="user-chip__avatar"
+              :member-id="auth.myMemberId"
+              :name="displayName"
+              :size="24"
+            />
             <span class="user-chip__name">{{ displayName }}</span>
             <span
               class="user-chip__role"
@@ -188,9 +187,12 @@ useOutsideClick({
               data-test="user-menu"
             >
               <header class="user-menu__header">
-                <span class="user-menu__avatar" aria-hidden="true">
-                  {{ avatarInitial }}
-                </span>
+                <MemberAvatar
+                  class="user-menu__avatar"
+                  :member-id="auth.myMemberId"
+                  :name="displayName"
+                  :size="40"
+                />
                 <div class="user-menu__profile">
                   <div class="user-menu__name">{{ displayName }}</div>
                   <div class="user-menu__role-row">
@@ -428,23 +430,9 @@ useOutsideClick({
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
 }
 
+/* MemberAvatar owns size/shape/background; the navbar only adds the lift. */
 .user-chip__avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #ffffff;
-  background: linear-gradient(
-    135deg,
-    var(--brand-primary),
-    var(--brand-accent)
-  );
   box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
-  flex: 0 0 auto;
 }
 
 .user-chip__name {
@@ -526,22 +514,7 @@ useOutsideClick({
 }
 
 .user-menu__avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  color: #ffffff;
-  background: linear-gradient(
-    135deg,
-    var(--brand-primary),
-    var(--brand-accent)
-  );
   box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
-  flex: 0 0 auto;
 }
 
 .user-menu__profile {
