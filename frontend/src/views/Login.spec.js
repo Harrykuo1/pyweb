@@ -123,6 +123,32 @@ describe('Login.vue', () => {
     )
   })
 
+  it('hides the password login by default but keeps it in the DOM (F12-revealable break-glass)', () => {
+    const wrapper = mount(Login)
+    const panel = wrapper.find('[data-test="password-login"]')
+    // Present in the DOM (v-show, not v-if) so a developer can un-hide it...
+    expect(panel.exists()).toBe(true)
+    // ...but hidden from normal users via the display:none that v-show emits.
+    expect(panel.attributes('style')).toContain('display: none')
+  })
+
+  it('reveals the password form once the break-glass flag flips, and it still submits', async () => {
+    const auth = useAuthStore()
+    const loginSpy = vi.spyOn(auth, 'login').mockResolvedValue()
+
+    const wrapper = mount(Login)
+    // Simulate a developer flipping the flag (what un-hiding via dev tools does).
+    wrapper.vm.showPasswordLogin = true
+    await wrapper.vm.$nextTick()
+
+    const panel = wrapper.find('[data-test="password-login"]')
+    expect(panel.attributes('style') ?? '').not.toContain('display: none')
+
+    await submitWithPassword(wrapper, 'pw')
+    expect(loginSpy).toHaveBeenCalledWith('pw')
+    expect(pushMock).toHaveBeenCalledWith('/')
+  })
+
   it('declares a required rule for password so Element Plus blocks empty submits', () => {
     const wrapper = mount(Login)
     const form = wrapper.findComponent({ name: 'ElForm' })

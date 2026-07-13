@@ -18,6 +18,11 @@ const form = reactive({ password: '' })
 const submitting = ref(false)
 const errorMessage = ref('')
 
+// Break-glass password login: hidden from normal users (Discord is the primary
+// path). Kept in the DOM via v-show so a developer can un-hide it with dev tools
+// when OAuth is down. Not a security boundary — the API stays open by design.
+const showPasswordLogin = ref(false)
+
 // Show the admin-uploaded logo if it exists; on 404 the <img> onerror fires
 // and we fall back to the Lock icon. The query string is just a per-load
 // cache-buster so admins testing rapid edits see fresh bytes.
@@ -122,7 +127,7 @@ async function handleSubmit() {
       <main class="form-panel">
         <div class="form-inner">
           <h2 class="form-title">歡迎回來</h2>
-          <p class="form-sub">用 Discord 登入，或輸入密碼。</p>
+          <p class="form-sub">用 Discord 登入。</p>
 
           <p v-if="oauthError" class="error-message" data-test="oauth-error">
             {{ oauthError }}
@@ -137,50 +142,52 @@ async function handleSubmit() {
             使用 Discord 登入
           </el-button>
 
-          <div class="login-divider"><span>或用密碼</span></div>
+          <div v-show="showPasswordLogin" data-test="password-login">
+            <div class="login-divider"><span>或用密碼</span></div>
 
-          <el-form
-            ref="formRef"
-            :model="form"
-            :rules="rules"
-            label-position="top"
-            @submit.prevent="handleSubmit"
-          >
-            <el-form-item label="密碼" prop="password">
-              <el-input
-                v-model="form.password"
-                type="password"
+            <el-form
+              ref="formRef"
+              :model="form"
+              :rules="rules"
+              label-position="top"
+              @submit.prevent="handleSubmit"
+            >
+              <el-form-item label="密碼" prop="password">
+                <el-input
+                  v-model="form.password"
+                  type="password"
+                  size="large"
+                  placeholder="請輸入密碼"
+                  autocomplete="current-password"
+                  show-password
+                  :prefix-icon="Lock"
+                />
+              </el-form-item>
+
+              <p v-if="errorMessage" class="error-message" data-test="error">
+                {{ errorMessage }}
+              </p>
+
+              <el-button
+                type="primary"
                 size="large"
-                placeholder="請輸入密碼"
-                autocomplete="current-password"
-                show-password
-                :prefix-icon="Lock"
-              />
-            </el-form-item>
+                class="submit-button"
+                native-type="submit"
+                :loading="submitting"
+                @click="handleSubmit"
+              >
+                {{ submitting ? '驗證中…' : '登入' }}
+              </el-button>
 
-            <p v-if="errorMessage" class="error-message" data-test="error">
-              {{ errorMessage }}
-            </p>
-
-            <el-button
-              type="primary"
-              size="large"
-              class="submit-button"
-              native-type="submit"
-              :loading="submitting"
-              @click="handleSubmit"
-            >
-              {{ submitting ? '驗證中…' : '登入' }}
-            </el-button>
-
-            <p
-              v-if="submitting"
-              class="pending-hint"
-              data-test="login-pending-hint"
-            >
-              正在驗證密碼，請稍候…
-            </p>
-          </el-form>
+              <p
+                v-if="submitting"
+                class="pending-hint"
+                data-test="login-pending-hint"
+              >
+                正在驗證密碼，請稍候…
+              </p>
+            </el-form>
+          </div>
         </div>
       </main>
     </div>
