@@ -16,10 +16,18 @@ import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import { eventsApi } from '../../api/events'
-import EventComments from './EventComments.vue'
+import CommentThread from '../CommentThread.vue'
 import LikeButton from '../LikeButton.vue'
 import LikersDialog from '../LikersDialog.vue'
 import { useLikeToggle } from '../../composables/useLikeToggle'
+
+// Comment API bound to events, handed to the generic CommentThread.
+const commentApi = {
+  list: (id) => eventsApi.listComments(id),
+  create: (id, body) => eventsApi.createComment(id, body),
+  update: (id, cid, body) => eventsApi.updateComment(id, cid, body),
+  remove: (id, cid, password) => eventsApi.removeComment(id, cid, password),
+}
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -309,7 +317,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <p>這個活動還沒有照片或記錄。</p>
       </div>
 
-      <EventComments :event-id="event.id" :active="modelValue" />
+      <CommentThread
+        :post-id="event.id"
+        :api="commentApi"
+        :active="modelValue"
+      />
     </div>
 
     <template #footer>
