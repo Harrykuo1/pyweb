@@ -93,6 +93,29 @@ export const eventsApi = {
     return `/api/events/${eventId}/photos/${photoId}`
   },
 
+  // ---- comments ----
+  async listComments(eventId) {
+    const { data } = await client.get(`/events/${eventId}/comments`)
+    return data
+  },
+  async createComment(eventId, body) {
+    const { data } = await client.post(`/events/${eventId}/comments`, { body })
+    return data
+  },
+  async updateComment(eventId, commentId, body) {
+    const { data } = await client.put(
+      `/events/${eventId}/comments/${commentId}`,
+      { body },
+    )
+    return data
+  },
+  async removeComment(eventId, commentId, password) {
+    // Author omits the body (owner path); an admin moderating someone else's
+    // comment sends the admin password to re-authenticate.
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/events/${eventId}/comments/${commentId}`, config)
+  },
+
   // ---- routing ----
   // Single source of truth for the "open this event's detail dialog" URL
   // shape, mirroring jobsApi.detailRoute.

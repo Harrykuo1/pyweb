@@ -149,6 +149,40 @@ describe('eventsApi photos', () => {
   })
 })
 
+describe('eventsApi comments', () => {
+  it('GETs the comment list', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
+    await eventsApi.listComments(2)
+    expect(get).toHaveBeenCalledWith('/events/2/comments')
+  })
+
+  it('POSTs a new comment body', async () => {
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 1 } })
+    await eventsApi.createComment(2, '讚')
+    expect(post).toHaveBeenCalledWith('/events/2/comments', { body: '讚' })
+  })
+
+  it('PUTs an edited comment body', async () => {
+    const put = vi.spyOn(client, 'put').mockResolvedValue({ data: { id: 1 } })
+    await eventsApi.updateComment(2, 5, '更正')
+    expect(put).toHaveBeenCalledWith('/events/2/comments/5', { body: '更正' })
+  })
+
+  it('DELETEs own comment with no body', async () => {
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+    await eventsApi.removeComment(2, 5)
+    expect(del).toHaveBeenCalledWith('/events/2/comments/5', undefined)
+  })
+
+  it('DELETEs another comment with the admin password', async () => {
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+    await eventsApi.removeComment(2, 5, 'pw')
+    expect(del).toHaveBeenCalledWith('/events/2/comments/5', {
+      data: { password: 'pw' },
+    })
+  })
+})
+
 describe('eventsApi.detailRoute', () => {
   it('returns a router location pointing at /events with detail=<id>', () => {
     expect(eventsApi.detailRoute(12)).toEqual({
