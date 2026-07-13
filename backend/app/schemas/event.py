@@ -82,6 +82,49 @@ class EventPhotoCaptionUpdate(BaseModel):
     caption: str | None = Field(default=None, max_length=200)
 
 
+# Comments are short plain-text remarks, not posts; this bounds one comment
+# to a couple of paragraphs.
+COMMENT_MAX_LENGTH = 2000
+
+
+class _EventCommentBody(BaseModel):
+    body: str = Field(min_length=1, max_length=COMMENT_MAX_LENGTH)
+
+    @field_validator("body")
+    @classmethod
+    def _strip_body(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("留言不可為空白")
+        return trimmed
+
+
+class EventCommentCreate(_EventCommentBody):
+    pass
+
+
+class EventCommentUpdate(_EventCommentBody):
+    pass
+
+
+class EventCommentResponse(BaseModel):
+    id: int
+    event_id: int
+    body: str
+    created_at: datetime
+    # Set once the author edits; the UI shows a "已編輯" marker when present.
+    edited_at: datetime | None = None
+    author_display_name: str | None = None
+    # Only surfaced to admins (for moderation); None for everyone else.
+    author_user_id: int | None = None
+    # Per-viewer affordances stamped by the router: only the author edits,
+    # the author or an admin deletes.
+    can_edit: bool = False
+    can_delete: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EventResponse(BaseModel):
     id: int
     title: str

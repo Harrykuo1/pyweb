@@ -13,6 +13,9 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.schemas.event import (
+    EventCommentCreate,
+    EventCommentResponse,
+    EventCommentUpdate,
     EventCreate,
     EventPhotoCaptionUpdate,
     EventPhotoResponse,
@@ -59,6 +62,9 @@ __all__ = [
     "ConfigFieldResponse",
     "ConfigResponse",
     "ConfigUpdateRequest",
+    "EventCommentCreate",
+    "EventCommentResponse",
+    "EventCommentUpdate",
     "EventCreate",
     "EventPhotoCaptionUpdate",
     "EventPhotoResponse",
