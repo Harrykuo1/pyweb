@@ -8,8 +8,9 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.member_display import member_display_map
 from app.database import get_db
-from app.models import Event, EventComment, Member, PostStatus, User, UserRole
+from app.models import Event, EventComment, PostStatus, User, UserRole
 from app.schemas import (
     EventCommentCreate,
     EventCommentResponse,
@@ -41,50 +42,6 @@ def _comment_or_404(db: Session, event_id: int, comment_id: int) -> EventComment
     if comment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到留言")
     return comment
-
-
-def _author_infos(db: Session, author_ids: list[int | None]) -> dict[int, dict]:
-    """Map author_user_id -> {name, member_id, has_photo, photo_updated_at} in
-    one query. The name prefers the member's real name, then Discord global
-    name / handle, then legacy username, so every commenter (including
-    profileless admins) shows a name; the member fields let the UI render the
-    author's photo as an avatar."""
-    ids = [a for a in author_ids if a is not None]
-    if not ids:
-        return {}
-    rows = (
-        db.query(
-            User.id,
-            Member.id,
-            Member.real_name,
-            Member.photo_content_type,
-            Member.photo_updated_at,
-            User.discord_global_name,
-            User.discord_username,
-            User.username,
-        )
-        .outerjoin(Member, Member.user_id == User.id)
-        .filter(User.id.in_(ids))
-        .all()
-    )
-    out: dict[int, dict] = {}
-    for (
-        uid,
-        mid,
-        real_name,
-        photo_ct,
-        photo_updated,
-        global_name,
-        handle,
-        username,
-    ) in rows:
-        out[uid] = {
-            "name": real_name or global_name or handle or username or "未知成員",
-            "member_id": mid,
-            "has_photo": photo_ct is not None,
-            "photo_updated_at": photo_updated,
-        }
-    return out
 
 
 def _to_response(
@@ -128,7 +85,7 @@ def list_comments(
         .all()
     )
     is_admin = current_user.role is UserRole.ADMIN
-    authors = _author_infos(db, [c.author_user_id for c in comments])
+    authors = member_display_map(db, [c.author_user_id for c in comments])
     return [
         _to_response(
             c,
@@ -161,7 +118,7 @@ def create_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    authors = _author_infos(db, [comment.author_user_id])
+    authors = member_display_map(db, [comment.author_user_id])
     return _to_response(
         comment,
         is_admin=current_user.role is UserRole.ADMIN,
@@ -189,7 +146,7 @@ def update_comment(
     comment.edited_at = datetime.now(UTC)
     db.commit()
     db.refresh(comment)
-    authors = _author_infos(db, [comment.author_user_id])
+    authors = member_display_map(db, [comment.author_user_id])
     return _to_response(
         comment,
         is_admin=current_user.role is UserRole.ADMIN,
