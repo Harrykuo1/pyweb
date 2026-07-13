@@ -65,6 +65,11 @@ class Event(Base):
         cascade="all, delete-orphan",
         order_by="EventPhoto.id",
     )
+    comments: Mapped[list["EventComment"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+        order_by="EventComment.id",
+    )
 
 
 class EventTag(Base):
@@ -107,3 +112,33 @@ class EventPhoto(Base):
     )
 
     event: Mapped["Event"] = relationship(back_populates="photos")
+
+
+class EventComment(Base):
+    __tablename__ = "event_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The commenter. Nullable so a comment survives the author's account
+    # deletion (mirrors events.author_user_id); always set on creation.
+    author_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    # Plain text (rendered escaped on the client, no Markdown) — comments are
+    # short remarks, not posts, so there's no sanitization surface.
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    # Stamped when the author edits; drives the "已編輯" marker in the UI.
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    event: Mapped["Event"] = relationship(back_populates="comments")
