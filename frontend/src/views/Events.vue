@@ -58,12 +58,17 @@ const SEARCH_DEBOUNCE_MS = 300
 
 // Filter state lives in the URL; `detail` is preserved across rewrites for
 // the deep-link dialog. onChange refetches after each sync. Mirrors Jobs.
-const { sortOrder, year, tag, q } = useUrlQuerySync({
+const { sortKey, sortOrder, year, tag, q } = useUrlQuerySync({
   route,
   router,
   preserveKeys: ['detail'],
   onChange: () => loadItems(),
   fields: {
+    sortKey: {
+      queryKey: 'sort',
+      parse: (v) => (v === 'likes' ? 'likes' : 'event_date'),
+      serialize: (v) => (v !== 'event_date' ? v : undefined),
+    },
     sortOrder: {
       queryKey: 'order',
       parse: safeOrder,
@@ -136,6 +141,26 @@ const {
   fetchItem: (id) => eventsApi.get(id),
 })
 
+// The detail dialog toggles the heart; patch the matching list row in place so
+// the timeline count/sort stays in step without a refetch. items entries are
+// the same objects the store cache holds, so this is authoritative until the
+// next fetch.
+function onLikeChanged({ id, liked, likeCount }) {
+  const item = items.value.find((e) => e.id === id)
+  if (item) {
+    item.liked_by_me = liked
+    item.like_count = likeCount
+  }
+}
+
+// The order toggle reads differently depending on the sort key.
+const sortToggleLabel = computed(() => {
+  if (sortKey.value === 'likes') {
+    return sortOrder.value === 'desc' ? '多 → 少' : '少 → 多'
+  }
+  return sortOrder.value === 'desc' ? '新 → 舊' : '舊 → 新'
+})
+
 // Group the (already sorted) events by calendar year so the timeline can
 // drop a sticky year divider at each boundary. Order of years follows
 // item order.
@@ -198,6 +223,7 @@ function excerpt(md, n = 120) {
 async function loadItems() {
   try {
     await eventsStore.fetch({
+      sort: sortKey.value,
       order: sortOrder.value,
       year: year.value ?? undefined,
       tag: tag.value,
@@ -427,13 +453,18 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
           />
         </el-select>
 
+        <el-select v-model="sortKey" data-test="sort-mode" class="sort-mode">
+          <el-option label="依日期" value="event_date" />
+          <el-option label="最多愛心" value="likes" />
+        </el-select>
+
         <button
           type="button"
           class="sort-toggle"
           data-test="sort-toggle"
           @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
         >
-          {{ sortOrder === 'desc' ? '新 → 舊' : '舊 → 新' }}
+          {{ sortToggleLabel }}
           <span aria-hidden="true">{{ sortOrder === 'desc' ? '↓' : '↑' }}</span>
         </button>
       </div>
@@ -618,6 +649,19 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                 <span class="tl-more" aria-hidden="true">
                   閱讀活動 <span class="tl-more-arrow">→</span>
                 </span>
+                <span
+                  v-if="ev.like_count"
+                  class="tl-likes"
+                  data-test="entry-likes"
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13">
+                    <path
+                      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  {{ ev.like_count }}
+                </span>
               </div>
 
               <!-- Zone 3: right meta-rail (the journal date-stamp) -->
@@ -672,6 +716,7 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
       v-model="detailOpen"
       :event="detailEvent"
       @edit="onDetailEdit"
+      @like-changed="onLikeChanged"
     >
       <template #footer-extra>
         <el-button
@@ -1593,6 +1638,21 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
 }
 .tl-more {
   order: 5;
+}
+
+.tl-likes {
+  order: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #ef4444;
+}
+
+.sort-mode {
+  width: 128px;
 }
 
 /* Tags ride one line and fade out under a mask so a many-tag event can
