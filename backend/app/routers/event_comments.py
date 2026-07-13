@@ -43,17 +43,22 @@ def _comment_or_404(db: Session, event_id: int, comment_id: int) -> EventComment
     return comment
 
 
-def _author_display_names(db: Session, author_ids: list[int | None]) -> dict[int, str]:
-    """Map author_user_id -> a display name in one query. Prefers the member's
-    real name, then Discord global name / handle, then legacy username — so
-    every commenter (including profileless admins) shows a name."""
+def _author_infos(db: Session, author_ids: list[int | None]) -> dict[int, dict]:
+    """Map author_user_id -> {name, member_id, has_photo, photo_updated_at} in
+    one query. The name prefers the member's real name, then Discord global
+    name / handle, then legacy username, so every commenter (including
+    profileless admins) shows a name; the member fields let the UI render the
+    author's photo as an avatar."""
     ids = [a for a in author_ids if a is not None]
     if not ids:
         return {}
     rows = (
         db.query(
             User.id,
+            Member.id,
             Member.real_name,
+            Member.photo_content_type,
+            Member.photo_updated_at,
             User.discord_global_name,
             User.discord_username,
             User.username,
@@ -62,9 +67,23 @@ def _author_display_names(db: Session, author_ids: list[int | None]) -> dict[int
         .filter(User.id.in_(ids))
         .all()
     )
-    out: dict[int, str] = {}
-    for uid, real_name, global_name, handle, username in rows:
-        out[uid] = real_name or global_name or handle or username or "未知成員"
+    out: dict[int, dict] = {}
+    for (
+        uid,
+        mid,
+        real_name,
+        photo_ct,
+        photo_updated,
+        global_name,
+        handle,
+        username,
+    ) in rows:
+        out[uid] = {
+            "name": real_name or global_name or handle or username or "未知成員",
+            "member_id": mid,
+            "has_photo": photo_ct is not None,
+            "photo_updated_at": photo_updated,
+        }
     return out
 
 
@@ -73,18 +92,22 @@ def _to_response(
     *,
     is_admin: bool,
     viewer_user_id: int,
-    author_name: str | None,
+    author: dict | None,
 ) -> EventCommentResponse:
     is_author = (
         comment.author_user_id is not None and comment.author_user_id == viewer_user_id
     )
+    author = author or {}
     return EventCommentResponse(
         id=comment.id,
         event_id=comment.event_id,
         body=comment.body,
         created_at=comment.created_at,
         edited_at=comment.edited_at,
-        author_display_name=author_name,
+        author_display_name=author.get("name"),
+        author_member_id=author.get("member_id"),
+        author_has_photo=author.get("has_photo", False),
+        author_photo_updated_at=author.get("photo_updated_at"),
         author_user_id=comment.author_user_id if is_admin else None,
         can_edit=is_author,
         can_delete=is_admin or is_author,
@@ -105,13 +128,13 @@ def list_comments(
         .all()
     )
     is_admin = current_user.role is UserRole.ADMIN
-    names = _author_display_names(db, [c.author_user_id for c in comments])
+    authors = _author_infos(db, [c.author_user_id for c in comments])
     return [
         _to_response(
             c,
             is_admin=is_admin,
             viewer_user_id=current_user.id,
-            author_name=names.get(c.author_user_id),
+            author=authors.get(c.author_user_id),
         )
         for c in comments
     ]
@@ -138,12 +161,12 @@ def create_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    names = _author_display_names(db, [comment.author_user_id])
+    authors = _author_infos(db, [comment.author_user_id])
     return _to_response(
         comment,
         is_admin=current_user.role is UserRole.ADMIN,
         viewer_user_id=current_user.id,
-        author_name=names.get(comment.author_user_id),
+        author=authors.get(comment.author_user_id),
     )
 
 
@@ -166,12 +189,12 @@ def update_comment(
     comment.edited_at = datetime.now(UTC)
     db.commit()
     db.refresh(comment)
-    names = _author_display_names(db, [comment.author_user_id])
+    authors = _author_infos(db, [comment.author_user_id])
     return _to_response(
         comment,
         is_admin=current_user.role is UserRole.ADMIN,
         viewer_user_id=current_user.id,
-        author_name=names.get(comment.author_user_id),
+        author=authors.get(comment.author_user_id),
     )
 
 

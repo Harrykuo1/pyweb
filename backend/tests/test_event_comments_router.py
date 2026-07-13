@@ -88,6 +88,35 @@ def test_member_can_comment(ctx):
     assert body["can_delete"] is True
 
 
+def test_comment_exposes_author_member_and_photo(ctx, db_session):
+    client, login, eid = ctx
+    # Give mem's member profile a photo so has_photo/updated_at are populated.
+    from datetime import UTC, datetime
+
+    from app.models import Member, User
+
+    mem = db_session.query(User).filter_by(username="mem").one()
+    member = db_session.query(Member).filter_by(user_id=mem.id).one()
+    member.photo_content_type = "image/png"
+    member.photo_updated_at = datetime(2026, 1, 2, tzinfo=UTC)
+    db_session.commit()
+
+    login("mem-pw")
+    body = _comment(client, eid, "帶頭貼").json()
+    assert body["author_member_id"] == member.id
+    assert body["author_has_photo"] is True
+    assert body["author_photo_updated_at"] is not None
+
+
+def test_admin_author_has_no_member_or_photo(ctx):
+    # An admin has no member profile, so avatar falls back to the initial.
+    client, login, eid = ctx
+    login("admin-pw")
+    body = _comment(client, eid, "admin 留言").json()
+    assert body["author_member_id"] is None
+    assert body["author_has_photo"] is False
+
+
 def test_comment_body_is_trimmed_and_blank_rejected(ctx):
     client, login, eid = ctx
     login("mem-pw")
