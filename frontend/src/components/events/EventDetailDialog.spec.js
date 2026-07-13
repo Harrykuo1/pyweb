@@ -51,6 +51,9 @@ const PHOTOS = [
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(eventsApi, 'listPhotos').mockResolvedValue(PHOTOS)
+  // The embedded comment section fetches on open; stub it so these tests
+  // don't hit the real client.
+  vi.spyOn(eventsApi, 'listComments').mockResolvedValue([])
 })
 
 afterEach(() => {

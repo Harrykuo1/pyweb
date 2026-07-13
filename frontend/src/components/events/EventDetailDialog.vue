@@ -16,6 +16,7 @@ import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import { eventsApi } from '../../api/events'
+import EventComments from './EventComments.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -252,6 +253,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <el-icon :size="28"><Picture /></el-icon>
         <p>這個活動還沒有照片或記錄。</p>
       </div>
+
+      <EventComments :event-id="event.id" :active="modelValue" />
     </div>
 
     <template #footer>
