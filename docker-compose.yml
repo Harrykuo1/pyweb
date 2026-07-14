@@ -96,3 +96,24 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+  # sqlite-web — a phpMyAdmin-style browser UI for the SQLite DB. Mounts the
+  # same ./data as the backend and points at pyweb.db (read-write). Password
+  # gated via SQLITE_WEB_PASSWORD from .env, exposed on host port 8119.
+  # WARNING: plain HTTP with full DB access — only run on a trusted network.
+  # WAL mode lets it read alongside the app; writes still contend for the
+  # single SQLite write lock, so avoid heavy edits while the app is busy.
+  sqlite-web:
+    image: coleifer/sqlite-web:latest
+    depends_on:
+      - backend
+    ports:
+      - "8119:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      SQLITE_WEB_PASSWORD: ${SQLITE_WEB_PASSWORD}
+    command:
+      ["sqlite_web", "-H", "0.0.0.0", "-p", "8080", "-x", "-P", "/data/pyweb.db"]
+    logging: *default-logging
+    restart: unless-stopped
