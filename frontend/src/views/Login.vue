@@ -1,10 +1,10 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElForm, ElFormItem, ElIcon, ElInput } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 
-import { DISCORD_LOGIN_URL } from '../api/auth'
+import { DISCORD_LOGIN_URL, authApi } from '../api/auth'
 import { settingImageUrl } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import loginBg from '../assets/login-bg.jpg'
@@ -48,11 +48,59 @@ const OAUTH_ERRORS = {
   link_ambiguous: '無法自動連結你的帳號，請聯絡管理員。',
   discord_denied: '你取消了 Discord 授權。',
 }
+// The errors above whose fix is "go ask an admin" — those get the admin
+// contact list appended so the user knows who to actually ping.
+const ADMIN_HELP_ERRORS = new Set([
+  'not_linked',
+  'guild_not_configured',
+  'account_suspended',
+  'link_ambiguous',
+])
+
+const oauthErrorKey = computed(() =>
+  typeof route.query.error === 'string' ? route.query.error : '',
+)
 const oauthError = computed(() => {
-  const e = typeof route.query.error === 'string' ? route.query.error : ''
+  const e = oauthErrorKey.value
   if (!e) return ''
   return OAUTH_ERRORS[e] || 'Discord 登入失敗，請稍後再試。'
 })
+
+// Password login can land on the suspended message too, which also tells the
+// user to contact an admin.
+const passwordErrorNeedsAdmin = ref(false)
+const needsAdminHelp = computed(
+  () =>
+    ADMIN_HELP_ERRORS.has(oauthErrorKey.value) || passwordErrorNeedsAdmin.value,
+)
+
+const adminContacts = ref([])
+async function loadAdminContacts() {
+  try {
+    adminContacts.value = await authApi.listAdminContacts()
+  } catch {
+    adminContacts.value = []
+  }
+}
+// Only fetched when an error actually needs it — no request on a clean load.
+watch(
+  needsAdminHelp,
+  (needs) => {
+    if (needs && adminContacts.value.length === 0) loadAdminContacts()
+  },
+  { immediate: true },
+)
+
+// "Harry（@as6325400）", or just "@as6325400" when they set no display name.
+const adminContactsText = computed(() =>
+  adminContacts.value
+    .map((c) =>
+      c.display_name
+        ? `${c.display_name}（@${c.discord_username}）`
+        : `@${c.discord_username}`,
+    )
+    .join('、'),
+)
 
 function loginWithDiscord() {
   window.location.href = DISCORD_LOGIN_URL
@@ -65,6 +113,7 @@ async function handleSubmit() {
 
   submitting.value = true
   errorMessage.value = ''
+  passwordErrorNeedsAdmin.value = false
   try {
     await auth.login(form.password)
     const redirect =
@@ -79,6 +128,7 @@ async function handleSubmit() {
       err?.response?.data?.detail === 'Account suspended'
     ) {
       errorMessage.value = OAUTH_ERRORS.account_suspended
+      passwordErrorNeedsAdmin.value = true
     } else {
       errorMessage.value = '登入失敗，請稍後再試'
     }
@@ -131,6 +181,14 @@ async function handleSubmit() {
 
           <p v-if="oauthError" class="error-message" data-test="oauth-error">
             {{ oauthError }}
+          </p>
+
+          <p
+            v-if="needsAdminHelp && adminContactsText"
+            class="admin-contacts"
+            data-test="admin-contacts"
+          >
+            管理員：{{ adminContactsText }}
           </p>
 
           <el-button
@@ -381,6 +439,15 @@ async function handleSubmit() {
   color: #ef4444;
   font-size: 13px;
   margin: -4px 0 16px;
+}
+
+/* Who to actually ping, shown under a "contact an admin" error. */
+.admin-contacts {
+  margin: -10px 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-700, #374151);
+  overflow-wrap: anywhere;
 }
 
 .pending-hint {

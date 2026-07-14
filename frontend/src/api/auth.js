@@ -16,6 +16,12 @@ export const authApi = {
     const { data } = await client.get('/auth/me')
     return data
   },
+  // Public (pre-auth): the admins a stuck user can ping on Discord. Shown on
+  // the login page's "contact an admin" errors.
+  async listAdminContacts() {
+    const { data } = await client.get('/auth/admin-contacts')
+    return data
+  },
   async listUsers() {
     const { data } = await client.get('/auth/users')
     return data

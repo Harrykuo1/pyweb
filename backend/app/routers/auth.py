@@ -24,6 +24,7 @@ from app.database import get_db
 from app.models import Member, PendingDiscordLink, RegistrationInvite, User, UserRole
 from app.schemas import (
     ActiveUpdateRequest,
+    AdminContactResponse,
     GuildConfigResponse,
     GuildConfigUpdate,
     LoginRequest,
@@ -114,6 +115,31 @@ def _oauth_error(reason: str) -> RedirectResponse:
         url=f"{_LOGIN_PATH}?error={reason}",
         status_code=status.HTTP_302_FOUND,
     )
+
+
+@router.get("/admin-contacts", response_model=list[AdminContactResponse])
+def admin_contacts(db: Session = Depends(get_db)) -> list[AdminContactResponse]:
+    """Public: the admins a stuck user can reach out to on Discord.
+
+    Served to the unauthenticated login page (the "contact an admin" errors),
+    so it exposes only Discord display name + handle — never a real name.
+    Suspended admins, and admins with no handle (e.g. the break-glass password
+    account), are left out: neither is reachable.
+    """
+    rows = (
+        db.query(User.discord_global_name, User.discord_username)
+        .filter(
+            User.role == UserRole.ADMIN,
+            User.is_active.is_(True),
+            User.discord_username.isnot(None),
+        )
+        .order_by(User.id)
+        .all()
+    )
+    return [
+        AdminContactResponse(display_name=global_name, discord_username=handle)
+        for global_name, handle in rows
+    ]
 
 
 @router.get("/discord/login")

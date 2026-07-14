@@ -9,6 +9,21 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=255)
 
 
+class AdminContactResponse(BaseModel):
+    """Who to ping when login needs an admin's help.
+
+    Deliberately Discord-only: this is served to the *unauthenticated* login
+    page, so it must never carry a member's real name. The handle is what
+    someone actually needs to find them on Discord.
+    """
+
+    # Discord global (display) name; null when the admin never set one.
+    display_name: str | None = None
+    # The @handle — always present, since an admin without one is unreachable
+    # and is filtered out of the list.
+    discord_username: str
+
+
 class UserResponse(BaseModel):
     id: int
     # Null for Discord-linked accounts (they have no traditional username);

@@ -1,5 +1,6 @@
 from app.schemas.auth import (
     ActiveUpdateRequest,
+    AdminContactResponse,
     GuildConfigResponse,
     GuildConfigUpdate,
     LoginRequest,
@@ -55,6 +56,7 @@ from app.schemas.timeline import (
 
 __all__ = [
     "ActiveUpdateRequest",
+    "AdminContactResponse",
     "BulkDeleteRequest",
     "BulkDeleteResponse",
     "BulkDownloadRequest",

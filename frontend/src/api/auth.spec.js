@@ -49,6 +49,18 @@ describe('authApi.getMe', () => {
   })
 })
 
+describe('authApi.listAdminContacts', () => {
+  it('GETs /auth/admin-contacts and returns the list', async () => {
+    const contacts = [{ display_name: 'Harry', discord_username: 'as6325400' }]
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: contacts })
+
+    const result = await authApi.listAdminContacts()
+
+    expect(get).toHaveBeenCalledWith('/auth/admin-contacts')
+    expect(result).toEqual(contacts)
+  })
+})
+
 describe('authApi.listUsers', () => {
   it('GETs /auth/users and returns the array', async () => {
     const fakeUsers = [
