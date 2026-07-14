@@ -673,20 +673,6 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                 <span class="tl-more" aria-hidden="true">
                   閱讀活動 <span class="tl-more-arrow">→</span>
                 </span>
-                <div
-                  class="tl-like"
-                  data-test="entry-likes"
-                  @click.stop
-                  @keydown.stop
-                >
-                  <LikeButton
-                    :liked="ev.liked_by_me"
-                    :count="ev.like_count || 0"
-                    :pending="!!likePending[ev.id]"
-                    @toggle="onCardLike(ev)"
-                    @show-likers="openDetail(ev)"
-                  />
-                </div>
               </div>
 
               <!-- Zone 3: right meta-rail (the journal date-stamp) -->
@@ -702,6 +688,23 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                 <span class="mr-photo">
                   <el-icon :size="12"><Picture /></el-icon>{{ ev.photo_count }}
                 </span>
+              </div>
+
+              <!-- Heart pinned to the card's top-right corner (over the
+                   empty top of the vertically-centred date rail). -->
+              <div
+                class="tl-like"
+                data-test="entry-likes"
+                @click.stop
+                @keydown.stop
+              >
+                <LikeButton
+                  :liked="ev.liked_by_me"
+                  :count="ev.like_count || 0"
+                  :pending="!!likePending[ev.id]"
+                  @toggle="onCardLike(ev)"
+                  @show-likers="openDetail(ev)"
+                />
               </div>
             </div>
           </div>
@@ -1665,10 +1668,17 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
   order: 5;
 }
 
+/* Heart pinned to the card's top-right corner. Sits over the empty top of the
+   vertically-centred date rail; a translucent chip keeps it legible there. */
 .tl-like {
-  order: 6;
-  margin-top: 2px;
-  margin-left: -4px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .sort-mode {

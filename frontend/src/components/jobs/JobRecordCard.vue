@@ -136,6 +136,16 @@ function formatDate(iso) {
     <span class="card-stripe" aria-hidden="true"></span>
     <span class="card-glow" aria-hidden="true"></span>
 
+    <div class="card-like" data-test="card-like" @click.stop @keydown.stop>
+      <LikeButton
+        :liked="isLiked"
+        :count="likeCount"
+        :pending="likePending"
+        @toggle="onLike"
+        @show-likers="emit('open', job)"
+      />
+    </div>
+
     <div class="card-tags">
       <span class="kind-badge" :data-test="`kind-${job.kind}`">
         <span class="kind-dot" aria-hidden="true"></span>
@@ -180,15 +190,6 @@ function formatDate(iso) {
     </p>
 
     <div class="card-meta">
-      <div class="card-like" data-test="card-like" @click.stop @keydown.stop>
-        <LikeButton
-          :liked="isLiked"
-          :count="likeCount"
-          :pending="likePending"
-          @toggle="onLike"
-          @show-likers="emit('open', job)"
-        />
-      </div>
       <span class="meta-year">
         <el-icon :size="12"><School /></el-icon>
         {{ formatJobYearMonth(job) }} 求職
@@ -316,6 +317,9 @@ function formatDate(iso) {
   align-items: center;
   gap: 6px;
   margin-bottom: 2px;
+  /* Reserve room at the right so a long category/status never runs under
+     the top-right like button. */
+  padding-right: 46px;
   /* Allow the chip child to shrink below its intrinsic content width
      so it stays inline with .kind-badge instead of wrapping. */
   min-width: 0;
@@ -484,9 +488,10 @@ function formatDate(iso) {
 }
 
 .card-like {
-  display: inline-flex;
-  align-items: center;
-  margin-left: -4px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
 }
 
 .meta-year,
