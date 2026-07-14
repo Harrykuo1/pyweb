@@ -113,6 +113,23 @@ describe('EventDetailDialog — likes', () => {
     })
   })
 
+  it('reflects an in-place like change on the event (liked from its card)', async () => {
+    const { reactive } = await import('vue')
+    const event = reactive({ ...sample, like_count: 3, liked_by_me: false })
+    const wrapper = await mountDialog({ event })
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('3')
+
+    // The list row is liked elsewhere — same object, mutated in place.
+    event.like_count = 4
+    event.liked_by_me = true
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('4')
+    expect(wrapper.find('[data-test="like-toggle"]').classes()).toContain(
+      'is-liked',
+    )
+  })
+
   it('opens the likers dialog and lists who liked', async () => {
     vi.spyOn(eventsApi, 'listLikers').mockResolvedValue([
       {
