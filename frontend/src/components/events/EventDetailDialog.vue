@@ -16,14 +16,77 @@ import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import { eventsApi } from '../../api/events'
-import EventComments from './EventComments.vue'
+import CommentThread from '../CommentThread.vue'
+import LikeButton from '../LikeButton.vue'
+import LikersDialog from '../LikersDialog.vue'
+import { useLikeToggle } from '../../composables/useLikeToggle'
+
+// Comment API bound to events, handed to the generic CommentThread.
+const commentApi = {
+  list: (id) => eventsApi.listComments(id),
+  create: (id, body) => eventsApi.createComment(id, body),
+  update: (id, cid, body) => eventsApi.updateComment(id, cid, body),
+  remove: (id, cid, password) => eventsApi.removeComment(id, cid, password),
+}
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
   event: { type: Object, default: null },
 })
 
-const emit = defineEmits(['update:modelValue', 'edit'])
+const emit = defineEmits(['update:modelValue', 'edit', 'like-changed'])
+
+// ---- likes ----
+const {
+  isLiked,
+  likeCount,
+  pending: likePending,
+  toggle: toggleLike,
+  sync: syncLike,
+} = useLikeToggle({
+  liked: props.event?.liked_by_me,
+  count: props.event?.like_count,
+  like: () => eventsApi.like(props.event.id),
+  unlike: () => eventsApi.unlike(props.event.id),
+})
+
+const likersOpen = ref(false)
+const likers = ref([])
+const likersLoading = ref(false)
+
+// Keep the heart in step when the dialog is pointed at a different event.
+watch(
+  () => props.event,
+  (ev) => {
+    syncLike(ev?.liked_by_me, ev?.like_count)
+    likersOpen.value = false
+    likers.value = []
+  },
+)
+
+async function onToggleLike() {
+  if (!props.event) return
+  await toggleLike()
+  // Let the list update its copy without a refetch.
+  emit('like-changed', {
+    id: props.event.id,
+    liked: isLiked.value,
+    likeCount: likeCount.value,
+  })
+}
+
+async function openLikers() {
+  if (!props.event) return
+  likersOpen.value = true
+  likersLoading.value = true
+  try {
+    likers.value = await eventsApi.listLikers(props.event.id)
+  } catch {
+    likers.value = []
+  } finally {
+    likersLoading.value = false
+  }
+}
 
 // Only non-accepted events get a status pill; the owner / an admin are the
 // only ones the backend sends a non-accepted event to.
@@ -254,11 +317,22 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         <p>這個活動還沒有照片或記錄。</p>
       </div>
 
-      <EventComments :event-id="event.id" :active="modelValue" />
+      <CommentThread
+        :post-id="event.id"
+        :api="commentApi"
+        :active="modelValue"
+      />
     </div>
 
     <template #footer>
       <div class="footer-row">
+        <LikeButton
+          :liked="isLiked"
+          :count="likeCount"
+          :pending="likePending"
+          @toggle="onToggleLike"
+          @show-likers="openLikers"
+        />
         <slot name="footer-extra" />
         <div class="footer-spacer" />
         <el-button
@@ -274,6 +348,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
       </div>
     </template>
   </el-dialog>
+
+  <LikersDialog
+    v-model="likersOpen"
+    :likers="likers"
+    :loading="likersLoading"
+  />
 
   <!-- Lightbox overlay (teleported to body so it sits above the dialog) -->
   <Teleport to="body">

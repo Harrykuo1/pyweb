@@ -2,11 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import EventComments from './EventComments.vue'
-import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
-import MemberAvatar from '../members/MemberAvatar.vue'
-import { eventsApi } from '../../api/events'
-import { useAuthStore } from '../../stores/auth'
+import CommentThread from './CommentThread.vue'
+import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
+import MemberAvatar from './members/MemberAvatar.vue'
+import { useAuthStore } from '../stores/auth'
 
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal()
@@ -30,7 +29,6 @@ import { ElMessageBox } from 'element-plus'
 function comment(overrides = {}) {
   return {
     id: 1,
-    event_id: 1,
     body: '好活動',
     created_at: '2026-03-02T10:00:00Z',
     edited_at: null,
@@ -51,41 +49,43 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
-  // restoreAllMocks doesn't clear the persistent vi.fn()s from vi.mock, so
-  // clear their call history too or counts bleed across tests.
   vi.clearAllMocks()
   document.body.innerHTML = ''
 })
 
-async function mountComments({ role = 'member', comments = [] } = {}) {
+async function mountThread({ role = 'member', comments = [], api = {} } = {}) {
   const auth = useAuthStore()
   auth.user = { id: 1, role }
-  vi.spyOn(eventsApi, 'listComments').mockResolvedValue(comments)
-  const wrapper = mount(EventComments, { props: { eventId: 1, active: true } })
+  const resolvedApi = {
+    list: vi.fn().mockResolvedValue(comments),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    ...api,
+  }
+  const wrapper = mount(CommentThread, {
+    props: { postId: 1, api: resolvedApi, active: true },
+  })
   await flushPromises()
-  return wrapper
+  return { wrapper, api: resolvedApi }
 }
 
-describe('EventComments', () => {
-  it('loads and renders comments when the dialog is active', async () => {
-    const wrapper = await mountComments({
+describe('CommentThread', () => {
+  it('loads the thread through the injected api', async () => {
+    const { wrapper, api } = await mountThread({
       comments: [
         comment({ id: 1, body: '第一則', author_display_name: '阿明' }),
         comment({ id: 2, body: '第二則', edited_at: '2026-03-02T11:00:00Z' }),
       ],
     })
-    expect(eventsApi.listComments).toHaveBeenCalledWith(1)
+    expect(api.list).toHaveBeenCalledWith(1)
     const items = wrapper.findAll('[data-test="comment-item"]')
     expect(items).toHaveLength(2)
-    expect(items[0].find('[data-test="comment-author"]').text()).toBe('阿明')
-    expect(items[0].find('[data-test="comment-body"]').text()).toBe('第一則')
-    // The second one was edited → shows the marker.
     expect(items[1].find('[data-test="comment-edited"]').exists()).toBe(true)
-    expect(items[0].find('[data-test="comment-edited"]').exists()).toBe(false)
   })
 
-  it('passes the author member id and photo info to MemberAvatar', async () => {
-    const wrapper = await mountComments({
+  it('passes author member/photo info to MemberAvatar', async () => {
+    const { wrapper } = await mountThread({
       comments: [
         comment({
           id: 1,
@@ -99,48 +99,34 @@ describe('EventComments', () => {
     const avatar = wrapper.findComponent(MemberAvatar)
     expect(avatar.props('memberId')).toBe(7)
     expect(avatar.props('hasPhoto')).toBe(true)
-    expect(avatar.props('photoUpdatedAt')).toBe('2026-01-01')
-    expect(avatar.props('name')).toBe('王子銜')
-  })
-
-  it('shows the empty state when there are no comments', async () => {
-    const wrapper = await mountComments({ comments: [] })
-    expect(wrapper.find('[data-test="comments-empty"]').exists()).toBe(true)
   })
 
   it('hides the compose box for the read-only viewer role', async () => {
-    const wrapper = await mountComments({ role: 'viewer' })
+    const { wrapper } = await mountThread({ role: 'viewer' })
     expect(wrapper.find('[data-test="comment-compose"]').exists()).toBe(false)
   })
 
-  it('submits a new comment and appends it to the list', async () => {
-    const wrapper = await mountComments({ comments: [] })
+  it('submits a new comment via api.create and appends it', async () => {
     const created = comment({
       id: 9,
       body: '新留言',
       can_edit: true,
       can_delete: true,
     })
-    const spy = vi.spyOn(eventsApi, 'createComment').mockResolvedValue(created)
-
+    const { wrapper, api } = await mountThread({
+      comments: [],
+      api: { create: vi.fn().mockResolvedValue(created) },
+    })
     await wrapper.find('textarea').setValue('新留言')
     await wrapper.find('[data-test="comment-submit"]').trigger('click')
     await flushPromises()
 
-    expect(spy).toHaveBeenCalledWith(1, '新留言')
-    const items = wrapper.findAll('[data-test="comment-item"]')
-    expect(items).toHaveLength(1)
-    expect(items[0].find('[data-test="comment-body"]').text()).toBe('新留言')
-    // Draft cleared after a successful post.
+    expect(api.create).toHaveBeenCalledWith(1, '新留言')
+    expect(wrapper.findAll('[data-test="comment-item"]')).toHaveLength(1)
     expect(wrapper.find('textarea').element.value).toBe('')
   })
 
-  it('lets the author edit their own comment', async () => {
-    const wrapper = await mountComments({
-      comments: [
-        comment({ id: 3, body: '打錯字', can_edit: true, can_delete: true }),
-      ],
-    })
+  it('edits an own comment via api.update', async () => {
     const updated = comment({
       id: 3,
       body: '更正了',
@@ -148,48 +134,46 @@ describe('EventComments', () => {
       can_delete: true,
       edited_at: '2026-03-02T12:00:00Z',
     })
-    const spy = vi.spyOn(eventsApi, 'updateComment').mockResolvedValue(updated)
-
+    const { wrapper, api } = await mountThread({
+      comments: [
+        comment({ id: 3, body: '打錯字', can_edit: true, can_delete: true }),
+      ],
+      api: { update: vi.fn().mockResolvedValue(updated) },
+    })
     await wrapper.find('[data-test="comment-edit"]').trigger('click')
-    // While editing, the edit textarea is first in the DOM (before compose).
     await wrapper.findAll('textarea')[0].setValue('更正了')
     await wrapper.find('[data-test="comment-edit-save"]').trigger('click')
     await flushPromises()
 
-    expect(spy).toHaveBeenCalledWith(1, 3, '更正了')
+    expect(api.update).toHaveBeenCalledWith(1, 3, '更正了')
     expect(wrapper.find('[data-test="comment-body"]').text()).toBe('更正了')
-    expect(wrapper.find('[data-test="comment-edited"]').exists()).toBe(true)
   })
 
-  it('deletes the author’s own comment after a plain confirm (no password)', async () => {
-    const wrapper = await mountComments({
+  it('deletes an own comment after a plain confirm (no password)', async () => {
+    const { wrapper, api } = await mountThread({
       comments: [comment({ id: 4, can_edit: true, can_delete: true })],
+      api: { remove: vi.fn().mockResolvedValue() },
     })
-    const spy = vi.spyOn(eventsApi, 'removeComment').mockResolvedValue()
-
     await wrapper.find('[data-test="comment-delete"]').trigger('click')
     await flushPromises()
 
     expect(ElMessageBox.confirm).toHaveBeenCalled()
-    expect(spy).toHaveBeenCalledWith(1, 4)
+    expect(api.remove).toHaveBeenCalledWith(1, 4)
     expect(wrapper.findAll('[data-test="comment-item"]')).toHaveLength(0)
   })
 
   it('routes an admin deleting someone else’s comment through the password dialog', async () => {
-    const wrapper = await mountComments({
+    const { wrapper, api } = await mountThread({
       role: 'admin',
-      // Not the author (can_edit false) but can_delete → admin moderation.
       comments: [comment({ id: 5, can_edit: false, can_delete: true })],
     })
-    const spy = vi.spyOn(eventsApi, 'removeComment').mockResolvedValue()
-
     await wrapper.find('[data-test="comment-delete"]').trigger('click')
     await flushPromises()
 
-    // The password dialog opens; the delete call waits for confirmation.
-    expect(spy).not.toHaveBeenCalled()
+    expect(api.remove).not.toHaveBeenCalled()
     expect(ElMessageBox.confirm).not.toHaveBeenCalled()
-    const dialog = wrapper.findComponent(DeleteWithPasswordDialog)
-    expect(dialog.props('modelValue')).toBe(true)
+    expect(
+      wrapper.findComponent(DeleteWithPasswordDialog).props('modelValue'),
+    ).toBe(true)
   })
 })

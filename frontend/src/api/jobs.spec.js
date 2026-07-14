@@ -182,6 +182,45 @@ describe('jobsApi.listCategories', () => {
   })
 })
 
+describe('jobsApi comments + likes', () => {
+  it('GETs / POSTs / PUTs / DELETEs comments', async () => {
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
+    const post = vi.spyOn(client, 'post').mockResolvedValue({ data: { id: 1 } })
+    const put = vi.spyOn(client, 'put').mockResolvedValue({ data: { id: 1 } })
+    const del = vi.spyOn(client, 'delete').mockResolvedValue({})
+
+    await jobsApi.listComments(2)
+    expect(get).toHaveBeenCalledWith('/jobs/2/comments')
+    await jobsApi.createComment(2, '推')
+    expect(post).toHaveBeenCalledWith('/jobs/2/comments', { body: '推' })
+    await jobsApi.updateComment(2, 5, '改')
+    expect(put).toHaveBeenCalledWith('/jobs/2/comments/5', { body: '改' })
+    await jobsApi.removeComment(2, 5)
+    expect(del).toHaveBeenCalledWith('/jobs/2/comments/5', undefined)
+    await jobsApi.removeComment(2, 5, 'pw')
+    expect(del).toHaveBeenCalledWith('/jobs/2/comments/5', {
+      data: { password: 'pw' },
+    })
+  })
+
+  it('POSTs / DELETEs a like and GETs likers', async () => {
+    const post = vi
+      .spyOn(client, 'post')
+      .mockResolvedValue({ data: { like_count: 1, liked: true } })
+    const del = vi
+      .spyOn(client, 'delete')
+      .mockResolvedValue({ data: { like_count: 0, liked: false } })
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ data: [] })
+
+    expect(await jobsApi.like(2)).toEqual({ like_count: 1, liked: true })
+    expect(post).toHaveBeenCalledWith('/jobs/2/like')
+    expect(await jobsApi.unlike(2)).toEqual({ like_count: 0, liked: false })
+    expect(del).toHaveBeenCalledWith('/jobs/2/like')
+    await jobsApi.listLikers(2)
+    expect(get).toHaveBeenCalledWith('/jobs/2/likes')
+  })
+})
+
 describe('jobsApi.detailRoute', () => {
   it('returns a router location object pointing at /jobs with detail=<id>', () => {
     expect(jobsApi.detailRoute(12)).toEqual({

@@ -123,6 +123,10 @@ class JobResponse(BaseModel):
     # Admin or the post's owner only.
     review_reason: str | None = None
     can_edit: bool = False
+    # Heart count + whether the current viewer hearted it, stamped by the
+    # jobs router with grouped queries.
+    like_count: int = 0
+    liked_by_me: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

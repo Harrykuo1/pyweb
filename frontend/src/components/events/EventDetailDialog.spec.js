@@ -25,6 +25,8 @@ const sample = {
   tags: ['春酒', '聚餐'],
   photo_count: 2,
   cover_photo_id: 10,
+  like_count: 3,
+  liked_by_me: false,
 }
 
 const PHOTOS = [
@@ -83,6 +85,50 @@ describe('EventDetailDialog — mounts closed (regression)', () => {
       .flat()
       .some((a) => String(a?.message ?? a).includes('before initialization'))
     expect(tdz).toBe(false)
+  })
+})
+
+describe('EventDetailDialog — likes', () => {
+  it('renders the like button with the event count', async () => {
+    const wrapper = await mountDialog()
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('3')
+  })
+
+  it('likes the event and emits like-changed', async () => {
+    const likeSpy = vi
+      .spyOn(eventsApi, 'like')
+      .mockResolvedValue({ like_count: 4, liked: true })
+    const wrapper = await mountDialog()
+    await wrapper.find('[data-test="like-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(likeSpy).toHaveBeenCalledWith(1)
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('4')
+    const emitted = wrapper.emitted('like-changed')
+    expect(emitted).toBeTruthy()
+    expect(emitted.at(-1)[0]).toMatchObject({
+      id: 1,
+      liked: true,
+      likeCount: 4,
+    })
+  })
+
+  it('opens the likers dialog and lists who liked', async () => {
+    vi.spyOn(eventsApi, 'listLikers').mockResolvedValue([
+      {
+        user_id: 2,
+        display_name: '阿明',
+        member_id: null,
+        has_photo: false,
+        photo_updated_at: null,
+      },
+    ])
+    const wrapper = await mountDialog()
+    await wrapper.find('[data-test="like-count"]').trigger('click')
+    await flushPromises()
+
+    expect(eventsApi.listLikers).toHaveBeenCalledWith(1)
+    expect(wrapper.find('[data-test="liker-item"]').text()).toContain('阿明')
   })
 })
 

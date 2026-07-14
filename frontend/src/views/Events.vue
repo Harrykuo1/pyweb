@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
@@ -26,6 +26,7 @@ import {
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
 import EventDetailDialog from '../components/events/EventDetailDialog.vue'
 import EventFormDialog from '../components/events/EventFormDialog.vue'
+import LikeButton from '../components/LikeButton.vue'
 import {
   TAG_FILTER_LIMIT,
   YEAR_OPTIONS,
@@ -58,12 +59,17 @@ const SEARCH_DEBOUNCE_MS = 300
 
 // Filter state lives in the URL; `detail` is preserved across rewrites for
 // the deep-link dialog. onChange refetches after each sync. Mirrors Jobs.
-const { sortOrder, year, tag, q } = useUrlQuerySync({
+const { sortKey, sortOrder, year, tag, q } = useUrlQuerySync({
   route,
   router,
   preserveKeys: ['detail'],
   onChange: () => loadItems(),
   fields: {
+    sortKey: {
+      queryKey: 'sort',
+      parse: (v) => (v === 'likes' ? 'likes' : 'event_date'),
+      serialize: (v) => (v !== 'event_date' ? v : undefined),
+    },
     sortOrder: {
       queryKey: 'order',
       parse: safeOrder,
@@ -136,6 +142,49 @@ const {
   fetchItem: (id) => eventsApi.get(id),
 })
 
+// The detail dialog toggles the heart; patch the matching list row in place so
+// the timeline count/sort stays in step without a refetch. items entries are
+// the same objects the store cache holds, so this is authoritative until the
+// next fetch.
+function onLikeChanged({ id, liked, likeCount }) {
+  const item = items.value.find((e) => e.id === id)
+  if (item) {
+    item.liked_by_me = liked
+    item.like_count = likeCount
+  }
+}
+
+// Like straight from a timeline card (no need to open the post). Optimistic
+// flip on the list row, reconciled with — or reverted to — the server truth.
+const likePending = reactive({})
+async function onCardLike(ev) {
+  if (likePending[ev.id]) return
+  likePending[ev.id] = true
+  const wasLiked = ev.liked_by_me
+  ev.liked_by_me = !wasLiked
+  ev.like_count = Math.max(0, (ev.like_count || 0) + (wasLiked ? -1 : 1))
+  try {
+    const res = wasLiked
+      ? await eventsApi.unlike(ev.id)
+      : await eventsApi.like(ev.id)
+    ev.liked_by_me = res.liked
+    ev.like_count = res.like_count
+  } catch {
+    ev.liked_by_me = wasLiked
+    ev.like_count = Math.max(0, (ev.like_count || 0) + (wasLiked ? 1 : -1))
+  } finally {
+    delete likePending[ev.id]
+  }
+}
+
+// The order toggle reads differently depending on the sort key.
+const sortToggleLabel = computed(() => {
+  if (sortKey.value === 'likes') {
+    return sortOrder.value === 'desc' ? '多 → 少' : '少 → 多'
+  }
+  return sortOrder.value === 'desc' ? '新 → 舊' : '舊 → 新'
+})
+
 // Group the (already sorted) events by calendar year so the timeline can
 // drop a sticky year divider at each boundary. Order of years follows
 // item order.
@@ -198,6 +247,7 @@ function excerpt(md, n = 120) {
 async function loadItems() {
   try {
     await eventsStore.fetch({
+      sort: sortKey.value,
       order: sortOrder.value,
       year: year.value ?? undefined,
       tag: tag.value,
@@ -427,13 +477,18 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
           />
         </el-select>
 
+        <el-select v-model="sortKey" data-test="sort-mode" class="sort-mode">
+          <el-option label="依日期" value="event_date" />
+          <el-option label="最多愛心" value="likes" />
+        </el-select>
+
         <button
           type="button"
           class="sort-toggle"
           data-test="sort-toggle"
           @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
         >
-          {{ sortOrder === 'desc' ? '新 → 舊' : '舊 → 新' }}
+          {{ sortToggleLabel }}
           <span aria-hidden="true">{{ sortOrder === 'desc' ? '↓' : '↑' }}</span>
         </button>
       </div>
@@ -634,6 +689,23 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                   <el-icon :size="12"><Picture /></el-icon>{{ ev.photo_count }}
                 </span>
               </div>
+
+              <!-- Heart pinned to the card's top-right corner (over the
+                   empty top of the vertically-centred date rail). -->
+              <div
+                class="tl-like"
+                data-test="entry-likes"
+                @click.stop
+                @keydown.stop
+              >
+                <LikeButton
+                  :liked="ev.liked_by_me"
+                  :count="ev.like_count || 0"
+                  :pending="!!likePending[ev.id]"
+                  @toggle="onCardLike(ev)"
+                  @show-likers="openDetail(ev)"
+                />
+              </div>
             </div>
           </div>
         </article>
@@ -672,6 +744,7 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
       v-model="detailOpen"
       :event="detailEvent"
       @edit="onDetailEdit"
+      @like-changed="onLikeChanged"
     >
       <template #footer-extra>
         <el-button
@@ -1593,6 +1666,23 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
 }
 .tl-more {
   order: 5;
+}
+
+/* Heart pinned to the card's top-right corner. Sits over the empty top of the
+   vertically-centred date rail; a translucent chip keeps it legible there. */
+.tl-like {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.sort-mode {
+  width: 128px;
 }
 
 /* Tags ride one line and fade out under a mask so a many-tag event can

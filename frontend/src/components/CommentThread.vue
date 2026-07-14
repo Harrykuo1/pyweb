@@ -2,14 +2,16 @@
 import { computed, ref, watch } from 'vue'
 import { ElButton, ElInput, ElMessage, ElMessageBox } from 'element-plus'
 
-import { eventsApi } from '../../api/events'
-import { useAuthStore } from '../../stores/auth'
-import { useDeleteWithPassword } from '../../composables/useDeleteWithPassword'
-import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
-import MemberAvatar from '../members/MemberAvatar.vue'
+import { useAuthStore } from '../stores/auth'
+import { useDeleteWithPassword } from '../composables/useDeleteWithPassword'
+import DeleteWithPasswordDialog from './DeleteWithPasswordDialog.vue'
+import MemberAvatar from './members/MemberAvatar.vue'
 
 const props = defineProps({
-  eventId: { type: Number, default: null },
+  postId: { type: Number, default: null },
+  // { list, create, update, remove } bound to a post type (events or jobs);
+  // keeps this thread component agnostic to which resource it renders.
+  api: { type: Object, required: true },
   // The parent detail dialog toggles this; we (re)load when it opens so a
   // closed dialog isn't holding a stale thread.
   active: { type: Boolean, default: false },
@@ -33,11 +35,11 @@ const savingEdit = ref(false)
 const canPost = computed(() => ['admin', 'member'].includes(auth.actualRole))
 
 async function load() {
-  if (!props.eventId) return
+  if (!props.postId) return
   loading.value = true
   loadError.value = false
   try {
-    comments.value = await eventsApi.listComments(props.eventId)
+    comments.value = await props.api.list(props.postId)
   } catch {
     loadError.value = true
     comments.value = []
@@ -47,9 +49,9 @@ async function load() {
 }
 
 watch(
-  () => [props.active, props.eventId],
+  () => [props.active, props.postId],
   ([active]) => {
-    if (active && props.eventId) {
+    if (active && props.postId) {
       load()
     } else if (!active) {
       draft.value = ''
@@ -64,7 +66,7 @@ async function submit() {
   if (!body || submitting.value) return
   submitting.value = true
   try {
-    const created = await eventsApi.createComment(props.eventId, body)
+    const created = await props.api.create(props.postId, body)
     comments.value.push(created)
     draft.value = ''
   } catch (err) {
@@ -89,7 +91,7 @@ async function saveEdit(c) {
   if (!body || savingEdit.value) return
   savingEdit.value = true
   try {
-    const updated = await eventsApi.updateComment(props.eventId, c.id, body)
+    const updated = await props.api.update(props.postId, c.id, body)
     const idx = comments.value.findIndex((x) => x.id === c.id)
     if (idx !== -1) comments.value[idx] = updated
     editingId.value = null
@@ -111,8 +113,7 @@ const {
   open: askPasswordDelete,
   confirm: onPasswordConfirm,
 } = useDeleteWithPassword({
-  remove: (c, password) =>
-    eventsApi.removeComment(props.eventId, c.id, password),
+  remove: (c, password) => props.api.remove(props.postId, c.id, password),
   messages: { 404: '留言已不存在' },
   onSuccess: (c) => {
     comments.value = comments.value.filter((x) => x.id !== c.id)
@@ -136,7 +137,7 @@ async function requestDelete(c) {
     return
   }
   try {
-    await eventsApi.removeComment(props.eventId, c.id)
+    await props.api.remove(props.postId, c.id)
     comments.value = comments.value.filter((x) => x.id !== c.id)
     ElMessage.success('已刪除留言')
   } catch {

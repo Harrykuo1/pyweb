@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import JobDetailDialog from './JobDetailDialog.vue'
 import { useAuthStore } from '../../stores/auth'
+import { jobsApi } from '../../api/jobs'
 
 vi.mock('md-editor-v3', () => ({
   MdPreview: {
@@ -25,10 +26,15 @@ const sample = {
   experience_md: '## interview content',
   timeline_md: '| date | event |\n|---|---|\n| 5/1 | apply |',
   created_at: '2025-05-01T00:00:00+00:00',
+  like_count: 3,
+  liked_by_me: false,
 }
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  // The embedded comment thread fetches on open; stub it so these tests
+  // don't hit the real client.
+  vi.spyOn(jobsApi, 'listComments').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -45,6 +51,48 @@ async function mountDialog(props = {}, role = 'admin') {
   await flushPromises()
   return wrapper
 }
+
+describe('JobDetailDialog — likes', () => {
+  it('renders the like button with the job count', async () => {
+    const wrapper = await mountDialog()
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('3')
+  })
+
+  it('likes the job and emits like-changed', async () => {
+    const likeSpy = vi
+      .spyOn(jobsApi, 'like')
+      .mockResolvedValue({ like_count: 4, liked: true })
+    const wrapper = await mountDialog()
+    await wrapper.find('[data-test="like-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(likeSpy).toHaveBeenCalledWith(1)
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('4')
+    expect(wrapper.emitted('like-changed').at(-1)[0]).toMatchObject({
+      id: 1,
+      liked: true,
+      likeCount: 4,
+    })
+  })
+
+  it('opens the likers dialog and lists who liked', async () => {
+    vi.spyOn(jobsApi, 'listLikers').mockResolvedValue([
+      {
+        user_id: 2,
+        display_name: '阿明',
+        member_id: null,
+        has_photo: false,
+        photo_updated_at: null,
+      },
+    ])
+    const wrapper = await mountDialog()
+    await wrapper.find('[data-test="like-count"]').trigger('click')
+    await flushPromises()
+
+    expect(jobsApi.listLikers).toHaveBeenCalledWith(1)
+    expect(wrapper.find('[data-test="liker-item"]').text()).toContain('阿明')
+  })
+})
 
 describe('JobDetailDialog — header', () => {
   it('shows the kind badge, company, real name and meta', async () => {

@@ -10,7 +10,7 @@ from app.core.deps import (
 )
 from app.core.member_display import member_display_map
 from app.database import get_db
-from app.models import Event, EventComment, PostStatus, User, UserRole
+from app.models import Job, JobComment, Member, PostStatus, User, UserRole
 from app.schemas import (
     CommentCreate,
     CommentResponse,
@@ -18,34 +18,36 @@ from app.schemas import (
     PasswordConfirmRequest,
 )
 
-router = APIRouter(prefix="/api/events", tags=["event_comments"])
+router = APIRouter(prefix="/api/jobs", tags=["job_comments"])
 
 
-def _visible_event_or_404(db: Session, event_id: int, user: User) -> Event:
-    """The event, but 404 if it's not visible to this viewer — same rule as
-    events.get_event: admins see everything, others only accepted events plus
-    their own. Keeps comments from leaking the existence of pending posts."""
-    event = db.query(Event).filter_by(id=event_id).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
+def _visible_job_or_404(db: Session, job_id: int, user: User) -> Job:
+    """The job, but 404 if it's not visible to this viewer — same rule as
+    jobs.get_job: admins see everything, others only accepted posts plus the
+    ones they are the subject of."""
+    job = db.query(Job).filter_by(id=job_id).one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到貼文")
     is_admin = user.role is UserRole.ADMIN
-    is_owner = event.author_user_id is not None and event.author_user_id == user.id
-    if not is_admin and event.status is not PostStatus.ACCEPTED and not is_owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
-    return event
-
-
-def _comment_or_404(db: Session, event_id: int, comment_id: int) -> EventComment:
-    comment = (
-        db.query(EventComment).filter_by(id=comment_id, event_id=event_id).one_or_none()
+    member_row = db.query(Member.id).filter_by(user_id=user.id).first()
+    viewer_member_id = member_row[0] if member_row is not None else None
+    is_owner = (
+        job.subject_member_id is not None and job.subject_member_id == viewer_member_id
     )
+    if not is_admin and job.status is not PostStatus.ACCEPTED and not is_owner:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到貼文")
+    return job
+
+
+def _comment_or_404(db: Session, job_id: int, comment_id: int) -> JobComment:
+    comment = db.query(JobComment).filter_by(id=comment_id, job_id=job_id).one_or_none()
     if comment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到留言")
     return comment
 
 
 def _to_response(
-    comment: EventComment,
+    comment: JobComment,
     *,
     is_admin: bool,
     viewer_user_id: int,
@@ -70,17 +72,17 @@ def _to_response(
     )
 
 
-@router.get("/{event_id}/comments", response_model=list[CommentResponse])
+@router.get("/{job_id}/comments", response_model=list[CommentResponse])
 def list_comments(
-    event_id: int,
+    job_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_completed_member),
 ) -> list[CommentResponse]:
-    _visible_event_or_404(db, event_id, current_user)
+    _visible_job_or_404(db, job_id, current_user)
     comments = (
-        db.query(EventComment)
-        .filter_by(event_id=event_id)
-        .order_by(EventComment.id.asc())
+        db.query(JobComment)
+        .filter_by(job_id=job_id)
+        .order_by(JobComment.id.asc())
         .all()
     )
     is_admin = current_user.role is UserRole.ADMIN
@@ -97,20 +99,19 @@ def list_comments(
 
 
 @router.post(
-    "/{event_id}/comments",
+    "/{job_id}/comments",
     response_model=CommentResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def create_comment(
-    event_id: int,
+    job_id: int,
     payload: CommentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
 ) -> CommentResponse:
-    _visible_event_or_404(db, event_id, current_user)
-    # Comments publish immediately — no review queue, unlike events themselves.
-    comment = EventComment(
-        event_id=event_id,
+    _visible_job_or_404(db, job_id, current_user)
+    comment = JobComment(
+        job_id=job_id,
         author_user_id=current_user.id,
         body=payload.body,
     )
@@ -126,17 +127,15 @@ def create_comment(
     )
 
 
-@router.put("/{event_id}/comments/{comment_id}", response_model=CommentResponse)
+@router.put("/{job_id}/comments/{comment_id}", response_model=CommentResponse)
 def update_comment(
-    event_id: int,
+    job_id: int,
     comment_id: int,
     payload: CommentUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
 ) -> CommentResponse:
-    comment = _comment_or_404(db, event_id, comment_id)
-    # Only the author edits their own words — not even an admin rewrites
-    # someone else's comment (admins moderate by deleting, not editing).
+    comment = _comment_or_404(db, job_id, comment_id)
     if comment.author_user_id is None or comment.author_user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="不能編輯別人的留言"
@@ -155,17 +154,17 @@ def update_comment(
 
 
 @router.delete(
-    "/{event_id}/comments/{comment_id}",
+    "/{job_id}/comments/{comment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_comment(
-    event_id: int,
+    job_id: int,
     comment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
     payload: PasswordConfirmRequest | None = None,
 ) -> None:
-    comment = _comment_or_404(db, event_id, comment_id)
+    comment = _comment_or_404(db, job_id, comment_id)
     is_admin = current_user.role is UserRole.ADMIN
     is_author = (
         comment.author_user_id is not None and comment.author_user_id == current_user.id
@@ -174,8 +173,6 @@ def delete_comment(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="不能刪除別人的留言"
         )
-    # Authors delete their own comment freely; an admin moderating someone
-    # else's re-authenticates with the admin password (mirrors events/photos).
     if is_admin and not is_author:
         if payload is None:
             raise HTTPException(

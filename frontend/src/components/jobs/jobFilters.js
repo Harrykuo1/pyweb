@@ -11,6 +11,7 @@ export const SORT_OPTIONS = [
   { key: 'company', label: '公司' },
   { key: 'real_name', label: '名字' },
   { key: 'kind', label: '類型' },
+  { key: 'likes', label: '最多愛心' },
 ]
 const ALLOWED_SORTS = SORT_OPTIONS.map((o) => o.key)
 const ALLOWED_ORDERS = ['asc', 'desc']

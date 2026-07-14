@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 
 import JobRecordCard from './JobRecordCard.vue'
+import { jobsApi } from '../../api/jobs'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 const baseJob = {
   id: 1,
@@ -29,6 +34,29 @@ describe('JobRecordCard', () => {
     expect(wrapper.find('[data-test="real-name"]').text()).toContain('Alice')
     expect(wrapper.text()).toContain('2024/05 求職')
     expect(wrapper.find('[data-test="card-category"]').text()).toBe('Backend')
+  })
+
+  it('likes the job straight from the card and reflects the new count', async () => {
+    const likeSpy = vi
+      .spyOn(jobsApi, 'like')
+      .mockResolvedValue({ like_count: 3, liked: true })
+    const wrapper = mountCard({ ...baseJob, like_count: 2, liked_by_me: false })
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('2')
+
+    await wrapper.find('[data-test="like-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(likeSpy).toHaveBeenCalledWith(1)
+    expect(wrapper.find('[data-test="like-count"]').text()).toBe('3')
+  })
+
+  it('does not open the detail when the like button is clicked', async () => {
+    vi.spyOn(jobsApi, 'like').mockResolvedValue({ like_count: 1, liked: true })
+    const wrapper = mountCard({ ...baseJob, like_count: 0, liked_by_me: false })
+    await wrapper.find('[data-test="like-toggle"]').trigger('click')
+    await flushPromises()
+    // The card's open event must not fire from a like click (stop propagation).
+    expect(wrapper.emitted('open')).toBeFalsy()
   })
 
   it('falls back to 匿名 and the anonymous data-test when display_name is null', () => {

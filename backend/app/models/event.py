@@ -1,6 +1,15 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -69,6 +78,10 @@ class Event(Base):
         back_populates="event",
         cascade="all, delete-orphan",
         order_by="EventComment.id",
+    )
+    likes: Mapped[list["EventLike"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
     )
 
 
@@ -142,3 +155,32 @@ class EventComment(Base):
     )
 
     event: Mapped["Event"] = relationship(back_populates="comments")
+
+
+class EventLike(Base):
+    __tablename__ = "event_likes"
+    __table_args__ = (
+        # One like per person per event; the like/unlike endpoints rely on this
+        # to stay idempotent.
+        UniqueConstraint("event_id", "user_id", name="uq_event_likes_event_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # CASCADE: a like is a join row with no meaning once its user is gone.
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    event: Mapped["Event"] = relationship(back_populates="likes")

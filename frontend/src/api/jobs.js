@@ -78,6 +78,40 @@ export const jobsApi = {
     return data
   },
 
+  // ---- comments ----
+  async listComments(jobId) {
+    const { data } = await client.get(`/jobs/${jobId}/comments`)
+    return data
+  },
+  async createComment(jobId, body) {
+    const { data } = await client.post(`/jobs/${jobId}/comments`, { body })
+    return data
+  },
+  async updateComment(jobId, commentId, body) {
+    const { data } = await client.put(`/jobs/${jobId}/comments/${commentId}`, {
+      body,
+    })
+    return data
+  },
+  async removeComment(jobId, commentId, password) {
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/jobs/${jobId}/comments/${commentId}`, config)
+  },
+
+  // ---- likes (愛心) ----
+  async like(jobId) {
+    const { data } = await client.post(`/jobs/${jobId}/like`)
+    return data
+  },
+  async unlike(jobId) {
+    const { data } = await client.delete(`/jobs/${jobId}/like`)
+    return data
+  },
+  async listLikers(jobId) {
+    const { data } = await client.get(`/jobs/${jobId}/likes`)
+    return data
+  },
+
   // ---- routing ----
   // Single source of truth for the "open this job's detail dialog" URL
   // shape. Callers that want to deep-link from elsewhere (e.g. the

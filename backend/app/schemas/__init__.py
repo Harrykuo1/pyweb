@@ -12,10 +12,8 @@ from app.schemas.auth import (
     UpdateUsernameRequest,
     UserResponse,
 )
+from app.schemas.comment import CommentCreate, CommentResponse, CommentUpdate
 from app.schemas.event import (
-    EventCommentCreate,
-    EventCommentResponse,
-    EventCommentUpdate,
     EventCreate,
     EventPhotoCaptionUpdate,
     EventPhotoResponse,
@@ -35,6 +33,7 @@ from app.schemas.job_attachment import (
     BulkDownloadRequest,
     JobAttachmentResponse,
 )
+from app.schemas.like import LikerResponse, LikeStatusResponse
 from app.schemas.member import (
     MemberCreate,
     MemberResponse,
@@ -61,10 +60,10 @@ __all__ = [
     "BulkDownloadRequest",
     "ConfigFieldResponse",
     "ConfigResponse",
+    "CommentCreate",
+    "CommentResponse",
+    "CommentUpdate",
     "ConfigUpdateRequest",
-    "EventCommentCreate",
-    "EventCommentResponse",
-    "EventCommentUpdate",
     "EventCreate",
     "EventPhotoCaptionUpdate",
     "EventPhotoResponse",
@@ -77,6 +76,8 @@ __all__ = [
     "JobCreatedItem",
     "JobResponse",
     "JobUpdate",
+    "LikeStatusResponse",
+    "LikerResponse",
     "ListResponse",
     "LoginRequest",
     "MemberCreate",
