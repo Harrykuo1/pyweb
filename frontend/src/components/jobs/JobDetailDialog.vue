@@ -63,13 +63,20 @@ const likersOpen = ref(false)
 const likers = ref([])
 const likersLoading = ref(false)
 
+// Reset the likers popover when pointed at a different job.
 watch(
-  () => props.job,
-  (job) => {
-    syncLike(job?.liked_by_me, job?.like_count)
+  () => props.job?.id,
+  () => {
     likersOpen.value = false
     likers.value = []
   },
+)
+// Keep the heart in sync with the list row even when it's mutated in place
+// (e.g. liked straight from its card) — a reference watch would miss that,
+// since the same job object is reused.
+watch(
+  () => [props.job?.liked_by_me, props.job?.like_count],
+  ([liked, count]) => syncLike(liked, count),
 )
 
 async function onToggleLike() {

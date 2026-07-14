@@ -54,14 +54,20 @@ const likersOpen = ref(false)
 const likers = ref([])
 const likersLoading = ref(false)
 
-// Keep the heart in step when the dialog is pointed at a different event.
+// Reset the likers popover when pointed at a different event.
 watch(
-  () => props.event,
-  (ev) => {
-    syncLike(ev?.liked_by_me, ev?.like_count)
+  () => props.event?.id,
+  () => {
     likersOpen.value = false
     likers.value = []
   },
+)
+// Keep the heart in sync with the list row even when it's mutated in place
+// (e.g. liked straight from its card) — a reference watch would miss that,
+// since the same event object is reused.
+watch(
+  () => [props.event?.liked_by_me, props.event?.like_count],
+  ([liked, count]) => syncLike(liked, count),
 )
 
 async function onToggleLike() {
