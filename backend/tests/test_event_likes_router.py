@@ -39,7 +39,10 @@ def ctx(db_session):
                 photo_updated_at=datetime(2026, 1, 2, tzinfo=UTC),
             ),
             Member(
-                graduation_year=2024, real_name="別人", institution="Y", user_id=other.id
+                graduation_year=2024,
+                real_name="別人",
+                institution="Y",
+                user_id=other.id,
             ),
         ]
     )
@@ -161,8 +164,7 @@ def test_sort_by_likes_orders_most_hearted_first(ctx):
     client.post(f"/api/events/{eid}/like")
 
     ids = [
-        e["id"]
-        for e in client.get("/api/events?sort=likes&order=desc").json()["items"]
+        e["id"] for e in client.get("/api/events?sort=likes&order=desc").json()["items"]
     ]
     # eid has 2 hearts, eid2 has 0 → eid comes first.
     assert ids[0] == eid

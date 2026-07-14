@@ -40,7 +40,10 @@ def ctx(db_session):
         [
             mem_member,
             Member(
-                graduation_year=2024, real_name="別人", institution="Y", user_id=other.id
+                graduation_year=2024,
+                real_name="別人",
+                institution="Y",
+                user_id=other.id,
             ),
         ]
     )
@@ -90,7 +93,9 @@ def test_member_can_comment_on_job(ctx):
 def test_viewer_cannot_comment_on_job(ctx):
     client, login, jid = ctx
     login("viewer-pw")
-    assert client.post(f"/api/jobs/{jid}/comments", json={"body": "x"}).status_code == 403
+    assert (
+        client.post(f"/api/jobs/{jid}/comments", json={"body": "x"}).status_code == 403
+    )
 
 
 def test_job_comment_edit_and_delete_flow(ctx):
@@ -191,6 +196,8 @@ def test_jobs_sort_by_likes(ctx):
     login("mem-pw")
     client.post(f"/api/jobs/{jid}/like")
 
-    ids = [j["id"] for j in client.get("/api/jobs?sort=likes&order=desc").json()["items"]]
+    ids = [
+        j["id"] for j in client.get("/api/jobs?sort=likes&order=desc").json()["items"]
+    ]
     assert ids[0] == jid
     assert ids.index(jid) < ids.index(jid2)
