@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
+import { authApi } from '../api/auth'
 import Login from './Login.vue'
 
 // Vite's static asset import resolves to a string URL at runtime; the test
@@ -61,6 +62,9 @@ describe('Login.vue', () => {
   })
 
   it('shows the suspension message when password login returns 403 Account suspended', async () => {
+    // The suspended message also pulls the admin contact list; stub it so this
+    // test doesn't reach for the real client.
+    vi.spyOn(authApi, 'listAdminContacts').mockResolvedValue([])
     const auth = useAuthStore()
     vi.spyOn(auth, 'login').mockRejectedValue(
       Object.assign(new Error('403'), {
@@ -120,6 +124,57 @@ describe('Login.vue', () => {
 
     expect(wrapper.find('[data-test="error"]').text()).toBe(
       '登入失敗，請稍後再試',
+    )
+  })
+
+  it('lists admin Discord contacts on an error that needs an admin', async () => {
+    routeQuery = { error: 'not_linked' }
+    const spy = vi.spyOn(authApi, 'listAdminContacts').mockResolvedValue([
+      { display_name: 'Harry', discord_username: 'as6325400' },
+      { display_name: null, discord_username: 'handleonly' },
+    ])
+
+    const wrapper = mount(Login)
+    await flushPromises()
+
+    expect(spy).toHaveBeenCalled()
+    const line = wrapper.find('[data-test="admin-contacts"]')
+    expect(line.exists()).toBe(true)
+    // Display name + handle; bare handle when there's no display name.
+    expect(line.text()).toContain('Harry（@as6325400）')
+    expect(line.text()).toContain('@handleonly')
+  })
+
+  it('does not fetch or show admin contacts for errors that do not need one', async () => {
+    routeQuery = { error: 'discord_denied' }
+    const spy = vi.spyOn(authApi, 'listAdminContacts').mockResolvedValue([])
+
+    const wrapper = mount(Login)
+    await flushPromises()
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test="admin-contacts"]').exists()).toBe(false)
+  })
+
+  it('shows admin contacts when password login reports a suspended account', async () => {
+    const spy = vi
+      .spyOn(authApi, 'listAdminContacts')
+      .mockResolvedValue([
+        { display_name: 'Harry', discord_username: 'as6325400' },
+      ])
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'login').mockRejectedValue(
+      Object.assign(new Error('403'), {
+        response: { status: 403, data: { detail: 'Account suspended' } },
+      }),
+    )
+
+    const wrapper = mount(Login)
+    await submitWithPassword(wrapper, 'pw')
+
+    expect(spy).toHaveBeenCalled()
+    expect(wrapper.find('[data-test="admin-contacts"]').text()).toContain(
+      'Harry（@as6325400）',
     )
   })
 
