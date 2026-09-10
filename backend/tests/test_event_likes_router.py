@@ -169,3 +169,30 @@ def test_sort_by_likes_orders_most_hearted_first(ctx):
     # eid has 2 hearts, eid2 has 0 → eid comes first.
     assert ids[0] == eid
     assert ids.index(eid) < ids.index(eid2)
+
+
+def test_pending_event_is_invisible_to_other_members_on_like_endpoints(ctx, db_session):
+    # The like endpoints carry their own copy of the visibility rule, so the
+    # events router's tests don't cover them. A pending event must 404 for
+    # everyone except its author and admins.
+    client, login, _ = ctx
+    author_id = db_session.query(User).filter_by(username="mem").one().id
+    pending = Event(
+        title="未審核",
+        event_date=date(2026, 4, 1),
+        author_user_id=author_id,
+        status=PostStatus.PENDING,
+    )
+    db_session.add(pending)
+    db_session.commit()
+
+    login("other-pw")
+    assert client.post(f"/api/events/{pending.id}/like").status_code == 404
+    assert client.get(f"/api/events/{pending.id}/likes").status_code == 404
+
+    # Positive controls — proves the 404s above are the visibility rule and
+    # not a broken row that would 404 for everybody.
+    login("mem-pw")
+    assert client.post(f"/api/events/{pending.id}/like").status_code == 200
+    login("admin-pw")
+    assert client.get(f"/api/events/{pending.id}/likes").status_code == 200

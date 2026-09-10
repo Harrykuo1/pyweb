@@ -244,3 +244,33 @@ def test_admin_deletes_own_comment_without_password(ctx):
     assert (
         client.request("DELETE", f"/api/events/{eid}/comments/{cid}").status_code == 204
     )
+
+
+def test_pending_event_is_invisible_to_other_members_on_comment_endpoints(
+    ctx, db_session
+):
+    # Same rule as the like endpoints, enforced by a separate copy here.
+    client, login, _ = ctx
+    author_id = db_session.query(User).filter_by(username="mem").one().id
+    pending = Event(
+        title="未審核",
+        event_date=date(2026, 4, 1),
+        author_user_id=author_id,
+        status=PostStatus.PENDING,
+    )
+    db_session.add(pending)
+    db_session.commit()
+
+    login("other-pw")
+    assert client.get(f"/api/events/{pending.id}/comments").status_code == 404
+    assert (
+        client.post(
+            f"/api/events/{pending.id}/comments", json={"body": "偷看"}
+        ).status_code
+        == 404
+    )
+
+    login("mem-pw")
+    assert client.get(f"/api/events/{pending.id}/comments").status_code == 200
+    login("admin-pw")
+    assert client.get(f"/api/events/{pending.id}/comments").status_code == 200

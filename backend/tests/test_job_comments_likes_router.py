@@ -201,3 +201,48 @@ def test_jobs_sort_by_likes(ctx):
     ]
     assert ids[0] == jid
     assert ids.index(jid) < ids.index(jid2)
+
+
+def test_pending_job_is_invisible_to_other_members_on_comment_and_like_endpoints(
+    ctx, db_session
+):
+    # Jobs key ownership off subject_member_id rather than an author user, and
+    # the comment and like routers each re-implement that check — so both need
+    # their own coverage.
+    client, login, _ = ctx
+    subject_id = (
+        db_session.query(Member)
+        .join(User, Member.user_id == User.id)
+        .filter(User.username == "mem")
+        .one()
+        .id
+    )
+    pending = Job(
+        job_year=2025,
+        job_month=3,
+        company="Secret",
+        kind=JobKind.INTERNSHIP,
+        experience_md="未審核",
+        status=PostStatus.PENDING,
+        subject_member_id=subject_id,
+    )
+    db_session.add(pending)
+    db_session.commit()
+
+    login("other-pw")
+    assert client.get(f"/api/jobs/{pending.id}/comments").status_code == 404
+    assert (
+        client.post(
+            f"/api/jobs/{pending.id}/comments", json={"body": "偷看"}
+        ).status_code
+        == 404
+    )
+    assert client.post(f"/api/jobs/{pending.id}/like").status_code == 404
+    assert client.get(f"/api/jobs/{pending.id}/likes").status_code == 404
+
+    # Positive controls — the subject and admins still get through.
+    login("mem-pw")
+    assert client.get(f"/api/jobs/{pending.id}/comments").status_code == 200
+    assert client.post(f"/api/jobs/{pending.id}/like").status_code == 200
+    login("admin-pw")
+    assert client.get(f"/api/jobs/{pending.id}/likes").status_code == 200
