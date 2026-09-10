@@ -84,7 +84,10 @@ services:
       - "8081:8080"
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/"]
+      # 127.0.0.1, not localhost: the image resolves localhost to ::1 first and
+      # nginx only listens on IPv4, so the probe got ECONNREFUSED against a
+      # perfectly healthy container.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 15s
       timeout: 5s
       retries: 5
