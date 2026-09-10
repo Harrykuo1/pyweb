@@ -1,4 +1,8 @@
 fastapi>=0.115,<1.0
+# fastapi asks for starlette>=0.46.0 with no upper bound, so majors land here
+# unannounced — that is how we ended up on 1.0 and started tripping its
+# deprecations. Cap the major; no floor of our own, so fastapi keeps picking it.
+starlette<2.0
 uvicorn[standard]>=0.32,<1.0
 sqlalchemy>=2.0,<3.0
 alembic>=1.13,<2.0

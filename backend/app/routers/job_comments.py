@@ -9,8 +9,9 @@ from app.core.deps import (
     require_posting_member,
 )
 from app.core.member_display import member_display_map
+from app.core.post_visibility import visible_job_or_404
 from app.database import get_db
-from app.models import Job, JobComment, Member, PostStatus, User, UserRole
+from app.models import JobComment, User, UserRole
 from app.schemas import (
     CommentCreate,
     CommentResponse,
@@ -19,24 +20,6 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/jobs", tags=["job_comments"])
-
-
-def _visible_job_or_404(db: Session, job_id: int, user: User) -> Job:
-    """The job, but 404 if it's not visible to this viewer — same rule as
-    jobs.get_job: admins see everything, others only accepted posts plus the
-    ones they are the subject of."""
-    job = db.query(Job).filter_by(id=job_id).one_or_none()
-    if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到貼文")
-    is_admin = user.role is UserRole.ADMIN
-    member_row = db.query(Member.id).filter_by(user_id=user.id).first()
-    viewer_member_id = member_row[0] if member_row is not None else None
-    is_owner = (
-        job.subject_member_id is not None and job.subject_member_id == viewer_member_id
-    )
-    if not is_admin and job.status is not PostStatus.ACCEPTED and not is_owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到貼文")
-    return job
 
 
 def _comment_or_404(db: Session, job_id: int, comment_id: int) -> JobComment:
@@ -78,7 +61,7 @@ def list_comments(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_completed_member),
 ) -> list[CommentResponse]:
-    _visible_job_or_404(db, job_id, current_user)
+    visible_job_or_404(db, job_id, current_user)
     comments = (
         db.query(JobComment)
         .filter_by(job_id=job_id)
@@ -109,7 +92,7 @@ def create_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
 ) -> CommentResponse:
-    _visible_job_or_404(db, job_id, current_user)
+    visible_job_or_404(db, job_id, current_user)
     comment = JobComment(
         job_id=job_id,
         author_user_id=current_user.id,

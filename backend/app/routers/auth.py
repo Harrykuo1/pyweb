@@ -393,7 +393,7 @@ def update_user_role(
     # not something we promote individuals into.
     if payload.role not in (UserRole.ADMIN, UserRole.MEMBER):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Role must be admin or member",
         )
     user = db.query(User).filter_by(id=user_id).one_or_none()
@@ -561,7 +561,7 @@ def update_username(
     new_username = payload.username.strip()
     if not new_username:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Username cannot be blank",
         )
 
@@ -598,7 +598,7 @@ def update_password(
     # password as an expired session; the session is still valid here.
     if not verify_admin_password(db, payload.current_password):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Current password is incorrect",
         )
 

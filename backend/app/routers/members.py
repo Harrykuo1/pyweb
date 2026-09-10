@@ -406,7 +406,7 @@ def delete_member_photo(
     if current_user.role is UserRole.ADMIN:
         if payload is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Password is required",
             )
         require_admin_password(db, payload.password)
@@ -503,7 +503,7 @@ def delete_member_resume_pdf(
     if current_user.role is UserRole.ADMIN:
         if payload is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Password is required",
             )
         require_admin_password(db, payload.password)
