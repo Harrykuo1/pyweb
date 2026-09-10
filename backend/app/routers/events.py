@@ -411,7 +411,7 @@ def delete_event(
     if is_admin:
         if payload is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Password is required",
             )
         require_admin_password(db, payload.password)
