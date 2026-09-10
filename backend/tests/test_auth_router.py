@@ -2,7 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.core.security import hash_password
+from app.core.deps import verify_admin_password
+from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.main import app
 from app.models import Member, User, UserRole
@@ -338,9 +339,82 @@ def test_update_viewer_username_succeeds(client):
     assert r.json()["role"] == "viewer"
 
 
-def test_update_username_conflicts_when_role_is_ambiguous(client, db_session):
-    # Two accounts share a role -> targeting by role is ambiguous. Must 409,
-    # not 500 (the old .one_or_none() raised MultipleResultsFound).
+def test_update_username_ignores_discord_accounts_sharing_the_role(client, db_session):
+    # A Discord-linked account holding the same role has no credentials to
+    # edit. It must not make the role ambiguous — the seeded password account
+    # is still the one that gets renamed.
+    db_session.add(
+        User(username=None, discord_id="900", role=UserRole.VIEWER),
+    )
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/username",
+        json={"username": "watcher"},
+    )
+    assert r.status_code == 200, r.text
+    renamed = db_session.query(User).filter_by(username="watcher").one()
+    assert renamed.password_hash is not None
+
+
+def test_update_password_targets_the_break_glass_admin_not_a_discord_admin(
+    client, db_session
+):
+    # The bug this fixes: promoting members to admin used to make
+    # /users/admin/password ambiguous, 409-ing every password rotation.
+    db_session.add_all(
+        [
+            User(username=None, discord_id="901", role=UserRole.ADMIN),
+            User(username=None, discord_id="902", role=UserRole.ADMIN),
+        ]
+    )
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/admin/password",
+        json={"current_password": "admin-pw", "new_password": "rotated-pw"},
+    )
+    assert r.status_code == 204, r.text
+
+    seeded = db_session.query(User).filter_by(username="admin").one()
+    assert verify_password("rotated-pw", seeded.password_hash)
+    for discord_admin in db_session.query(User).filter(User.discord_id.isnot(None)):
+        assert discord_admin.password_hash is None
+
+
+def test_rotated_admin_password_still_confirms_destructive_actions(client, db_session):
+    # The invariant the whole change exists for: the account whose password
+    # this endpoint edits must be the one verify_admin_password checks.
+    db_session.add(User(username=None, discord_id="903", role=UserRole.ADMIN))
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/admin/password",
+        json={"current_password": "admin-pw", "new_password": "rotated-pw"},
+    )
+    assert r.status_code == 204, r.text
+
+    assert verify_admin_password(db_session, "rotated-pw") is True
+    assert verify_admin_password(db_session, "admin-pw") is False
+
+
+def test_update_password_404s_when_the_role_has_no_password_account(client, db_session):
+    # Stripping the viewer's password leaves nothing to edit under that role.
+    viewer = db_session.query(User).filter_by(username="viewer").one()
+    viewer.password_hash = None
+    db_session.commit()
+    _login_admin(client)
+    r = client.patch(
+        "/api/auth/users/viewer/password",
+        json={"current_password": "admin-pw", "new_password": "fresh-pw"},
+    )
+    assert r.status_code == 404, r.text
+
+
+def test_two_password_accounts_in_a_role_resolve_to_the_lowest_id(client, db_session):
+    # Not an expected state (one password account per role), but the tie-break
+    # must be deterministic rather than arbitrary — and it must agree with
+    # admin_password_account, which resolves the same way.
     db_session.add(
         User(
             username="viewer2",
@@ -354,7 +428,10 @@ def test_update_username_conflicts_when_role_is_ambiguous(client, db_session):
         "/api/auth/users/viewer/username",
         json={"username": "watcher"},
     )
-    assert r.status_code == 409, r.text
+    assert r.status_code == 200, r.text
+    assert db_session.query(User).filter_by(username="watcher").one().id < (
+        db_session.query(User).filter_by(username="viewer2").one().id
+    )
 
 
 def test_update_admin_username_succeeds_and_me_reflects_it(client):
