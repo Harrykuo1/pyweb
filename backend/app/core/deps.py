@@ -108,18 +108,29 @@ def require_posting_member(
     return current_user
 
 
+def password_account_by_role(db: Session, role: UserRole) -> User | None:
+    """The one account in `role` that still logs in with a password.
+
+    Discord-linked accounts carry no password, so this is what separates the
+    seeded break-glass credentials from members who merely hold the same role.
+    order_by(id) is a determinism tie-break, not a selection rule: a role is
+    only ever expected to have one password account.
+    """
+    return (
+        db.query(User)
+        .filter(User.role == role, User.password_hash.isnot(None))
+        .order_by(User.id)
+        .first()
+    )
+
+
 def admin_password_account(db: Session) -> User | None:
     """The break-glass password admin — the one admin-role account that still
     has a password (Discord-linked admins have none). Its password is the
     shared confirmation credential for destructive/account actions, so any
     admin — even a Discord-linked one with no password of their own — can
     confirm by entering the admin password."""
-    return (
-        db.query(User)
-        .filter(User.role == UserRole.ADMIN, User.password_hash.isnot(None))
-        .order_by(User.id)
-        .first()
-    )
+    return password_account_by_role(db, UserRole.ADMIN)
 
 
 def verify_admin_password(db: Session, password: str) -> bool:

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.deps import (
     admin_password_account,
     get_current_user,
+    password_account_by_role,
     require_admin,
     verify_admin_password,
 )
@@ -47,27 +48,21 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 LOGIN_RATE_LIMIT = "5/minute"
 
 
-def _get_user_by_role(db: Session, role: UserRole) -> User:
-    users = db.query(User).filter_by(role=role).all()
-    if not users:
+def _credential_account_or_404(db: Session, role: UserRole) -> User:
+    """The account these endpoints edit: the role's password account, not just
+    anyone holding the role. Discord-linked members can hold admin/viewer too,
+    and they have no credentials to change — targeting by role alone made this
+    ambiguous the moment a member was promoted. Resolving through
+    password_account_by_role keeps the account whose password is edited here
+    identical to the one verify_admin_password checks against.
+    """
+    account = password_account_by_role(db, role)
+    if account is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No user with role '{role.value}'",
+            detail=f"No password account with role '{role.value}'",
         )
-    if len(users) > 1:
-        # Identifying the target by role only works while a role maps to one
-        # account. Once two share it (e.g. a member was promoted, so there
-        # are two admins), fail cleanly with 409 instead of 500-ing from
-        # .one()'s MultipleResultsFound — and steer callers to the id-based
-        # endpoints (/users/{id}/role, /users/{id}/active).
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Multiple accounts share the '{role.value}' role; "
-                "manage credentials by user id instead"
-            ),
-        )
-    return users[0]
+    return account
 
 
 @router.post("/login", response_model=UserResponse)
@@ -561,7 +556,7 @@ def update_username(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> User:
-    target = _get_user_by_role(db, role)
+    target = _credential_account_or_404(db, role)
 
     new_username = payload.username.strip()
     if not new_username:
@@ -607,7 +602,7 @@ def update_password(
             detail="Current password is incorrect",
         )
 
-    target = _get_user_by_role(db, role)
+    target = _credential_account_or_404(db, role)
 
     # Login is identified by password alone (linear scan over users), so two
     # accounts sharing a password would make login ambiguous.
