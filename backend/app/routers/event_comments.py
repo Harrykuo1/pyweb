@@ -9,8 +9,9 @@ from app.core.deps import (
     require_posting_member,
 )
 from app.core.member_display import member_display_map
+from app.core.post_visibility import visible_event_or_404
 from app.database import get_db
-from app.models import Event, EventComment, PostStatus, User, UserRole
+from app.models import EventComment, User, UserRole
 from app.schemas import (
     CommentCreate,
     CommentResponse,
@@ -19,20 +20,6 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/events", tags=["event_comments"])
-
-
-def _visible_event_or_404(db: Session, event_id: int, user: User) -> Event:
-    """The event, but 404 if it's not visible to this viewer — same rule as
-    events.get_event: admins see everything, others only accepted events plus
-    their own. Keeps comments from leaking the existence of pending posts."""
-    event = db.query(Event).filter_by(id=event_id).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
-    is_admin = user.role is UserRole.ADMIN
-    is_owner = event.author_user_id is not None and event.author_user_id == user.id
-    if not is_admin and event.status is not PostStatus.ACCEPTED and not is_owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
-    return event
 
 
 def _comment_or_404(db: Session, event_id: int, comment_id: int) -> EventComment:
@@ -76,7 +63,7 @@ def list_comments(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_completed_member),
 ) -> list[CommentResponse]:
-    _visible_event_or_404(db, event_id, current_user)
+    visible_event_or_404(db, event_id, current_user)
     comments = (
         db.query(EventComment)
         .filter_by(event_id=event_id)
@@ -107,7 +94,7 @@ def create_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
 ) -> CommentResponse:
-    _visible_event_or_404(db, event_id, current_user)
+    visible_event_or_404(db, event_id, current_user)
     # Comments publish immediately — no review queue, unlike events themselves.
     comment = EventComment(
         event_id=event_id,

@@ -1,28 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_completed_member, require_posting_member
 from app.core.member_display import member_display_map
+from app.core.post_visibility import visible_event_or_404
 from app.database import get_db
-from app.models import Event, EventLike, PostStatus, User, UserRole
+from app.models import EventLike, User
 from app.schemas import LikerResponse, LikeStatusResponse
 
 router = APIRouter(prefix="/api/events", tags=["event_likes"])
-
-
-def _visible_event_or_404(db: Session, event_id: int, user: User) -> Event:
-    # Mirrors event_comments._visible_event_or_404; both fold into one shared
-    # helper when likes + comments are ported to jobs.
-    event = db.query(Event).filter_by(id=event_id).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
-    is_admin = user.role is UserRole.ADMIN
-    is_owner = event.author_user_id is not None and event.author_user_id == user.id
-    if not is_admin and event.status is not PostStatus.ACCEPTED and not is_owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
-    return event
 
 
 def _like_count(db: Session, event_id: int) -> int:
@@ -35,7 +23,7 @@ def like_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
 ) -> LikeStatusResponse:
-    _visible_event_or_404(db, event_id, current_user)
+    visible_event_or_404(db, event_id, current_user)
     existing = (
         db.query(EventLike)
         .filter_by(event_id=event_id, user_id=current_user.id)
@@ -58,7 +46,7 @@ def unlike_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_posting_member),
 ) -> LikeStatusResponse:
-    _visible_event_or_404(db, event_id, current_user)
+    visible_event_or_404(db, event_id, current_user)
     existing = (
         db.query(EventLike)
         .filter_by(event_id=event_id, user_id=current_user.id)
@@ -76,7 +64,7 @@ def list_likers(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_completed_member),
 ) -> list[LikerResponse]:
-    _visible_event_or_404(db, event_id, current_user)
+    visible_event_or_404(db, event_id, current_user)
     # Most recent likers first.
     user_ids = [
         uid

@@ -14,6 +14,7 @@ from app.core.deps import (
     require_posting_member,
 )
 from app.core.job_serialize import serialize_job
+from app.core.post_visibility import resolve_viewer_member_id
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.database import get_db
@@ -84,11 +85,6 @@ def _attachment_counts(db: Session, job_ids: list[int]) -> dict[int, int]:
         .all()
     )
     return dict(rows)
-
-
-def _viewer_member_id(db: Session, user: User) -> int | None:
-    row = db.query(Member.id).filter_by(user_id=user.id).first()
-    return row[0] if row is not None else None
 
 
 def _subject_names(db: Session, member_ids: list[int | None]) -> dict[int, str]:
@@ -172,7 +168,7 @@ def list_jobs(
     current_user: User = Depends(require_completed_member),
 ) -> ListResponse[JobResponse]:
     is_admin = current_user.role is UserRole.ADMIN
-    viewer_member_id = _viewer_member_id(db, current_user)
+    viewer_member_id = resolve_viewer_member_id(db, current_user)
 
     query = db.query(Job)
 
@@ -262,7 +258,7 @@ def get_job(
 ) -> JobResponse:
     obj = _get_or_404(db, job_id)
     is_admin = current_user.role is UserRole.ADMIN
-    viewer_member_id = _viewer_member_id(db, current_user)
+    viewer_member_id = resolve_viewer_member_id(db, current_user)
     is_owner = (
         obj.subject_member_id is not None and obj.subject_member_id == viewer_member_id
     )
@@ -297,7 +293,7 @@ def create_job(
     current_user: User = Depends(require_posting_member),
 ) -> JobResponse:
     is_admin = current_user.role is UserRole.ADMIN
-    viewer_member_id = _viewer_member_id(db, current_user)
+    viewer_member_id = resolve_viewer_member_id(db, current_user)
 
     if is_admin:
         # Admin may attribute the post to any member (or free-text real_name),
@@ -367,7 +363,7 @@ def update_job(
 ) -> JobResponse:
     obj = _get_or_404(db, job_id)
     is_admin = current_user.role is UserRole.ADMIN
-    viewer_member_id = _viewer_member_id(db, current_user)
+    viewer_member_id = resolve_viewer_member_id(db, current_user)
     is_owner = (
         obj.subject_member_id is not None and obj.subject_member_id == viewer_member_id
     )
@@ -441,7 +437,7 @@ def delete_job(
 ) -> None:
     obj = _get_or_404(db, job_id)
     is_admin = current_user.role is UserRole.ADMIN
-    viewer_member_id = _viewer_member_id(db, current_user)
+    viewer_member_id = resolve_viewer_member_id(db, current_user)
     is_owner = (
         obj.subject_member_id is not None and obj.subject_member_id == viewer_member_id
     )
