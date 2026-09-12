@@ -34,6 +34,7 @@ from app.core.deps import (
     require_posting_member,
 )
 from app.core.runtime_config import get_int
+from app.core.uploads import stream_to_disk
 from app.database import get_db
 from app.models import Job, JobAttachment, Member, PostStatus, User, UserRole
 from app.schemas import (
@@ -193,12 +194,6 @@ async def upload_attachment(
 
     max_mb = get_int(db, "max_attachment_mb")
     max_bytes = max_mb * 1024 * 1024
-    data = await file.read()
-    if len(data) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"檔案大小超過 {max_mb} MB 上限",
-        )
 
     # Count check only matters when a new row would be added.
     # Overwrite reuses the existing row, so it doesn't push the count up.
@@ -221,9 +216,13 @@ async def upload_attachment(
 
     final_path = upload_dir / final_filename
     # The relpath can have intermediate subdirectories (folder upload);
-    # make sure they exist before write_bytes.
-    final_path.parent.mkdir(parents=True, exist_ok=True)
-    final_path.write_bytes(data)
+    # stream_to_disk creates them along with the file.
+    size_bytes = await stream_to_disk(
+        file,
+        final_path,
+        max_bytes=max_bytes,
+        too_large_detail=f"檔案大小超過 {max_mb} MB 上限",
+    )
 
     # Re-generate the on-disk PDF preview alongside the saved file so
     # the in-page Office viewer doesn't depend on a separate job. The
@@ -249,7 +248,7 @@ async def upload_attachment(
     now = datetime.now(UTC)
     if has_conflict and conflict_strategy == "overwrite" and existing_row is not None:
         existing_row.mime_type = file.content_type or existing_row.mime_type
-        existing_row.size_bytes = len(data)
+        existing_row.size_bytes = size_bytes
         existing_row.uploaded_at = now
         db.commit()
         db.refresh(existing_row)
@@ -259,7 +258,7 @@ async def upload_attachment(
         job_id=job_id,
         filename=final_filename,
         mime_type=file.content_type,
-        size_bytes=len(data),
+        size_bytes=size_bytes,
         uploaded_at=now,
     )
     db.add(new_row)

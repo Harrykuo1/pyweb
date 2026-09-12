@@ -20,6 +20,7 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.uploads import stream_to_disk
 from app.database import get_db
 from app.models import Event, EventPhoto, User, UserRole
 from app.schemas import (
@@ -151,22 +152,16 @@ async def upload_photo(
             detail=f"照片數量已達上限（最多 {MAX_PHOTOS_PER_EVENT} 張）",
         )
 
-    data = await file.read()
-    if len(data) > PHOTO_MAX_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"照片大小超過 {PHOTO_MAX_BYTES // (1024 * 1024)} MB 上限",
-        )
-
     trimmed_caption = caption.strip() if caption else ""
     # Flush an empty-filename row first so the auto-assigned id can name
     # the on-disk file — keeps every photo's path stable and collision-free
-    # under the per-event directory.
+    # under the per-event directory. size_bytes is backfilled once the
+    # stream lands, since nothing knows the real size until then.
     photo = EventPhoto(
         event_id=event_id,
         filename="",
         mime_type=file.content_type,
-        size_bytes=len(data),
+        size_bytes=0,
         caption=trimmed_caption or None,
         uploaded_at=datetime.now(UTC),
     )
@@ -176,8 +171,22 @@ async def upload_photo(
     ext = PHOTO_MIME_TO_EXT[file.content_type]
     photo.filename = f"{photo.id}{ext}"
     target = event_uploads_dir(uploads_root, event_id) / photo.filename
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
+    # The row had to be flushed before the bytes could land, so a rejected
+    # upload has to undo it explicitly. Leaving it to the session's lifetime
+    # would work in production and quietly not in anything that shares a
+    # session, which is exactly where it would go unnoticed.
+    try:
+        photo.size_bytes = await stream_to_disk(
+            file,
+            target,
+            max_bytes=PHOTO_MAX_BYTES,
+            too_large_detail=(
+                f"照片大小超過 {PHOTO_MAX_BYTES // (1024 * 1024)} MB 上限"
+            ),
+        )
+    except BaseException:
+        db.rollback()
+        raise
 
     db.commit()
     db.refresh(photo)

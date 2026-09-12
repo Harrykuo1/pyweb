@@ -368,3 +368,47 @@ def test_overwrite_does_not_trigger_count_limit(client, job, db_session):
     _upload(client, job.id, filename="report.pdf")
     r = _upload(client, job.id, filename="report.pdf", strategy="overwrite")
     assert r.status_code == 201
+
+
+def test_oversized_overwrite_leaves_the_existing_file_intact(
+    client, job, db_session, uploads_dir
+):
+    """A failed replacement must not destroy what it was replacing.
+
+    Uploads stream to disk now, and the overwrite path targets a file that
+    already exists — so writing straight into it would truncate the stored
+    attachment the instant the replacement ran over the cap. The bytes go to
+    a sibling .part file and are moved into place only on success.
+    """
+    _login_admin(client)
+    _upload(client, job.id, filename="report.pdf")
+    stored = uploads_dir / "jobs" / str(job.id) / "report.pdf"
+    assert stored.read_bytes() == TINY_PDF
+
+    db_session.add(AppConfig(key="max_attachment_mb", value="0"))
+    db_session.commit()
+
+    r = _upload(
+        client,
+        job.id,
+        filename="report.pdf",
+        body=b"%PDF-1.7\nreplacement\n",
+        strategy="overwrite",
+    )
+    assert r.status_code == 413
+    assert stored.read_bytes() == TINY_PDF
+    assert db_session.query(JobAttachment).filter_by(job_id=job.id).count() == 1
+
+
+def test_rejected_upload_leaves_no_partial_file(client, job, db_session, uploads_dir):
+    # The .part scratch file must be cleaned up, or the next upload of the
+    # same name would find junk sitting next to it.
+    db_session.add(AppConfig(key="max_attachment_mb", value="0"))
+    db_session.commit()
+
+    _login_admin(client)
+    assert _upload(client, job.id, filename="report.pdf").status_code == 413
+
+    job_dir = uploads_dir / "jobs" / str(job.id)
+    leftovers = list(job_dir.iterdir()) if job_dir.exists() else []
+    assert leftovers == [], leftovers

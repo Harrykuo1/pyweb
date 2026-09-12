@@ -231,3 +231,37 @@ def test_get_photo_isolated_per_event(client_factory, db_session):
     login_as("viewer")
     assert client.get(f"/api/events/2/photos/{pid}").status_code == 404
     assert client.get(f"/api/events/1/photos/{pid}").status_code == 200
+
+
+def test_rejected_photo_leaves_no_file_and_no_row(
+    client_factory, db_session, uploads_dir
+):
+    """The row is flushed before the bytes land, so the id can name the file.
+
+    An over-limit upload therefore has to unwind both: the session is never
+    committed, and the partial file is removed — otherwise a rejected upload
+    would leave an orphan row pointing at nothing, or a stub on disk.
+    """
+    client, login_as = client_factory
+    login_as("admin")
+    big = b"x" * (8 * 1024 * 1024 + 1)  # PHOTO_MAX_BYTES + 1
+    r = _upload(client, data=big, mime="image/png", name="big.png")
+    assert r.status_code == 413
+
+    assert db_session.query(EventPhoto).count() == 0
+    event_dir = uploads_dir / "events" / "1"
+    leftovers = list(event_dir.iterdir()) if event_dir.exists() else []
+    assert leftovers == [], leftovers
+
+
+def test_upload_records_the_streamed_byte_count(client_factory, uploads_dir):
+    # size_bytes is backfilled from the stream rather than len(data), so it
+    # has to still match what actually reached the disk.
+    client, login_as = client_factory
+    login_as("admin")
+    payload = b"\x89PNG\r\n\x1a\n" + b"z" * 5000
+    body = _upload(client, data=payload, mime="image/png", name="sized.png").json()
+
+    assert body["size_bytes"] == len(payload)
+    on_disk = uploads_dir / "events" / "1" / body["filename"]
+    assert on_disk.stat().st_size == len(payload)
