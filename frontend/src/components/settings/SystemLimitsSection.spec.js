@@ -5,12 +5,38 @@ import { ElMessage } from 'element-plus'
 import SystemLimitsSection from './SystemLimitsSection.vue'
 import { settingsApi } from '../../api/settings'
 
+// The API returns every group's fields in one payload; the component keeps
+// only its own, so the sample carries an event field to prove it is dropped.
 const SAMPLE = {
   fields: [
-    { key: 'max_attachments_per_job', value: 10, type: 'int', min: 1, max: 50 },
-    { key: 'max_attachment_mb', value: 20, type: 'int', min: 1, max: 200 },
+    {
+      key: 'max_attachments_per_job',
+      value: 10,
+      type: 'int',
+      group: 'job',
+      min: 1,
+      max: 50,
+    },
+    {
+      key: 'max_attachment_mb',
+      value: 20,
+      type: 'int',
+      group: 'job',
+      min: 1,
+      max: 200,
+    },
+    {
+      key: 'max_photo_mb',
+      value: 15,
+      type: 'int',
+      group: 'event',
+      min: 1,
+      max: 40,
+    },
   ],
 }
+
+const JOB = { props: { group: 'job' } }
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -22,7 +48,7 @@ describe('SystemLimitsSection.vue', () => {
       .spyOn(settingsApi, 'getConfig')
       .mockResolvedValue(SAMPLE)
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
 
     expect(getConfig).toHaveBeenCalledTimes(1)
@@ -40,7 +66,7 @@ describe('SystemLimitsSection.vue', () => {
   it('save button is disabled until the form changes', async () => {
     vi.spyOn(settingsApi, 'getConfig').mockResolvedValue(SAMPLE)
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
 
     expect(
@@ -61,7 +87,7 @@ describe('SystemLimitsSection.vue', () => {
       .mockResolvedValue(updated)
     const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => {})
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
 
     wrapper.vm.form.max_attachments_per_job = 25
@@ -88,7 +114,7 @@ describe('SystemLimitsSection.vue', () => {
     )
     const error = vi.spyOn(ElMessage, 'error').mockImplementation(() => {})
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
 
     wrapper.vm.form.max_attachments_per_job = 5
@@ -103,7 +129,7 @@ describe('SystemLimitsSection.vue', () => {
   it('reset reverts unsaved edits', async () => {
     vi.spyOn(settingsApi, 'getConfig').mockResolvedValue(SAMPLE)
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
 
     wrapper.vm.form.max_attachments_per_job = 42
@@ -117,7 +143,7 @@ describe('SystemLimitsSection.vue', () => {
     vi.spyOn(settingsApi, 'getConfig').mockResolvedValue(SAMPLE)
     vi.spyOn(settingsApi, 'updateConfig').mockResolvedValue(SAMPLE)
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
     const before = wrapper.vm.formVersion
 
@@ -132,10 +158,47 @@ describe('SystemLimitsSection.vue', () => {
   it('shows error banner when GET fails', async () => {
     vi.spyOn(settingsApi, 'getConfig').mockRejectedValue(new Error('boom'))
 
-    const wrapper = mount(SystemLimitsSection)
+    const wrapper = mount(SystemLimitsSection, JOB)
     await flushPromises()
 
     expect(wrapper.text()).toContain('載入設定失敗')
     expect(wrapper.find('[data-test="settings-form"]').exists()).toBe(false)
+  })
+})
+
+describe('SystemLimitsSection.vue — per-group split', () => {
+  it('renders only its own group and ignores the rest of the payload', async () => {
+    vi.spyOn(settingsApi, 'getConfig').mockResolvedValue(SAMPLE)
+
+    const wrapper = mount(SystemLimitsSection, { props: { group: 'event' } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="setting-max_photo_mb"]').exists()).toBe(
+      true,
+    )
+    // A job field must not leak into the events tab — one payload feeds both.
+    expect(
+      wrapper.find('[data-test="setting-max_attachment_mb"]').exists(),
+    ).toBe(false)
+    expect(wrapper.text()).toContain('照片單檔大小上限')
+  })
+
+  it('saves only its own group, leaving the other tab untouched', async () => {
+    vi.spyOn(settingsApi, 'getConfig').mockResolvedValue(SAMPLE)
+    const updateConfig = vi
+      .spyOn(settingsApi, 'updateConfig')
+      .mockResolvedValue(SAMPLE)
+
+    const wrapper = mount(SystemLimitsSection, { props: { group: 'event' } })
+    await flushPromises()
+
+    wrapper.vm.form.max_photo_mb = 20
+    await flushPromises()
+    await wrapper.find('[data-test="settings-save"]').trigger('click')
+    await flushPromises()
+
+    // PUT is a partial update, so sending a job key here would overwrite
+    // whatever the other tab holds with this tab's stale copy.
+    expect(updateConfig).toHaveBeenCalledWith({ max_photo_mb: 20 })
   })
 })
