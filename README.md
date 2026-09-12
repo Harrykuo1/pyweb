@@ -5,10 +5,13 @@
 ## 功能
 
 - **首頁**：站內計數與社群動態 feed。
-- **登入**：管理員 / 檢視者兩組固定帳號，server-side session。
+- **登入**：成員走 Discord OAuth；另有管理員 / 檢視者兩組密碼帳號作為備援。皆為 server-side session。詳見「帳號與登入」。
 - **成員介紹**：成員基本資料、照片、Markdown 履歷與履歷 PDF。
-- **求職紀錄**：實習 / 正職心得與時程表，支援附件上傳與線上預覽（office 檔走 OnlyOffice 轉 PDF）。
-- **設定頁 `/settings`**：管理員可改帳密、外觀資源、系統限制。
+- **求職紀錄**：實習 / 正職心得與時程表，支援匿名發表、附件上傳與線上預覽（office 檔走 OnlyOffice 轉 PDF）。
+- **活動紀錄 `/events`**：聚餐、出遊、比賽與講座的照片與文字紀錄，依日期排列並可依年份 / 標籤篩選。
+- **留言與愛心**：求職紀錄與活動紀錄皆可留言、按愛心並查看按讚名單。留言以純文字呈現，只有作者本人能編輯，管理員可刪除。
+- **審核佇列 `/review`**：成員發表的求職 / 活動紀錄先進入待審核狀態，管理員核可後才公開；待審核內容只有作者本人與管理員看得到。
+- **設定頁 `/settings`**：管理員可改帳密、管理成員與角色、發註冊邀請、設定 Discord 伺服器、調整外觀資源與系統限制。
 
 ## 技術棧
 
@@ -35,15 +38,20 @@ pyweb/
 │       ├── database.py
 │       ├── init_db.py        # 跑 alembic upgrade + 種帳號 + 種 app_configs 預設值
 │       ├── reset_password.py # CLI：丟失 admin 密碼時的救援腳本
-│       ├── models/           # member / job / job_attachment / app_config / site_setting / user
+│       ├── models/           # user / member / job / event / job_attachment / post_status
+│       │                     # / app_config / site_setting / pending_discord_link / registration_invite
 │       ├── schemas/          # Pydantic schemas
-│       ├── routers/          # auth / members / jobs / job_attachments / timeline / stats / settings / internal
-│       └── core/             # config / deps / security / rate_limit / attachments / office_convert / runtime_config / audit_log / search_query
+│       ├── routers/          # auth / members / jobs / events / job_comments / job_likes
+│       │                     # / event_comments / event_likes / job_attachments / event_photos
+│       │                     # / timeline / stats / settings / internal
+│       └── core/             # config / deps / security / post_visibility / rate_limit / attachments
+│                             # / office_convert / runtime_config / audit_log / search_query
+│                             # / member_display / job_serialize / discord_oauth / discord_link / discord_register
 ├── frontend/                 # Vue 3 + Vite 前端
 │   └── src/
 │       ├── views/            # Home / Login / Members / Jobs / Events / Settings
 │       ├── layouts/          # AuthLayout（navbar + outlet）
-│       ├── components/       # 共用對話框、TimelineFeed、MarqueeText 等
+│       ├── components/       # 共用對話框、TimelineFeed、MarqueeText、CommentThread、LikeButton、LikersDialog 等
 │       │   ├── jobs/         # 求職頁元件（卡片 / 篩選 / 排序 / 附件管理）
 │       │   ├── events/       # 活動頁元件（時間軸 / 詳情 / 表單 / 照片管理）
 │       │   ├── members/      # 成員頁元件（表單 / 照片格 / 履歷檢視）
@@ -97,7 +105,10 @@ docker compose down -v
 | `frontend` | `frontend/Dockerfile`（multi-stage：node build → nginx serve） | `8081:8080` | 服務 `dist/` + 反代 `/api` → backend |
 | `backend` | `backend/Dockerfile`（python:3.13-slim） | 不對外 | `:8000`，由 frontend nginx 反代 |
 | `onlyoffice` | `onlyoffice/documentserver:8.2` | 不對外 | `:80`，僅在 compose network 內由 backend 呼叫 |
+| `sqlite-web` | `coleifer/sqlite-web:latest` | `8119:8080` | phpMyAdmin 式的 DB 瀏覽介面，掛同一份 `./data` |
 | `./data` | bind mount | — | 掛在 backend `/data`，存 `pyweb.db` 與 `uploads/`、`logs/` |
+
+> **⚠️ `sqlite-web` 只適合信任網路。** 它對 `pyweb.db` 有完整讀寫權、走明文 HTTP、只靠一組共用密碼（`SQLITE_WEB_PASSWORD`），且**完全繞過 app 的權限系統** —— 進得去就能直接改 `users` 表。目前綁 `0.0.0.0`，同網段任何裝置都連得到。要收緊就把 port 改成 `127.0.0.1:8119:8080` 再走 SSH tunnel，唯讀的話加 `-r`。注意 Docker 發布 port 是直接寫 iptables 的 nat 表，**會繞過 ufw**，所以防火牆規則擋不住它。
 
 backend 容器啟動時會跑 `app/init_db.py`：先 `alembic upgrade head` 把 schema 帶到最新版，再依 `.env` 內的 `SEED_*` 變數 upsert 帳號，最後寫入 `app_configs` 預設值。所有步驟皆冪等，**不會覆蓋既有密碼或既有 config**。
 
@@ -117,6 +128,7 @@ SQLite 檔以 bind mount 落在 [data/pyweb.db](data/)，附件落在 `data/uplo
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | 否 | Discord OAuth 應用憑證。留空則停用 Discord 登入（只剩密碼登入） |
 | `DISCORD_REDIRECT_URI` | 否 | OAuth callback，須為公開網址且與 Discord 應用設定**完全一致**，如 `https://<域名>/api/auth/discord/callback` |
 | `DISCORD_GUILD_ID` | 否 | 初始允許登入的 Discord 伺服器 ID；之後可在設定頁改（DB 值優先） |
+| `SQLITE_WEB_PASSWORD` | 是 | `sqlite-web` 的登入密碼（沒有 username）。未設時容器會起不來。等同整個資料庫的讀寫權，用長亂數，並參考上方服務拓樸的警告 |
 
 `UPLOADS_DIR`、`ONLYOFFICE_INTERNAL_URL`、`BACKEND_INTERNAL_URL` 由 `docker-compose.yml` 直接寫死，平常不用手動設。
 
@@ -176,11 +188,21 @@ print('alembic_version:', con.cursor().execute('SELECT version_num FROM alembic_
 
 | 角色 | 登入方式 | 權限 |
 |---|---|---|
-| `admin` | 密碼 | 全部增刪改查；在 `/settings` 管理成員與帳號、發成員註冊邀請、設定 Discord 伺服器與系統限制 |
+| `admin` | Discord OAuth 或密碼 | 全部增刪改查；在 `/settings` 管理成員與帳號、發成員註冊邀請、設定 Discord 伺服器與系統限制。成員可被提權為 admin，此時走 Discord 登入、沒有自己的密碼 |
 | `member` | Discord OAuth | 瀏覽全部內容、發自己的求職／活動紀錄（進審核佇列）、編修自己的個資 |
 | `viewer` | 密碼 | 僅查（過渡期的舊唯讀帳號） |
 
 - **admin / viewer** 由 `backend/app/init_db.py` 依 `.env` 的 `SEED_*` 建立，走密碼登入（登入只認密碼、不問 username，所以兩者密碼必須不同；UI 改密碼時會擋撞號）。
+
+> **⚠️ 登入頁的密碼表單預設是隱藏的。** Discord 是唯一可見的登入路徑；密碼表單仍在 DOM 裡，但 `Login.vue` 用一個寫死的 `showPasswordLogin = ref(false)` 把它 `v-show` 掉。這是**刻意**的 break-glass 設計，不是遺留垃圾 —— Discord 掛掉時，開發者工具把那個元素的 `display` 清掉就能用：
+>
+> ```js
+> document.querySelector('[data-test="password-login"]').style.display = ''
+> ```
+>
+> 後端的密碼登入端點從未關閉，所以這只是 UI 層的隱藏，不是安全邊界。
+>
+> 另外：「哪一個帳號才是**那個** admin」由 `app/core/deps.py` 的 `password_account_by_role()` 唯一決定（條件是「角色相符**且**有密碼」）。因為 Discord 管理員身上沒有密碼，這條規則才能在有多位管理員時仍然指向種子帳號。任何要解析憑證帳號的程式碼都必須走它，不能只用角色去查。
 - **member** 走 **Discord OAuth**：管理員在 `/settings` 產生一次性註冊邀請連結（48 小時、單次使用），新成員用該連結經 Discord 授權後建立 member 帳號並補完個資；之後每次登入都會即時重驗 Discord 伺服器成員資格（離開伺服器即失去存取）。Discord 相關設定見上方環境變數表，留空則停用 Discord 登入、只剩密碼登入。
 
 admin / viewer 的初始 username／密碼來自 `.env`：
