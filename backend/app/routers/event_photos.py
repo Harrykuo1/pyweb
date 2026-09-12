@@ -20,6 +20,7 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.runtime_config import get_int
 from app.core.uploads import stream_to_disk
 from app.database import get_db
 from app.models import Event, EventPhoto, User, UserRole
@@ -31,8 +32,6 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/events", tags=["event_photos"])
 
-PHOTO_MAX_BYTES = 8 * 1024 * 1024
-MAX_PHOTOS_PER_EVENT = 30
 # Mirror the member-photo allowlist plus GIF, which is common for event
 # snapshots. Each maps to the canonical extension we store on disk.
 PHOTO_MIME_TO_EXT: dict[str, str] = {
@@ -145,12 +144,15 @@ async def upload_photo(
             detail=f"照片格式僅支援 {sorted(PHOTO_MIME_TO_EXT)}",
         )
 
+    max_count = get_int(db, "max_photos_per_event")
     current_count = db.query(EventPhoto).filter_by(event_id=event_id).count()
-    if current_count >= MAX_PHOTOS_PER_EVENT:
+    if current_count >= max_count:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"照片數量已達上限（最多 {MAX_PHOTOS_PER_EVENT} 張）",
+            detail=f"照片數量已達上限（最多 {max_count} 張）",
         )
+
+    max_mb = get_int(db, "max_photo_mb")
 
     trimmed_caption = caption.strip() if caption else ""
     # Flush an empty-filename row first so the auto-assigned id can name
@@ -179,10 +181,8 @@ async def upload_photo(
         photo.size_bytes = await stream_to_disk(
             file,
             target,
-            max_bytes=PHOTO_MAX_BYTES,
-            too_large_detail=(
-                f"照片大小超過 {PHOTO_MAX_BYTES // (1024 * 1024)} MB 上限"
-            ),
+            max_bytes=max_mb * 1024 * 1024,
+            too_large_detail=f"照片大小超過 {max_mb} MB 上限",
         )
     except BaseException:
         db.rollback()

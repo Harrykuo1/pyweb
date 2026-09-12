@@ -12,6 +12,7 @@ class ConfigFieldResponse(BaseModel):
     key: str
     value: int
     type: Literal["int"]
+    group: Literal["job", "event"]
     min: int | None = None
     max: int | None = None
 
