@@ -522,3 +522,35 @@ def test_a_member_who_is_not_the_author_cannot_reorder(ctx, db_session):
         json={"items": [{"type": "photo", "id": p1.id}]},
     )
     assert r.status_code == 403
+
+
+def test_an_uploaded_clip_is_appended_not_put_first(
+    ctx, db_session, monkeypatch, uploads_dir
+):
+    """Uploads used to keep the column default of 0, so a new clip appeared
+    at the front of an event someone had already put in order."""
+    client, login, _ = ctx
+    login("author-pw")
+    _photo_row(db_session, 1, 1, order=4)
+    db_session.commit()
+    _stub_transcode(monkeypatch, db_session, uploads_dir)
+
+    body = _upload(client).json()
+    row = db_session.query(EventVideo).filter_by(id=body["id"]).one()
+    assert row.sort_order > 4
+    assert _order(db_session, 1)[-1] == ("video", row.id)
+
+
+def test_a_youtube_link_is_appended_not_put_first(ctx, db_session):
+    # Same rule for a link: it joins the end of the grid, not the front.
+    client, login, _ = ctx
+    login("author-pw")
+    _photo_row(db_session, 1, 1, order=9)
+    db_session.commit()
+
+    r = client.post(
+        "/api/events/1/videos/youtube",
+        json={"url": "https://youtu.be/dQw4w9WgXcQ"},
+    )
+    assert r.status_code == 201, r.text
+    assert db_session.query(EventVideo).one().sort_order > 9

@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from app.core.event_media import next_sort_order
 from app.models import (
     Event,
     EventPhoto,
@@ -215,3 +216,42 @@ def test_an_event_whose_only_media_is_transcoding_has_no_cover(db_session, event
     assert summary.cover_type is None
     assert summary.cover_id is None
     assert summary.media_count == 1
+
+
+def test_new_media_lands_after_what_is_already_there(db_session, event):
+    """An upload used to take the column default of 0, which put it at the
+    front of an event someone had already arranged — and a photo sorts ahead
+    of a video at an equal position, so it also stole a clip's cover."""
+    db_session.add_all([_photo(event.id, 1, order=0), _video(event.id, order=1)])
+    db_session.commit()
+
+    assert next_sort_order(db_session, event.id) == 2
+
+
+def test_the_next_position_spans_both_tables(db_session, event):
+    # One sequence covers photos and videos, so looking at only one table
+    # would hand out a position that is already taken.
+    db_session.add(_video(event.id, order=7))
+    db_session.commit()
+
+    assert next_sort_order(db_session, event.id) == 8
+
+
+def test_the_first_item_of_an_empty_event_gets_a_position(db_session, event):
+    # Nothing to come after; it just has to be a valid position.
+    assert next_sort_order(db_session, event.id) >= 0
+
+
+def test_an_appended_photo_does_not_take_over_a_video_cover(db_session, event):
+    """The whole point: arrange a clip as the cover, add a photo, and the
+    cover stays where it was put."""
+    db_session.add_all([_video(event.id, order=0), _photo(event.id, 1, order=1)])
+    db_session.commit()
+
+    added = _photo(event.id, 2, order=next_sort_order(db_session, event.id))
+    db_session.add(added)
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.cover_type == "video"
+    assert summary.cover_id != added.id

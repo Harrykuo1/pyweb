@@ -9,7 +9,10 @@ that runs before the app starts pulling in FastAPI routing to get it.
 
 from pathlib import Path
 
-from app.models import EventVideo
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.models import EventPhoto, EventVideo
 
 
 def event_uploads_dir(uploads_root: Path, event_id: int) -> Path:
@@ -40,3 +43,26 @@ def video_files(video: EventVideo, uploads_root: Path) -> list[Path]:
         video.poster_filename,
     }
     return [event_dir / name for name in sorted(n for n in names if n)]
+
+
+def next_sort_order(db: Session, event_id: int) -> int:
+    """Where a newly added photo or video belongs: after everything else.
+
+    The column defaults to 0, which dropped every upload at the *front* of an
+    event whose media had been arranged — and, because a photo sorts ahead of
+    a video at an equal position, let one new photo take over a cover the
+    editor had deliberately set to a clip.
+
+    One sequence spans both tables, so the next position has to consider both.
+    """
+    highest = max(
+        db.query(func.max(EventPhoto.sort_order))
+        .filter(EventPhoto.event_id == event_id)
+        .scalar()
+        or 0,
+        db.query(func.max(EventVideo.sort_order))
+        .filter(EventVideo.event_id == event_id)
+        .scalar()
+        or 0,
+    )
+    return highest + 1

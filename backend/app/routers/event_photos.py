@@ -21,7 +21,7 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
-from app.core.event_media import event_uploads_dir
+from app.core.event_media import event_uploads_dir, next_sort_order
 from app.core.media import HEIC_MIME_TYPES, MediaConversionError, heic_to_jpeg
 from app.core.runtime_config import get_int
 from app.core.uploads import stream_to_disk
@@ -168,6 +168,7 @@ async def upload_photo(
         size_bytes=0,
         caption=trimmed_caption or None,
         uploaded_at=datetime.now(UTC),
+        sort_order=next_sort_order(db, event_id),
     )
     db.add(photo)
     db.flush()

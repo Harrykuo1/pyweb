@@ -345,3 +345,25 @@ def test_undecodable_heic_is_rejected_not_stored(
     event_dir = uploads_dir / "events" / "1"
     leftovers = list(event_dir.iterdir()) if event_dir.exists() else []
     assert leftovers == [], leftovers
+
+
+def test_upload_appends_after_existing_media(client_factory, db_session):
+    """An upload used to keep the column default of 0, landing in front of
+    an event whose media had already been arranged — and, since a photo sorts
+    ahead of a video at an equal position, taking over a clip's cover."""
+    client, login_as = client_factory
+    login_as("admin")
+    db_session.add(
+        EventPhoto(
+            event_id=1,
+            filename="old.png",
+            mime_type="image/png",
+            size_bytes=1,
+            sort_order=5,
+        )
+    )
+    db_session.commit()
+
+    body = _upload(client).json()
+    added = db_session.query(EventPhoto).filter_by(id=body["id"]).one()
+    assert added.sort_order > 5

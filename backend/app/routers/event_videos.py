@@ -21,7 +21,11 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
-from app.core.event_media import event_uploads_dir, video_files
+from app.core.event_media import (
+    event_uploads_dir,
+    next_sort_order,
+    video_files,
+)
 from app.core.media import (
     MediaConversionError,
     extract_poster,
@@ -230,6 +234,7 @@ async def upload_video(
         caption=trimmed_caption or None,
         uploaded_at=datetime.now(UTC),
         processing_started_at=datetime.now(UTC),
+        sort_order=next_sort_order(db, event_id),
     )
     db.add(video)
     db.flush()
@@ -307,6 +312,7 @@ def add_youtube_video(
         youtube_id=video_id,
         caption=caption or None,
         uploaded_at=datetime.now(UTC),
+        sort_order=next_sort_order(db, event_id),
     )
     db.add(video)
     db.commit()
