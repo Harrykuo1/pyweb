@@ -33,12 +33,25 @@ const GROUPS = [
   {
     key: 'site',
     label: '網站設定',
-    description: 'Discord 群組、登入頁外觀與系統參數',
+    description: 'Discord 群組、登入頁外觀與上傳限制',
     icon: SetUp,
     subs: [
       { key: 'discord', label: 'Discord 群組', component: GuildConfigSection },
       { key: 'appearance', label: '登入頁外觀', component: AppearanceSection },
-      { key: 'system', label: '系統參數', component: SystemLimitsSection },
+      // 'system' was one tab holding only job keys despite the name. It stays
+      // as the jobs tab's key so existing bookmarks and links still resolve.
+      {
+        key: 'system',
+        label: '求職參數',
+        component: SystemLimitsSection,
+        props: { group: 'job' },
+      },
+      {
+        key: 'event-limits',
+        label: '活動參數',
+        component: SystemLimitsSection,
+        props: { group: 'event' },
+      },
     ],
   },
   {
@@ -72,6 +85,9 @@ const activeSub = computed(
 )
 const activeGroup = computed(() => activeSub.value.group)
 const activeComponent = computed(() => activeSub.value.component)
+// SystemLimitsSection is mounted twice, once per config group, so the
+// leaf definition carries the props that tell the two apart.
+const activeProps = computed(() => activeSub.value.props ?? {})
 
 // Bridge the sidebar (which selects a GROUP) to the leaf source of truth:
 // selecting a group lands on that group's first sub.
@@ -183,7 +199,16 @@ watch(active, (next) => {
           class="settings-section__body"
           :data-test="`settings-active-sub-${active}`"
         >
-          <component :is="activeComponent" @generate-invite="goToInvites" />
+          <!-- Keyed by the leaf, not just the component: 求職參數 and
+               活動參數 are the same component with different props, so
+               without this Vue reuses the instance and the composable keeps
+               whichever group it was given at setup. -->
+          <component
+            :is="activeComponent"
+            :key="active"
+            v-bind="activeProps"
+            @generate-invite="goToInvites"
+          />
         </div>
       </main>
     </div>

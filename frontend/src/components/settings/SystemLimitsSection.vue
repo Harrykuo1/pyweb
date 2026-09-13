@@ -3,6 +3,17 @@ import { ElAlert, ElButton, ElInputNumber, ElSkeleton } from 'element-plus'
 
 import { useSystemLimitsForm } from '../../composables/useSystemLimitsForm'
 
+// Which slice of the runtime config this instance edits. The settings page
+// mounts one per domain, and the backend tags each field with its group, so
+// a new setting lands in the right tab without touching this file.
+const props = defineProps({
+  group: {
+    type: String,
+    required: true,
+    validator: (v) => ['job', 'event'].includes(v),
+  },
+})
+
 // The config-form logic lives in the composable; this is presentation.
 const {
   fields,
@@ -15,7 +26,7 @@ const {
   handleSave,
   handleReset,
   copyFor,
-} = useSystemLimitsForm()
+} = useSystemLimitsForm(props.group)
 
 defineExpose({ form, formVersion })
 </script>

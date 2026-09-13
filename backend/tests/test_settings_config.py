@@ -161,3 +161,27 @@ def test_put_config_above_max_rejected(client):
         json={"values": {"max_attachments_per_job": 999}},
     )
     assert r.status_code == 422
+
+
+def test_config_exposes_event_fields_grouped_for_the_settings_tabs(client):
+    """The settings page splits these into per-domain tabs, and it reads the
+    grouping off the API rather than keeping its own copy — so a field added
+    to CONFIG_FIELDS lands in the right tab without touching the frontend."""
+    _login_viewer(client)
+    fields = {f["key"]: f for f in client.get("/api/settings/config").json()["fields"]}
+
+    assert {k for k, f in fields.items() if f["group"] == "job"} == {
+        "max_attachments_per_job",
+        "max_attachment_mb",
+    }
+    assert {k for k, f in fields.items() if f["group"] == "event"} == {
+        "max_photos_per_event",
+        "max_photo_mb",
+        "max_videos_per_event",
+        "max_video_mb",
+    }
+
+    # max_video_mb is pinned to nginx's client_max_body_size: above it the
+    # upload dies at the proxy with a bare 413 instead of our message.
+    assert fields["max_video_mb"]["value"] == 240
+    assert fields["max_video_mb"]["max"] == 240

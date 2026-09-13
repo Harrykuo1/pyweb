@@ -18,21 +18,32 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 
 ConfigType = Literal["int"]
+# Which settings tab a field belongs to. Kept here rather than in the
+# frontend so adding a field doesn't mean editing two places.
+ConfigGroup = Literal["job", "event"]
 
 
 @dataclass(frozen=True)
 class ConfigField:
     key: str
     type: ConfigType
+    group: ConfigGroup
     default: str
     min_value: int | None = None
     max_value: int | None = None
 
 
+# Each max_value marks where something actually breaks, not a round number:
+# a video over ~240 MB dies at nginx's client_max_body_size with a bare 413
+# instead of our message; 40 MB covers a 200MP phone JPEG, above which the
+# file is a RAW that the MIME allowlist rejects anyway; and the per-event
+# counts are bounded by what the nightly backup tarball can carry and by what
+# is still scrollable on one page.
 CONFIG_FIELDS: tuple[ConfigField, ...] = (
     ConfigField(
         key="max_attachments_per_job",
         type="int",
+        group="job",
         default="10",
         min_value=1,
         max_value=50,
@@ -40,9 +51,42 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
     ConfigField(
         key="max_attachment_mb",
         type="int",
+        group="job",
         default="20",
         min_value=1,
         max_value=200,
+    ),
+    ConfigField(
+        key="max_photos_per_event",
+        type="int",
+        group="event",
+        default="30",
+        min_value=1,
+        max_value=150,
+    ),
+    ConfigField(
+        key="max_photo_mb",
+        type="int",
+        group="event",
+        default="15",
+        min_value=1,
+        max_value=40,
+    ),
+    ConfigField(
+        key="max_videos_per_event",
+        type="int",
+        group="event",
+        default="5",
+        min_value=1,
+        max_value=10,
+    ),
+    ConfigField(
+        key="max_video_mb",
+        type="int",
+        group="event",
+        default="240",
+        min_value=1,
+        max_value=240,
     ),
 )
 

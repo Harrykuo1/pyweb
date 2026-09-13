@@ -24,7 +24,9 @@ const sample = {
   created_at: '2026-03-16T00:00:00+00:00',
   tags: ['春酒', '聚餐'],
   photo_count: 2,
-  cover_photo_id: 10,
+  media_count: 2,
+  cover_media_type: 'photo',
+  cover_media_id: 10,
   like_count: 3,
   liked_by_me: false,
 }
@@ -53,6 +55,8 @@ const PHOTOS = [
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(eventsApi, 'listPhotos').mockResolvedValue(PHOTOS)
+  // The gallery now merges photos with videos, so both endpoints are hit.
+  vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([])
   // The embedded comment section fetches on open; stub it so these tests
   // don't hit the real client.
   vi.spyOn(eventsApi, 'listComments').mockResolvedValue([])
@@ -160,6 +164,23 @@ describe('EventDetailDialog — header', () => {
       '台北',
     )
   })
+
+  it('counts clips separately from photos in the header meta', async () => {
+    // media_count mixes both, so showing it raw next to the photo icon would
+    // claim an event with 2 photos and a clip holds 3 photos.
+    const wrapper = await mountDialog({
+      event: { ...sample, photo_count: 2, media_count: 3 },
+    })
+    expect(wrapper.find('[data-test="detail-videos"]').text()).toContain(
+      '1 部影片',
+    )
+    expect(wrapper.text()).toContain('2 張照片')
+  })
+
+  it('omits the clip count for an event that has none', async () => {
+    const wrapper = await mountDialog()
+    expect(wrapper.find('[data-test="detail-videos"]').exists()).toBe(false)
+  })
 })
 
 describe('EventDetailDialog — gallery', () => {
@@ -182,6 +203,54 @@ describe('EventDetailDialog — gallery', () => {
     await wrapper.findAll('[data-test="gallery-thumb"]')[0].trigger('click')
     await flushPromises()
     expect(document.querySelector('[data-test="lightbox"]')).not.toBeNull()
+  })
+
+  it('does not open a clip that has nothing to play', async () => {
+    // A failed tile stays clickable on purpose — it is how the uploader sees
+    // what happened — but it owns no poster and no file, so the lightbox fell
+    // through to an <img> with no src and showed a broken-image icon.
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      {
+        id: 7,
+        kind: 'upload',
+        status: 'failed',
+        caption: null,
+        has_poster: false,
+        youtube_id: null,
+        sort_order: 99,
+      },
+    ])
+    const wrapper = await mountDialog()
+    const tiles = wrapper.findAll('[data-test="gallery-thumb"]')
+    expect(tiles).toHaveLength(3)
+    expect(tiles[2].attributes('disabled')).toBeUndefined()
+
+    await tiles[2].trigger('click')
+    await flushPromises()
+    expect(document.querySelector('[data-test="lightbox"]')).toBeNull()
+  })
+
+  it('does not step onto an unplayable clip while browsing', async () => {
+    // Arrowing past the last photo used to land on it, with the same result.
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      {
+        id: 8,
+        kind: 'upload',
+        status: 'failed',
+        caption: null,
+        has_poster: false,
+        youtube_id: null,
+        sort_order: 99,
+      },
+    ])
+    const wrapper = await mountDialog()
+    await wrapper.findAll('[data-test="gallery-thumb"]')[0].trigger('click')
+    await flushPromises()
+
+    // Two photos are viewable, the failed clip is not.
+    expect(
+      document.querySelector('[data-test="lightbox"]').textContent,
+    ).toContain('1 / 2')
   })
 })
 

@@ -227,3 +227,37 @@ describe('Settings.vue navigation shell', () => {
     ).toBe(false)
   })
 })
+
+describe('Settings.vue — two tabs sharing one component', () => {
+  it('gives each tab its own instance rather than reusing one', async () => {
+    // 求職參數 and 活動參數 are the same component with different props.
+    // Without a per-leaf key Vue reuses the instance, and useSystemLimitsForm
+    // reads its group once in setup — so the second tab would keep rendering
+    // the first one's fields. Found in a browser, because every other test
+    // here mounts fresh and the real section is stubbed out.
+    const setupGroups = []
+    const recordingStub = {
+      props: ['group'],
+      setup(props) {
+        setupGroups.push(props.group)
+        return () => null
+      },
+    }
+
+    routeMock.hash = '#system'
+    const wrapper = mount(Settings, {
+      global: { stubs: { ...stubs, SystemLimitsSection: recordingStub } },
+    })
+    await flushPromises()
+    expect(setupGroups).toEqual(['job'])
+
+    await wrapper
+      .find('[data-test="settings-subtab-event-limits"]')
+      .trigger('click')
+    await flushPromises()
+
+    // A second setup call is the whole point: one entry means the instance
+    // was reused and the composable never saw the new group.
+    expect(setupGroups).toEqual(['job', 'event'])
+  })
+})

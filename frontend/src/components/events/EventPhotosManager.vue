@@ -1,9 +1,18 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ElButton, ElIcon, ElInput, ElMessage } from 'element-plus'
-import { Delete, Plus, Star } from '@element-plus/icons-vue'
+import {
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
+import { Delete, Link, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
+import { settingsApi } from '../../api/settings'
+import { useEventMedia } from '../../composables/useEventMedia'
+import { useMediaReorder } from '../../composables/useMediaReorder'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { useAuthStore } from '../../stores/auth'
 
@@ -15,31 +24,85 @@ const props = defineProps({
 // event's author (a non-admin managing their own event) deletes without one.
 const auth = useAuthStore()
 
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
-const MAX_PHOTOS = 30
-const MAX_MB = 8
+// HEIC is accepted and converted server-side: iPhones shoot it by default
+// and leaving it out meant rejecting a file the user had every reason to
+// think was a photo.
+const PHOTO_ACCEPT =
+  'image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif'
+const VIDEO_ACCEPT = 'video/*'
 
-const photos = ref([])
-const loading = ref(true)
+// These used to be constants here, duplicating values the backend also held.
+// They are admin-tunable now, so a stale copy would reject client-side what
+// the server would have accepted. Defaults only cover the window before the
+// config request lands.
+const limits = ref({
+  max_photos_per_event: 30,
+  max_photo_mb: 15,
+  max_videos_per_event: 5,
+  max_video_mb: 240,
+})
+
+// The same composable the detail gallery uses: it merges the two tables on
+// the shared sort_order and, crucially here, polls while anything is
+// transcoding. Managing its own copies meant an uploaded clip sat on
+// 轉檔中… until the dialog was reopened — and a failure never surfaced at
+// all in the one place the uploader was looking.
+const media = useEventMedia(() => props.eventId)
+const { photos, videos, loading } = media
+
 const uploading = ref(false)
 const uploadStatus = ref('')
+const uploadPercent = ref(0)
 const fileInputRef = ref(null)
+const videoInputRef = ref(null)
 
-const atCapacity = computed(() => photos.value.length >= MAX_PHOTOS)
+const atCapacity = computed(
+  () => photos.value.length >= limits.value.max_photos_per_event,
+)
+// A failed row holds no video, so it must not count here either — the
+// backend excludes it, and a mismatch would block an upload the server
+// would have allowed.
+const videoCount = computed(
+  () => videos.value.filter((v) => v.status !== 'failed').length,
+)
+const atVideoCapacity = computed(
+  () => videoCount.value >= limits.value.max_videos_per_event,
+)
+
+// Drag writes an explicit order here; until then the merged list is the
+// server's. Keeping it separate means a failed save can drop back to what
+// the server still holds rather than leaving the grid lying.
+const localOrder = ref(null)
+
+const mediaItems = computed(() => localOrder.value ?? media.items.value)
+
+// The card skips anything with no still to show — a clip mid-transcode, or a
+// failed one — so the star has to land where the cover actually lands.
+const coverKey = computed(() => mediaItems.value.find((m) => m.thumbUrl)?.key)
+
+const { container: gridRef } = useMediaReorder({
+  getEventId: () => props.eventId,
+  getItems: () => mediaItems.value,
+  onReordered: (items) => {
+    localOrder.value = items
+  },
+})
 
 async function load() {
-  loading.value = true
-  try {
-    photos.value = await eventsApi.listPhotos(props.eventId)
-  } catch {
-    ElMessage.error('載入照片失敗')
-  } finally {
-    loading.value = false
-  }
+  if (!(await media.load())) ElMessage.error('載入媒體失敗')
+  localOrder.value = null
 }
 
-function thumbUrl(p) {
-  return eventsApi.photoUrl(props.eventId, p.id)
+async function loadLimits() {
+  try {
+    const config = await settingsApi.getConfig()
+    for (const field of config.fields ?? []) {
+      if (field.key in limits.value) limits.value[field.key] = field.value
+    }
+  } catch {
+    // Keep the defaults; the server rejects anything over its own limit
+    // regardless, so the client copy is a courtesy, not the enforcement.
+  }
 }
 
 function pickFiles() {
@@ -52,18 +115,22 @@ async function onFilesChosen(event) {
   event.target.value = ''
   if (files.length === 0) return
 
-  const room = MAX_PHOTOS - photos.value.length
+  const room = limits.value.max_photos_per_event - photos.value.length
   const queued = files.slice(0, Math.max(0, room))
   if (files.length > queued.length) {
-    ElMessage.warning(`最多 ${MAX_PHOTOS} 張，僅上傳前 ${queued.length} 張`)
+    ElMessage.warning(
+      `最多 ${limits.value.max_photos_per_event} 張，僅上傳前 ${queued.length} 張`,
+    )
   }
 
   uploading.value = true
   let done = 0
   try {
     for (const file of queued) {
-      if (file.size > MAX_MB * 1024 * 1024) {
-        ElMessage.warning(`「${file.name}」超過 ${MAX_MB} MB，已略過`)
+      if (file.size > limits.value.max_photo_mb * 1024 * 1024) {
+        ElMessage.warning(
+          `「${file.name}」超過 ${limits.value.max_photo_mb} MB，已略過`,
+        )
         continue
       }
       uploadStatus.value = `上傳中 ${done + 1}/${queued.length}…`
@@ -89,21 +156,22 @@ async function onFilesChosen(event) {
 
 // Caption is saved on blur — only when it actually changed, to avoid a
 // redundant PUT every time the field loses focus.
-async function onCaptionBlur(photo) {
-  const next = (photo._draftCaption ?? '').trim()
-  const current = photo.caption ?? ''
+async function onCaptionBlur(item) {
+  const row = item.raw
+  const next = (row._draftCaption ?? '').trim()
+  const current = row.caption ?? ''
   if (next === current) return
+  const save =
+    item.type === 'video'
+      ? eventsApi.updateVideoCaption
+      : eventsApi.updatePhotoCaption
   try {
-    const updated = await eventsApi.updatePhotoCaption(
-      props.eventId,
-      photo.id,
-      next,
-    )
-    photo.caption = updated.caption
-    photo._draftCaption = updated.caption ?? ''
+    const updated = await save(props.eventId, row.id, next)
+    row.caption = updated.caption
+    row._draftCaption = updated.caption ?? ''
   } catch {
     ElMessage.error('說明儲存失敗')
-    photo._draftCaption = current
+    row._draftCaption = current
   }
 }
 
@@ -112,8 +180,8 @@ const deleteTarget = ref(null)
 const deleteSubmitting = ref(false)
 const deleteError = ref('')
 
-function askDelete(photo) {
-  deleteTarget.value = photo
+function askDelete(item) {
+  deleteTarget.value = item
   deleteError.value = ''
   deleteOpen.value = true
 }
@@ -124,8 +192,10 @@ async function onDeleteConfirm(password) {
   deleteSubmitting.value = true
   deleteError.value = ''
   try {
-    await eventsApi.removePhoto(props.eventId, target.id, password)
-    ElMessage.success('已刪除照片')
+    const remove =
+      target.type === 'video' ? eventsApi.removeVideo : eventsApi.removePhoto
+    await remove(props.eventId, target.raw.id, password)
+    ElMessage.success(target.type === 'video' ? '已刪除影片' : '已刪除照片')
     deleteOpen.value = false
     deleteTarget.value = null
     await load()
@@ -139,14 +209,90 @@ async function onDeleteConfirm(password) {
   }
 }
 
-onMounted(load)
+function pickVideo() {
+  videoInputRef.value?.click()
+}
+
+async function addYoutubeLink() {
+  // The upload cap is about a minute of 4K; anything longer belongs on
+  // YouTube, where it costs no storage and no transcoding here.
+  let url
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '貼上 YouTube 連結，長影片建議用這個方式。',
+      '加入 YouTube 影片',
+      {
+        confirmButtonText: '加入',
+        cancelButtonText: '取消',
+        inputPlaceholder: 'https://youtu.be/...',
+      },
+    )
+    url = value
+  } catch {
+    return // cancelled
+  }
+  if (!url?.trim()) return
+
+  try {
+    await eventsApi.addYoutubeVideo(props.eventId, url.trim(), null)
+    ElMessage.success('已加入 YouTube 影片')
+    await load()
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 422) ElMessage.error('請貼上有效的 YouTube 連結')
+    else if (status === 409) ElMessage.error('影片數量已達上限')
+    else ElMessage.error('加入失敗，請稍後再試')
+  }
+}
+
+async function onVideoChosen(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  if (file.size > limits.value.max_video_mb * 1024 * 1024) {
+    ElMessage.warning(
+      `「${file.name}」超過 ${limits.value.max_video_mb} MB，請先裁剪或降低畫質`,
+    )
+    return
+  }
+
+  uploading.value = true
+  uploadPercent.value = 0
+  uploadStatus.value = '影片上傳中…'
+  try {
+    await eventsApi.uploadVideo(props.eventId, file, null, (e) => {
+      if (e.total) uploadPercent.value = Math.round((e.loaded / e.total) * 100)
+    })
+    // The row comes back as "processing" — transcoding runs server-side and
+    // the grid polls for it, so the message says queued rather than done.
+    ElMessage.success('影片已上傳，轉檔完成後就能播放')
+    await load()
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 413) ElMessage.error('影片檔案過大')
+    else if (status === 415) ElMessage.error('不支援的影片格式')
+    else if (status === 409) ElMessage.error('影片數量已達上限')
+    else ElMessage.error('影片上傳失敗')
+  } finally {
+    uploading.value = false
+    uploadPercent.value = 0
+    uploadStatus.value = ''
+  }
+}
+
+onMounted(() => {
+  loadLimits()
+  load()
+})
 </script>
 
 <template>
   <div class="photos-manager" data-test="event-photos-manager">
     <div class="manager-head">
       <span class="count-hint">
-        {{ photos.length }} / {{ MAX_PHOTOS }} 張
+        {{ photos.length }} / {{ limits.max_photos_per_event }} 張 ·
+        {{ videoCount }} / {{ limits.max_videos_per_event }} 支影片
       </span>
       <el-button
         type="primary"
@@ -158,20 +304,56 @@ onMounted(load)
       >
         {{ uploading ? uploadStatus || '上傳中…' : '加入照片' }}
       </el-button>
+      <el-button
+        :icon="VideoCamera"
+        :disabled="atVideoCapacity || uploading"
+        data-test="add-video-button"
+        @click="pickVideo"
+      >
+        加入影片
+      </el-button>
+      <el-button
+        :icon="Link"
+        :disabled="atVideoCapacity || uploading"
+        data-test="add-youtube-button"
+        @click="addYoutubeLink"
+      >
+        YouTube 連結
+      </el-button>
       <input
         ref="fileInputRef"
         type="file"
-        :accept="ACCEPT"
+        :accept="PHOTO_ACCEPT"
         multiple
         hidden
         data-test="photo-file-input"
         @change="onFilesChosen"
       />
+      <input
+        ref="videoInputRef"
+        type="file"
+        :accept="VIDEO_ACCEPT"
+        hidden
+        data-test="video-file-input"
+        @change="onVideoChosen"
+      />
     </div>
 
-    <p class="manager-tip">
-      第一張照片會成為活動封面。支援 PNG / JPG / WebP / GIF，單張上限
-      {{ MAX_MB }} MB。
+    <ul class="manager-tip">
+      <li>拖曳縮圖可調整順序，排在第一個的就是活動封面</li>
+      <li>
+        照片 PNG / JPG / WebP / GIF / HEIC，單張上限
+        {{ limits.max_photo_mb }} MB
+      </li>
+      <li>影片單支上限 {{ limits.max_video_mb }} MB，上傳後需轉檔才能播放</li>
+    </ul>
+
+    <p
+      v-if="uploading && uploadPercent > 0"
+      class="manager-tip"
+      data-test="video-upload-progress"
+    >
+      影片上傳中 {{ uploadPercent }}%
     </p>
 
     <div v-if="loading" class="photo-grid">
@@ -184,49 +366,82 @@ onMounted(load)
       </div>
     </div>
 
-    <div v-else-if="photos.length > 0" class="photo-grid">
+    <div v-else-if="mediaItems.length > 0" ref="gridRef" class="photo-grid">
       <figure
-        v-for="(p, idx) in photos"
-        :key="p.id"
+        v-for="m in mediaItems"
+        :key="m.key"
         class="photo-cell"
         data-test="photo-cell"
+        :data-media-type="m.type"
       >
-        <div class="photo-thumb">
+        <div
+          class="photo-thumb"
+          :class="{ 'is-blank': !m.thumbUrl }"
+          data-drag-handle
+        >
           <img
-            :src="thumbUrl(p)"
-            :alt="p.caption || '活動照片'"
+            v-if="m.thumbUrl"
+            :src="m.thumbUrl"
+            :alt="
+              m.raw.caption || (m.type === 'video' ? '活動影片' : '活動照片')
+            "
             loading="lazy"
           />
-          <span v-if="idx === 0" class="cover-flag">
+          <span
+            v-if="m.status === 'processing'"
+            class="media-state"
+            data-test="manager-processing"
+          >
+            轉檔中…
+          </span>
+          <span
+            v-else-if="m.status === 'failed'"
+            class="media-state is-failed"
+            data-test="manager-failed"
+          >
+            轉檔失敗
+          </span>
+          <span
+            v-else-if="m.type === 'video'"
+            class="video-flag"
+            data-test="manager-video-flag"
+          >
+            <el-icon :size="11"><VideoCamera /></el-icon>
+            {{ m.youtubeId ? 'YouTube' : '影片' }}
+          </span>
+
+          <span v-if="m.key === coverKey" class="cover-flag">
             <el-icon :size="11"><Star /></el-icon>
             封面
           </span>
           <button
             type="button"
             class="del-btn"
-            aria-label="刪除照片"
+            :aria-label="m.type === 'video' ? '刪除影片' : '刪除照片'"
             data-test="delete-photo-button"
-            @click="askDelete(p)"
+            @click="askDelete(m)"
           >
             <el-icon :size="14"><Delete /></el-icon>
           </button>
         </div>
         <el-input
-          v-model="p._draftCaption"
+          v-model="m.raw._draftCaption"
           size="small"
           maxlength="200"
           placeholder="加上說明（選填）"
           class="caption-input"
           data-test="caption-input"
-          @focus="p._draftCaption = p._draftCaption ?? p.caption ?? ''"
-          @blur="onCaptionBlur(p)"
+          @focus="
+            m.raw._draftCaption = m.raw._draftCaption ?? m.raw.caption ?? ''
+          "
+          @blur="onCaptionBlur(m)"
         />
       </figure>
     </div>
 
     <div v-else class="photos-empty" data-test="photos-empty">
       <el-icon :size="26"><Plus /></el-icon>
-      <p>還沒有照片，點「加入照片」開始上傳。</p>
+      <p>還沒有內容，點上方按鈕加入照片或影片。</p>
     </div>
 
     <DeleteWithPasswordDialog
@@ -261,6 +476,11 @@ onMounted(load)
 }
 
 .manager-tip {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   margin: 0;
   font-size: 12px;
   color: var(--ink-500);
@@ -294,6 +514,49 @@ onMounted(load)
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* A video tile with nothing to show yet still has to hold its shape. */
+.photo-thumb {
+  cursor: grab;
+}
+
+.photo-thumb:active {
+  cursor: grabbing;
+}
+
+/* The placeholder Sortable leaves where the dragged cell will land. */
+.media-drag-ghost {
+  opacity: 0.4;
+}
+
+.photo-thumb.is-blank {
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+}
+
+.media-state {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.media-state.is-failed {
+  color: var(--el-color-danger, #c45656);
+}
+
+.video-flag {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 11px;
 }
 
 .cover-flag {

@@ -103,10 +103,12 @@ def test_create_event_with_tags(client_factory):
     assert body["event_date"] == "2026-03-15"
     assert body["tags"] == ["春酒", "聚餐"]
     assert body["photo_count"] == 0
-    assert body["cover_photo_id"] is None
+    assert body["media_count"] == 0
+    assert body["cover_media_id"] is None
+    assert body["cover_media_type"] is None
 
 
-def test_get_event_includes_photo_aggregates(client_factory, db_session):
+def test_get_event_includes_media_aggregates(client_factory, db_session):
     client, login_as = client_factory
     ev = _seed_event(db_session, title="比賽", event_date=date(2026, 2, 1))
     db_session.add_all(
@@ -131,7 +133,9 @@ def test_get_event_includes_photo_aggregates(client_factory, db_session):
 
     body = client.get(f"/api/events/{ev.id}").json()
     assert body["photo_count"] == 2
-    assert body["cover_photo_id"] == cover_id
+    assert body["media_count"] == 2
+    assert body["cover_media_id"] == cover_id
+    assert body["cover_media_type"] == "photo"
 
 
 def test_get_missing_event_404(client_factory):

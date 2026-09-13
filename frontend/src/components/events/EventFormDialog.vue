@@ -375,13 +375,13 @@ async function handleSubmit() {
           <template #label>
             <el-tooltip
               v-if="!isEdit"
-              content="先按「新增」建立活動後可上傳照片"
+              content="先按「新增」建立活動後可上傳照片與影片"
               placement="top"
               :show-after="200"
             >
-              <span>照片</span>
+              <span>照片與影片</span>
             </el-tooltip>
-            <span v-else>照片</span>
+            <span v-else>照片與影片</span>
           </template>
 
           <EventPhotosManager
@@ -392,7 +392,7 @@ async function handleSubmit() {
           <div v-else class="photos-locked" data-test="photos-locked">
             <p class="photos-locked-title">先儲存基本資料</p>
             <p class="photos-locked-sub">
-              按下方「新增」建立活動後即可上傳照片。
+              按下方「新增」建立活動後即可上傳照片與影片。
             </p>
           </div>
         </el-tab-pane>

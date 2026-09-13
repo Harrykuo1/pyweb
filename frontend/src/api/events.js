@@ -93,6 +93,59 @@ export const eventsApi = {
     return `/api/events/${eventId}/photos/${photoId}`
   },
 
+  // ---- videos ----
+  async listVideos(eventId) {
+    const { data } = await client.get(`/events/${eventId}/videos`)
+    return data
+  },
+  async uploadVideo(eventId, file, caption, onProgress) {
+    const form = new FormData()
+    form.append('file', file)
+    if (caption) form.append('caption', caption)
+    // A video is orders of magnitude larger than a photo — minutes on a home
+    // connection — so this upload reports progress rather than just spinning.
+    const { data } = await client.post(`/events/${eventId}/videos`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress,
+    })
+    return data
+  },
+  async updateVideoCaption(eventId, videoId, caption) {
+    const { data } = await client.put(`/events/${eventId}/videos/${videoId}`, {
+      caption,
+    })
+    return data
+  },
+  async removeVideo(eventId, videoId, password) {
+    // Same shape as removePhoto: admins re-authenticate, the event's author
+    // does not. The two share a grid, so they cannot ask for different things.
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/events/${eventId}/videos/${videoId}`, config)
+  },
+  async addYoutubeVideo(eventId, url, caption) {
+    const { data } = await client.post(`/events/${eventId}/videos/youtube`, {
+      url,
+      caption,
+    })
+    return data
+  },
+  async reorderMedia(eventId, items) {
+    // The complete order, not a move: photos and videos live in two tables
+    // sharing one sequence, and renumbering the whole event in one request
+    // is what keeps the halves from describing different orders.
+    await client.put(`/events/${eventId}/media/order`, { items })
+  },
+  videoFileUrl(eventId, videoId) {
+    return `/api/events/${eventId}/videos/${videoId}/file`
+  },
+  videoPosterUrl(eventId, videoId) {
+    return `/api/events/${eventId}/videos/${videoId}/poster`
+  },
+  // A linked video has no poster on our disk; YouTube serves the still.
+  youtubeThumbUrl(youtubeId) {
+    return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+  },
+
   // ---- comments ----
   async listComments(eventId) {
     const { data } = await client.get(`/events/${eventId}/comments`)

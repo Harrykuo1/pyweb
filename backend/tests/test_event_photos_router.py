@@ -4,10 +4,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.media import MediaConversionError
 from app.core.security import hash_password
 from app.database import get_db
 from app.main import app
-from app.models import Event, EventPhoto, User, UserRole
+from app.models import AppConfig, Event, EventPhoto, User, UserRole
 from app.routers.event_photos import get_uploads_root
 
 # Tiny valid PNG (1x1 transparent pixel).
@@ -183,10 +184,13 @@ def test_delete_requires_password(client_factory, db_session, uploads_dir):
     assert db_session.query(EventPhoto).count() == 0
 
 
-def test_max_photos_per_event(client_factory, monkeypatch):
+def test_max_photos_per_event(client_factory, db_session):
+    # The cap is admin-tunable now, so the test drives it the same way the
+    # settings page would rather than patching a module constant.
     client, login_as = client_factory
     login_as("admin")
-    monkeypatch.setattr("app.routers.event_photos.MAX_PHOTOS_PER_EVENT", 1)
+    db_session.add(AppConfig(key="max_photos_per_event", value="1"))
+    db_session.commit()
     assert _upload(client, name="a.png").status_code == 201
     assert _upload(client, name="b.png").status_code == 409
 
@@ -212,11 +216,12 @@ def test_delete_photo_requires_admin(client_factory, db_session, uploads_dir):
     assert db_session.query(EventPhoto).count() == 1
 
 
-def test_upload_rejects_oversized(client_factory):
+def test_upload_rejects_oversized(client_factory, db_session):
     client, login_as = client_factory
     login_as("admin")
-    big = b"x" * (8 * 1024 * 1024 + 1)  # PHOTO_MAX_BYTES + 1
-    r = _upload(client, data=big, mime="image/png", name="big.png")
+    db_session.add(AppConfig(key="max_photo_mb", value="0"))
+    db_session.commit()
+    r = _upload(client, data=b"x" * 1024, mime="image/png", name="big.png")
     assert r.status_code == 413
 
 
@@ -231,3 +236,134 @@ def test_get_photo_isolated_per_event(client_factory, db_session):
     login_as("viewer")
     assert client.get(f"/api/events/2/photos/{pid}").status_code == 404
     assert client.get(f"/api/events/1/photos/{pid}").status_code == 200
+
+
+def test_rejected_photo_leaves_no_file_and_no_row(
+    client_factory, db_session, uploads_dir
+):
+    """The row is flushed before the bytes land, so the id can name the file.
+
+    An over-limit upload therefore has to unwind both: the session is never
+    committed, and the partial file is removed — otherwise a rejected upload
+    would leave an orphan row pointing at nothing, or a stub on disk.
+    """
+    client, login_as = client_factory
+    login_as("admin")
+    db_session.add(AppConfig(key="max_photo_mb", value="0"))
+    db_session.commit()
+    r = _upload(client, data=b"x" * 1024, mime="image/png", name="big.png")
+    assert r.status_code == 413
+
+    assert db_session.query(EventPhoto).count() == 0
+    event_dir = uploads_dir / "events" / "1"
+    leftovers = list(event_dir.iterdir()) if event_dir.exists() else []
+    assert leftovers == [], leftovers
+
+
+def test_upload_records_the_streamed_byte_count(client_factory, uploads_dir):
+    # size_bytes is backfilled from the stream rather than len(data), so it
+    # has to still match what actually reached the disk.
+    client, login_as = client_factory
+    login_as("admin")
+    payload = b"\x89PNG\r\n\x1a\n" + b"z" * 5000
+    body = _upload(client, data=payload, mime="image/png", name="sized.png").json()
+
+    assert body["size_bytes"] == len(payload)
+    on_disk = uploads_dir / "events" / "1" / body["filename"]
+    assert on_disk.stat().st_size == len(payload)
+
+
+def test_photo_limits_follow_runtime_config(client_factory, db_session):
+    """The caps used to be module constants, so an admin could not touch
+    them without a rebuild. Prove both now read from app_configs."""
+    client, login_as = client_factory
+    login_as("admin")
+
+    db_session.add(AppConfig(key="max_photo_mb", value="1"))
+    db_session.commit()
+    under = b"\x89PNG\r\n\x1a\n" + b"z" * 1000
+    assert (
+        _upload(client, data=under, mime="image/png", name="ok.png").status_code == 201
+    )
+
+    over = b"\x89PNG\r\n\x1a\n" + b"z" * (1024 * 1024 + 1)
+    r = _upload(client, data=over, mime="image/png", name="big.png")
+    assert r.status_code == 413
+    assert "1 MB" in r.json()["detail"]
+
+
+def test_heic_upload_is_stored_as_jpeg(
+    client_factory, db_session, uploads_dir, monkeypatch
+):
+    """iPhones shoot HEIC by default and no browser renders it, so the upload
+    is converted rather than stored as shot. The row has to report the
+    converted type — a stored image/heic would tell the frontend to render
+    something it cannot."""
+    client, login_as = client_factory
+    login_as("admin")
+
+    def fake_convert(source, target):
+        # ffmpeg reads the staged upload, never the destination.
+        assert source.exists() and source != target
+        target.write_bytes(b"\xff\xd8\xff" + b"j" * 200)
+
+    monkeypatch.setattr("app.routers.event_photos.heic_to_jpeg", fake_convert)
+
+    body = _upload(
+        client, data=b"heic-bytes", mime="image/heic", name="IMG_0001.HEIC"
+    ).json()
+
+    assert body["mime_type"] == "image/jpeg"
+    assert body["filename"].endswith(".jpg")
+
+    event_dir = uploads_dir / "events" / "1"
+    stored = event_dir / body["filename"]
+    assert stored.exists()
+    # size_bytes tracks what was stored, not what arrived.
+    assert body["size_bytes"] == stored.stat().st_size
+    # The staging file must not outlive the conversion.
+    assert list(event_dir.iterdir()) == [stored]
+
+
+def test_undecodable_heic_is_rejected_not_stored(
+    client_factory, db_session, uploads_dir, monkeypatch
+):
+    # Keeping the original would turn a failed conversion into a broken image
+    # on the event page later, which is much harder to trace than a refusal.
+    client, login_as = client_factory
+    login_as("admin")
+
+    def boom(source, target):
+        raise MediaConversionError("invalid data found when processing input")
+
+    monkeypatch.setattr("app.routers.event_photos.heic_to_jpeg", boom)
+
+    r = _upload(client, data=b"not really heic", mime="image/heic", name="bad.heic")
+    assert r.status_code == 415
+
+    assert db_session.query(EventPhoto).count() == 0
+    event_dir = uploads_dir / "events" / "1"
+    leftovers = list(event_dir.iterdir()) if event_dir.exists() else []
+    assert leftovers == [], leftovers
+
+
+def test_upload_appends_after_existing_media(client_factory, db_session):
+    """An upload used to keep the column default of 0, landing in front of
+    an event whose media had already been arranged — and, since a photo sorts
+    ahead of a video at an equal position, taking over a clip's cover."""
+    client, login_as = client_factory
+    login_as("admin")
+    db_session.add(
+        EventPhoto(
+            event_id=1,
+            filename="old.png",
+            mime_type="image/png",
+            size_bytes=1,
+            sort_order=5,
+        )
+    )
+    db_session.commit()
+
+    body = _upload(client).json()
+    added = db_session.query(EventPhoto).filter_by(id=body["id"]).one()
+    assert added.sort_order > 5

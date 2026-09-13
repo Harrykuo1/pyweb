@@ -21,6 +21,7 @@ import {
   Refresh,
   Search,
   User,
+  VideoPlay,
 } from '@element-plus/icons-vue'
 
 import DeleteWithPasswordDialog from '../components/DeleteWithPasswordDialog.vue'
@@ -203,8 +204,18 @@ const groupedByYear = computed(() => {
 })
 
 function coverUrl(ev) {
-  if (!ev.cover_photo_id) return null
-  return eventsApi.photoUrl(ev.id, ev.cover_photo_id)
+  if (!ev.cover_media_id) return null
+  if (ev.cover_media_type !== 'video')
+    return eventsApi.photoUrl(ev.id, ev.cover_media_id)
+  // A video cover shows a still; the play badge below is what tells the
+  // viewer the card opens into something that moves.
+  return ev.cover_youtube_id
+    ? eventsApi.youtubeThumbUrl(ev.cover_youtube_id)
+    : eventsApi.videoPosterUrl(ev.id, ev.cover_media_id)
+}
+
+function coverIsVideo(ev) {
+  return ev.cover_media_type === 'video'
 }
 
 // Date parts for the right meta-rail date-stamp.
@@ -616,9 +627,16 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                     loading="lazy"
                   />
                 </template>
+                <span
+                  v-if="coverIsVideo(ev)"
+                  class="cover-play"
+                  aria-hidden="true"
+                >
+                  <el-icon :size="18"><VideoPlay /></el-icon>
+                </span>
                 <span class="photo-badge">
                   <el-icon :size="12"><Picture /></el-icon>
-                  {{ ev.photo_count }}
+                  {{ ev.media_count }}
                 </span>
               </div>
               <div v-else class="tl-thumb tl-thumb--empty" aria-hidden="true">
@@ -686,7 +704,7 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
                   <span>{{ ev.location }}</span>
                 </span>
                 <span class="mr-photo">
-                  <el-icon :size="12"><Picture /></el-icon>{{ ev.photo_count }}
+                  <el-icon :size="12"><Picture /></el-icon>{{ ev.media_count }}
                 </span>
               </div>
 
@@ -1552,6 +1570,26 @@ watch(() => auth.isPreviewingAsMember, reloadFresh)
   font-weight: 600;
   letter-spacing: 0.04em;
   opacity: 0.72;
+}
+
+/* Sits over the cover so a card that opens into a video says so before the
+   click, rather than surprising the viewer with a player. The disc rather
+   than a full-bleed scrim: it stays legible on a pale poster without
+   darkening the image everywhere. */
+.cover-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.cover-play .el-icon {
+  padding: 9px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.52);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.35);
 }
 
 .photo-badge {

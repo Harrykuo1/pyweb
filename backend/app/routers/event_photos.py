@@ -13,6 +13,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.deps import (
@@ -20,6 +21,10 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.event_media import event_uploads_dir, next_sort_order
+from app.core.media import HEIC_MIME_TYPES, MediaConversionError, heic_to_jpeg
+from app.core.runtime_config import get_int
+from app.core.uploads import stream_to_disk
 from app.database import get_db
 from app.models import Event, EventPhoto, User, UserRole
 from app.schemas import (
@@ -30,15 +35,17 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/events", tags=["event_photos"])
 
-PHOTO_MAX_BYTES = 8 * 1024 * 1024
-MAX_PHOTOS_PER_EVENT = 30
 # Mirror the member-photo allowlist plus GIF, which is common for event
-# snapshots. Each maps to the canonical extension we store on disk.
+# snapshots. Each maps to the canonical extension we store on disk — HEIC
+# maps to .jpg because it is converted on the way in rather than stored as
+# shot; see the upload handler.
 PHOTO_MIME_TO_EXT: dict[str, str] = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "image/heic": ".jpg",
+    "image/heif": ".jpg",
 }
 
 
@@ -48,11 +55,6 @@ def get_uploads_root() -> Path:
     Exposed so tests can override it via ``app.dependency_overrides``,
     matching the members / job_attachments routers."""
     return Path(settings.uploads_dir)
-
-
-def event_uploads_dir(uploads_root: Path, event_id: int) -> Path:
-    """Per-event photo directory under the shared uploads tree."""
-    return uploads_root / "events" / str(event_id)
 
 
 def _get_event_or_404(db: Session, event_id: int) -> Event:
@@ -90,7 +92,7 @@ def list_photos(
     return (
         db.query(EventPhoto)
         .filter_by(event_id=event_id)
-        .order_by(EventPhoto.id.asc())
+        .order_by(EventPhoto.sort_order.asc(), EventPhoto.id.asc())
         .all()
     )
 
@@ -144,40 +146,75 @@ async def upload_photo(
             detail=f"照片格式僅支援 {sorted(PHOTO_MIME_TO_EXT)}",
         )
 
+    max_count = get_int(db, "max_photos_per_event")
     current_count = db.query(EventPhoto).filter_by(event_id=event_id).count()
-    if current_count >= MAX_PHOTOS_PER_EVENT:
+    if current_count >= max_count:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"照片數量已達上限（最多 {MAX_PHOTOS_PER_EVENT} 張）",
+            detail=f"照片數量已達上限（最多 {max_count} 張）",
         )
 
-    data = await file.read()
-    if len(data) > PHOTO_MAX_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"照片大小超過 {PHOTO_MAX_BYTES // (1024 * 1024)} MB 上限",
-        )
+    max_mb = get_int(db, "max_photo_mb")
 
     trimmed_caption = caption.strip() if caption else ""
     # Flush an empty-filename row first so the auto-assigned id can name
     # the on-disk file — keeps every photo's path stable and collision-free
-    # under the per-event directory.
+    # under the per-event directory. size_bytes is backfilled once the
+    # stream lands, since nothing knows the real size until then.
     photo = EventPhoto(
         event_id=event_id,
         filename="",
         mime_type=file.content_type,
-        size_bytes=len(data),
+        size_bytes=0,
         caption=trimmed_caption or None,
         uploaded_at=datetime.now(UTC),
+        sort_order=next_sort_order(db, event_id),
     )
     db.add(photo)
     db.flush()
 
     ext = PHOTO_MIME_TO_EXT[file.content_type]
     photo.filename = f"{photo.id}{ext}"
-    target = event_uploads_dir(uploads_root, event_id) / photo.filename
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
+    event_dir = event_uploads_dir(uploads_root, event_id)
+    target = event_dir / photo.filename
+
+    # HEIC has to be decoded before it is stored, so it lands in a staging
+    # file first — ffmpeg cannot read and write the same path. The size cap
+    # is checked against what was uploaded, not what comes out of the
+    # converter, since the cap exists to bound the request.
+    needs_transcode = file.content_type in HEIC_MIME_TYPES
+    staged = event_dir / f"{photo.id}.src" if needs_transcode else target
+
+    # The row had to be flushed before the bytes could land, so a rejected
+    # upload has to undo it explicitly. Leaving it to the session's lifetime
+    # would work in production and quietly not in anything that shares a
+    # session, which is exactly where it would go unnoticed.
+    try:
+        photo.size_bytes = await stream_to_disk(
+            file,
+            staged,
+            max_bytes=max_mb * 1024 * 1024,
+            too_large_detail=f"照片大小超過 {max_mb} MB 上限",
+        )
+        if needs_transcode:
+            try:
+                await run_in_threadpool(heic_to_jpeg, staged, target)
+            except MediaConversionError as e:
+                # Storing the original would mean an upload that "succeeds"
+                # and then shows as a broken image on the event page, which
+                # is far harder to trace back than a refusal here.
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail="這張照片無法處理，請改用 JPEG 或 PNG 重新上傳",
+                ) from e
+            finally:
+                staged.unlink(missing_ok=True)
+            photo.mime_type = "image/jpeg"
+            photo.size_bytes = target.stat().st_size
+    except BaseException:
+        db.rollback()
+        target.unlink(missing_ok=True)
+        raise
 
     db.commit()
     db.refresh(photo)

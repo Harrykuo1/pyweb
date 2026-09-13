@@ -14,8 +14,30 @@ const FIELD_COPY = {
     unit: '個附件',
   },
   max_attachment_mb: {
-    label: '單檔大小上限',
+    label: '附件單檔大小上限',
     description: '每個附件檔案的最大上傳大小。',
+    unit: 'MB',
+  },
+  max_photos_per_event: {
+    label: '單場活動照片數上限',
+    description: '每場活動最多可上傳的照片張數。',
+    unit: '張照片',
+  },
+  max_photo_mb: {
+    label: '照片單檔大小上限',
+    description:
+      '每張照片的最大上傳大小。手機高像素模式拍出的照片可能超過 10 MB。',
+    unit: 'MB',
+  },
+  max_videos_per_event: {
+    label: '單場活動影片數上限',
+    description: '每場活動最多可上傳的影片支數。',
+    unit: '支影片',
+  },
+  max_video_mb: {
+    label: '影片單檔大小上限',
+    description:
+      '每支影片的最大上傳大小，約等於 4K 一分鐘或 1080p 四分鐘。上限卡在 nginx 的 client_max_body_size，調更高會在代理層就被擋掉。',
     unit: 'MB',
   },
 }
@@ -26,7 +48,9 @@ const FIELD_COPY = {
 // server-side clamp (typed 999, clamped to 50) leaves the spinner's
 // internal currentValue stale because the v-model prop didn't change.
 // Lifted out of SystemLimitsSection so the component is presentation only.
-export function useSystemLimitsForm() {
+export function useSystemLimitsForm(group) {
+  // Each tab owns only its own fields, so it saves and dirty-tracks
+  // independently of the others.
   const fields = ref([])
   const form = reactive({})
   const loading = ref(true)
@@ -35,7 +59,7 @@ export function useSystemLimitsForm() {
   const formVersion = ref(0)
 
   function applyFromResponse(payload) {
-    fields.value = payload.fields ?? []
+    fields.value = (payload.fields ?? []).filter((f) => f.group === group)
     for (const f of fields.value) {
       form[f.key] = f.value
     }

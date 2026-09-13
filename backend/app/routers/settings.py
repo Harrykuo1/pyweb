@@ -52,6 +52,7 @@ def _read_config(db: Session) -> ConfigResponse:
                 "key": field.key,
                 "value": int(raw),
                 "type": field.type,
+                "group": field.group,
                 "min": field.min_value,
                 "max": field.max_value,
             }

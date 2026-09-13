@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -69,6 +70,10 @@ class EventUpdate(BaseModel):
 class EventPhotoResponse(BaseModel):
     id: int
     event_id: int
+    # Photos and videos share one sequence; the client merges the two lists
+    # on this rather than concatenating them, which would always put every
+    # photo before every video no matter how they were arranged.
+    sort_order: int
     filename: str
     mime_type: str
     size_bytes: int
@@ -94,9 +99,17 @@ class EventResponse(BaseModel):
     # of triggering a per-row lazy load.
     tags: list[str] = Field(default_factory=list)
     photo_count: int = 0
-    # The cover thumbnail shown on the timeline — the earliest photo by id.
-    # None when the event has no photos yet.
-    cover_photo_id: int | None = None
+    # Photos plus ready videos: the card's badge answers "how much is in
+    # here", and an event holding only videos would otherwise read as empty.
+    media_count: int = 0
+    # The cover thumbnail shown on the timeline: the first item in the
+    # arranged order, whichever kind it is — a clip can open an event the
+    # same way a photo can. None until the event has media.
+    cover_media_type: Literal["photo", "video"] | None = None
+    cover_media_id: int | None = None
+    # Only for a YouTube cover: its thumbnail comes from YouTube's CDN
+    # rather than from the video-poster endpoint.
+    cover_youtube_id: str | None = None
     # Heart count + whether the current viewer has hearted it, stamped by the
     # router with grouped queries (no per-row lookup).
     like_count: int = 0
@@ -109,3 +122,50 @@ class EventResponse(BaseModel):
     author_user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EventVideoResponse(BaseModel):
+    id: int
+    event_id: int
+    kind: Literal["upload", "youtube"]
+    status: Literal["processing", "ready", "failed"]
+    caption: str | None
+    uploaded_at: datetime
+    sort_order: int
+
+    # kind=upload, and only once transcoding succeeded.
+    duration_seconds: int | None = None
+    size_bytes: int | None = None
+    has_poster: bool = False
+
+    # kind=youtube. The id, not a URL — the embed src is rebuilt client-side
+    # so nothing a user typed ever reaches an iframe attribute.
+    youtube_id: str | None = None
+
+    # ffmpeg's own words, admin-only: it names paths and codec parameters.
+    error_detail: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EventVideoCaptionUpdate(BaseModel):
+    caption: str | None = Field(default=None, max_length=200)
+
+
+class EventVideoLinkCreate(BaseModel):
+    # Bounded because only the parsed id is kept; the raw string exists just
+    # long enough to run through the parser.
+    url: str = Field(min_length=1, max_length=500)
+    caption: str | None = Field(default=None, max_length=200)
+
+
+class MediaOrderItem(BaseModel):
+    type: Literal["photo", "video"]
+    id: int
+
+
+class MediaOrderUpdate(BaseModel):
+    # The full order, not a delta. Renumbering everything in one request is
+    # what keeps two tables holding one sequence consistent — a partial update
+    # would leave the halves able to disagree.
+    items: list[MediaOrderItem] = Field(max_length=200)
