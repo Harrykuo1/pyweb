@@ -204,6 +204,54 @@ describe('EventDetailDialog — gallery', () => {
     await flushPromises()
     expect(document.querySelector('[data-test="lightbox"]')).not.toBeNull()
   })
+
+  it('does not open a clip that has nothing to play', async () => {
+    // A failed tile stays clickable on purpose — it is how the uploader sees
+    // what happened — but it owns no poster and no file, so the lightbox fell
+    // through to an <img> with no src and showed a broken-image icon.
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      {
+        id: 7,
+        kind: 'upload',
+        status: 'failed',
+        caption: null,
+        has_poster: false,
+        youtube_id: null,
+        sort_order: 99,
+      },
+    ])
+    const wrapper = await mountDialog()
+    const tiles = wrapper.findAll('[data-test="gallery-thumb"]')
+    expect(tiles).toHaveLength(3)
+    expect(tiles[2].attributes('disabled')).toBeUndefined()
+
+    await tiles[2].trigger('click')
+    await flushPromises()
+    expect(document.querySelector('[data-test="lightbox"]')).toBeNull()
+  })
+
+  it('does not step onto an unplayable clip while browsing', async () => {
+    // Arrowing past the last photo used to land on it, with the same result.
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      {
+        id: 8,
+        kind: 'upload',
+        status: 'failed',
+        caption: null,
+        has_poster: false,
+        youtube_id: null,
+        sort_order: 99,
+      },
+    ])
+    const wrapper = await mountDialog()
+    await wrapper.findAll('[data-test="gallery-thumb"]')[0].trigger('click')
+    await flushPromises()
+
+    // Two photos are viewable, the failed clip is not.
+    expect(
+      document.querySelector('[data-test="lightbox"]').textContent,
+    ).toContain('1 / 2')
+  })
 })
 
 describe('EventDetailDialog — edit', () => {

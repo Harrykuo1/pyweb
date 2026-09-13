@@ -147,9 +147,8 @@ watch(
   { immediate: true },
 )
 
-// A tile that is still transcoding has nothing to open.
 function openMedia(item) {
-  const idx = mediaItems.value.findIndex((m) => m.key === item.key)
+  const idx = viewableItems.value.findIndex((m) => m.key === item.key)
   if (idx >= 0) openLightbox(idx)
 }
 
@@ -175,9 +174,17 @@ function formatDate(iso) {
 }
 
 // ---------- lightbox ----------
+// A clip that is still transcoding, or that failed, has no poster and no
+// file: the lightbox would fall through to an <img> with no src and show a
+// broken-image icon. Its grid tile still says what happened; it just is not
+// somewhere to navigate into.
+const viewableItems = computed(() =>
+  mediaItems.value.filter((m) => m.type !== 'video' || m.fileUrl || m.embedUrl),
+)
+
 const lightboxOpen = computed(() => lightboxIndex.value >= 0)
 const lightboxItem = computed(() =>
-  lightboxIndex.value >= 0 ? mediaItems.value[lightboxIndex.value] : null,
+  lightboxIndex.value >= 0 ? viewableItems.value[lightboxIndex.value] : null,
 )
 
 function openLightbox(idx) {
@@ -187,12 +194,12 @@ function closeLightbox() {
   lightboxIndex.value = -1
 }
 function prevPhoto() {
-  const n = mediaItems.value.length
+  const n = viewableItems.value.length
   if (n === 0) return
   lightboxIndex.value = (lightboxIndex.value - 1 + n) % n
 }
 function nextPhoto() {
-  const n = mediaItems.value.length
+  const n = viewableItems.value.length
   if (n === 0) return
   lightboxIndex.value = (lightboxIndex.value + 1) % n
 }
@@ -386,7 +393,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <el-icon :size="22"><Close /></el-icon>
         </button>
         <button
-          v-if="mediaItems.length > 1"
+          v-if="viewableItems.length > 1"
           type="button"
           class="lb-btn lb-prev"
           aria-label="上一張"
@@ -430,11 +437,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
             {{ lightboxItem.caption }}
           </figcaption>
           <span class="lb-counter"
-            >{{ lightboxIndex + 1 }} / {{ mediaItems.length }}</span
+            >{{ lightboxIndex + 1 }} / {{ viewableItems.length }}</span
           >
         </figure>
         <button
-          v-if="mediaItems.length > 1"
+          v-if="viewableItems.length > 1"
           type="button"
           class="lb-btn lb-next"
           aria-label="下一張"
