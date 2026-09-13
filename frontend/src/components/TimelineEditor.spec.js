@@ -46,7 +46,7 @@ describe('TimelineEditor', () => {
     await wrapper.find('[data-test="timeline-add"]').trigger('click')
 
     expect(getValue()).toHaveLength(1)
-    expect(getValue()[0]).toEqual({ date: null, event: '' })
+    expect(getValue()[0]).toEqual({ date: null, day_offset: null, event: '' })
     expect(wrapper.findAll('[data-test="timeline-row"]')).toHaveLength(1)
   })
 
@@ -60,8 +60,8 @@ describe('TimelineEditor', () => {
     await deleteButtons[1].trigger('click')
 
     expect(getValue()).toEqual([
-      { date: '2025-02-23', event: 'a' },
-      { date: '2025-04-05', event: 'c' },
+      { date: '2025-02-23', day_offset: null, event: 'a' },
+      { date: '2025-04-05', day_offset: null, event: 'c' },
     ])
   })
 
@@ -79,7 +79,7 @@ describe('TimelineEditor', () => {
     const emitted = getValue()
     expect(emitted).toHaveLength(2)
     for (const entry of emitted) {
-      expect(Object.keys(entry).sort()).toEqual(['date', 'event'])
+      expect(Object.keys(entry).sort()).toEqual(['date', 'day_offset', 'event'])
     }
   })
 
@@ -106,5 +106,79 @@ describe('TimelineEditor', () => {
       'second (Jan 2026)',
       'third (back to Nov 2025)',
     ])
+  })
+})
+
+describe('TimelineEditor — date or D+N', () => {
+  function offsetInput(wrapper, index = 0) {
+    return wrapper
+      .findAll('[data-test="timeline-row-offset"]')
+      [index].find('input')
+  }
+
+  it('records a row that only has a relative day', async () => {
+    // The whole point: someone remembers "a week after I applied" and
+    // nothing more precise.
+    const { wrapper, getValue } = mountEditor([
+      { date: null, event: '線上測驗' },
+    ])
+    await offsetInput(wrapper).setValue('7')
+
+    expect(getValue()[0]).toEqual({
+      date: null,
+      day_offset: 7,
+      event: '線上測驗',
+    })
+  })
+
+  it('clears the date when a relative day is entered', async () => {
+    // An entry sits at one position or the other; keeping both would
+    // leave the reader with two answers and the API refuses it anyway.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞履歷' },
+    ])
+    await offsetInput(wrapper).setValue('7')
+
+    expect(getValue()[0].date).toBeNull()
+    expect(getValue()[0].day_offset).toBe(7)
+  })
+
+  it('hydrates an existing relative entry back into the offset field', async () => {
+    const { wrapper } = mountEditor([{ day_offset: 14, event: '一面' }])
+    expect(offsetInput(wrapper).element.value).toBe('14')
+  })
+
+  it('accepts the forms people actually type', async () => {
+    // A bare number is the common case; the rest is what gets pasted in
+    // from a message thread.
+    for (const [typed, expected] of [
+      ['7', 7],
+      ['+7', 7],
+      ['-3', -3],
+      ['D+7', 7],
+      ['d-3', -3],
+    ]) {
+      const { wrapper, getValue } = mountEditor([{ date: null, event: 'x' }])
+      await offsetInput(wrapper).setValue(typed)
+      expect(getValue()[0].day_offset).toBe(expected)
+    }
+  })
+
+  it('treats an emptied offset field as no offset rather than zero', async () => {
+    // Clearing the box must not silently pin the entry to D+0.
+    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
+    await offsetInput(wrapper).setValue('')
+
+    expect(getValue()[0].day_offset).toBeNull()
+    expect(getValue()[0].date).toBeNull()
+  })
+
+  it('leaves the offset alone when a date is picked back', async () => {
+    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
+    wrapper.vm.setDate(0, '2025-03-01')
+    await wrapper.vm.$nextTick()
+
+    expect(getValue()[0].date).toBe('2025-03-01')
+    expect(getValue()[0].day_offset).toBeNull()
   })
 })

@@ -4,7 +4,12 @@ import { ElButton, ElDatePicker, ElIcon, ElInput } from 'element-plus'
 import { Delete, InfoFilled, Plus } from '@element-plus/icons-vue'
 
 // Structured timeline editor: a vertical list of rows where each row
-// is { date: "YYYY-MM-DD" | null, event: string }.
+// is { date: "YYYY-MM-DD", event } or { dayOffset: number, event }.
+//
+// Two ways to place an entry because people write these up months
+// later: some remember the calendar date, some only remember "the
+// test was a week after I applied". A relative entry stays relative —
+// no date is derived for it, since that would put a guess on record.
 //
 // The editor preserves entry order so the admin's caret never jumps
 // mid-typing — the actual chronological sort happens in the parent
@@ -45,6 +50,7 @@ function _hydrate(list) {
   return (list ?? []).map((entry) => ({
     _id: _newId(),
     date: entry.date ?? null,
+    dayOffset: entry.day_offset ?? null,
     event: entry.event ?? '',
   }))
 }
@@ -68,7 +74,10 @@ function _matchesCurrent(next) {
   return next.every((entry, i) => {
     const r = rows.value[i]
     return (
-      r && r.date === (entry.date ?? null) && r.event === (entry.event ?? '')
+      r &&
+      r.date === (entry.date ?? null) &&
+      r.dayOffset === (entry.day_offset ?? null) &&
+      r.event === (entry.event ?? '')
     )
   })
 }
@@ -76,12 +85,16 @@ function _matchesCurrent(next) {
 function emitToParent() {
   emit(
     'update:modelValue',
-    rows.value.map(({ date, event }) => ({ date, event })),
+    rows.value.map(({ date, dayOffset, event }) => ({
+      date,
+      day_offset: dayOffset,
+      event,
+    })),
   )
 }
 
 function addRow() {
-  rows.value.push({ _id: _newId(), date: null, event: '' })
+  rows.value.push({ _id: _newId(), date: null, dayOffset: null, event: '' })
   emitToParent()
 }
 
@@ -93,6 +106,35 @@ function removeRow(index) {
 function patchRow(index, patch) {
   rows.value[index] = { ...rows.value[index], ...patch }
   emitToParent()
+}
+
+// The two fields say different things about where an entry sits, so
+// filling one clears the other rather than leaving a row that claims
+// both — which the API refuses anyway.
+function setDate(index, value) {
+  patchRow(index, {
+    date: value || null,
+    ...(value ? { dayOffset: null } : {}),
+  })
+}
+
+function setDayOffset(index, value) {
+  const parsed = _parseOffset(value)
+  patchRow(index, {
+    dayOffset: parsed,
+    ...(parsed === null ? {} : { date: null }),
+  })
+}
+
+// Accepts what people actually type into a "D+" box: 7, +7, -3, and
+// the whole label (D+7 / d-3) pasted in from somewhere else.
+function _parseOffset(raw) {
+  if (raw === null || raw === undefined) return null
+  const text = String(raw).trim()
+  if (text === '') return null
+  const match = /^[Dd]?\s*([+-]?\d{1,3})$/.exec(text)
+  if (!match) return null
+  return Number(match[1])
 }
 
 // When the admin clicks an empty row's date picker, anchor the
@@ -130,7 +172,8 @@ const accentForRow = computed(() => (index) => {
   <div class="timeline-editor" data-test="timeline-editor">
     <p class="timeline-helper">
       <el-icon :size="13"><InfoFilled /></el-icon>
-      點選或直接輸入日期，例：2025/03/15。儲存時會自動依日期排序。
+      填日期或 D+ 天數，擇一即可。只記得「投履歷後一週」就填 D+7，
+      填了其中一邊會清掉另一邊。儲存時自動排序。
     </p>
 
     <ol v-if="rows.length > 0" class="timeline-rows">
@@ -152,8 +195,21 @@ const accentForRow = computed(() => (index) => {
             placeholder="YYYY/MM/DD"
             :default-value="defaultPickerDateFor(index)"
             class="row-date-picker"
-            @update:model-value="(d) => patchRow(index, { date: d ?? null })"
+            @update:model-value="(d) => setDate(index, d)"
           />
+        </div>
+        <div class="row-offset" data-test="timeline-row-offset">
+          <el-input
+            :model-value="
+              entry.dayOffset === null ? '' : String(entry.dayOffset)
+            "
+            placeholder="D+7"
+            maxlength="5"
+            aria-label="相對天數"
+            @update:model-value="(v) => setDayOffset(index, v)"
+          >
+            <template #prepend>D</template>
+          </el-input>
         </div>
         <div class="row-event" data-test="timeline-row-event">
           <el-input
@@ -301,6 +357,17 @@ const accentForRow = computed(() => (index) => {
 
 .row-date :deep(.el-date-editor) {
   width: 100%;
+}
+
+/* ------- Relative-day slot: narrow, it only ever holds a small number ------- */
+.row-offset {
+  flex: 0 0 104px;
+}
+
+.row-offset :deep(.el-input-group__prepend) {
+  padding: 0 10px;
+  font-weight: 600;
+  color: #4f46e5;
 }
 
 /* ------- Event input slot ------- */

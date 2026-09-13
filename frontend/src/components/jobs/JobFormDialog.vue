@@ -377,26 +377,48 @@ async function fetchCategorySuggestions(queryString, cb) {
   }
 }
 
+// Dated and relative entries sit on one axis: how many days into the
+// process an entry is. A dated entry is measured from the earliest date
+// on the timeline — the one a reader sees as D+0 — and a relative entry
+// already states its own number. A timeline of only offsets sorts by
+// those alone; a timeline of only dates sorts exactly as it did before
+// relative entries existed.
+function _dayAxisFor(events) {
+  const earliest = events
+    .map((e) => e.date)
+    .filter(Boolean)
+    .sort()[0]
+  const base = earliest ? Date.parse(`${earliest}T00:00:00`) : null
+  return (e) => {
+    if (e.day_offset !== null) return e.day_offset
+    if (base === null) return 0
+    return Math.round((Date.parse(`${e.date}T00:00:00`) - base) / 86400000)
+  }
+}
+
 function buildPayload() {
   const trimmedCategory = form.category.trim()
-  // Drop incomplete rows (missing date or blank event text) so the
-  // backend's per-row validation never sees partial input. An entirely
+  // Drop incomplete rows (no position at all, or blank event text) so
+  // the backend's per-row validation never sees partial input. An entirely
   // empty list goes through as []; the backend distinguishes [] (admin
   // chose no timeline) from null (legacy markdown-only job) and we
   // always send the structured form here.
   //
-  // Sort by date asc on submit — the editor preserves entry order so
-  // the admin's caret never jumps mid-typing, but the persisted /
-  // displayed order is always chronological. ISO YYYY-MM-DD strings
-  // sort lexicographically = chronologically; V8's Array#sort is
-  // stable so same-date rows keep their entry order.
-  const cleanedEvents = form.timeline_events
+  // Sorted on submit — the editor preserves entry order so the caret
+  // never jumps mid-typing, but the persisted / displayed order is
+  // always chronological. V8's Array#sort is stable, so entries landing
+  // on the same day keep the order they were typed in.
+  const kept = form.timeline_events
     .map((e) => ({
       date: typeof e.date === 'string' ? e.date : null,
+      day_offset: Number.isInteger(e.day_offset) ? e.day_offset : null,
       event: typeof e.event === 'string' ? e.event.trim() : '',
     }))
-    .filter((e) => e.date !== null && e.event.length > 0)
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter(
+      (e) => (e.date !== null || e.day_offset !== null) && e.event.length > 0,
+    )
+  const dayOf = _dayAxisFor(kept)
+  const cleanedEvents = kept.sort((a, b) => dayOf(a) - dayOf(b))
   const payload = {
     kind: form.kind,
     job_year: form.job_year,
