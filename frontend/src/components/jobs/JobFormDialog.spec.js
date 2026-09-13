@@ -448,6 +448,22 @@ describe('JobFormDialog — submit', () => {
     expect(payload).not.toHaveProperty('real_name')
   })
 
+  // An entry now carries a date or a day_offset, so the one the fixture
+  // leaves out is sent explicitly null rather than being absent.
+  const sent = (events) =>
+    events.map((e) => ({ date: null, day_offset: null, ...e }))
+
+  const baseJob = (id) => ({
+    id,
+    kind: 'internship',
+    job_year: 2025,
+    job_month: 4,
+    company: 'Acme',
+    real_name: null,
+    experience_md: '## x',
+    timeline_md: null,
+  })
+
   it('round-trips timeline_events through edit mode unchanged when not modified', async () => {
     // Loading an existing job with structured timeline events into the
     // editor and saving without further edits must produce a payload
@@ -477,10 +493,12 @@ describe('JobFormDialog — submit', () => {
     await flushPromises()
 
     const payload = update.mock.calls[0][1]
-    expect(payload.timeline_events).toEqual([
-      { date: '2025-02-23', event: '投遞' },
-      { date: '2025-04-17', event: '拿到 offer' },
-    ])
+    expect(payload.timeline_events).toEqual(
+      sent([
+        { date: '2025-02-23', event: '投遞' },
+        { date: '2025-04-17', event: '拿到 offer' },
+      ]),
+    )
     // Legacy markdown column always nulled out by the structured editor.
     expect(payload.timeline_md).toBeNull()
   })
@@ -512,19 +530,22 @@ describe('JobFormDialog — submit', () => {
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
-    expect(update.mock.calls[0][1].timeline_events).toEqual([
-      { date: '2025-12-01', event: '初次接觸' },
-      { date: '2026-02-23', event: '投遞 (entry order 2)' },
-      { date: '2026-02-23', event: '投遞 (entry order 3)' },
-      { date: '2026-04-17', event: '拿到 offer' },
-    ])
+    expect(update.mock.calls[0][1].timeline_events).toEqual(
+      sent([
+        { date: '2025-12-01', event: '初次接觸' },
+        { date: '2026-02-23', event: '投遞 (entry order 2)' },
+        { date: '2026-02-23', event: '投遞 (entry order 3)' },
+        { date: '2026-04-17', event: '拿到 offer' },
+      ]),
+    )
   })
 
-  it('drops timeline rows that are missing date or blank event before saving', async () => {
+  it('drops timeline rows with no position or blank event before saving', async () => {
     // Inject partial rows through the job prop (the editor accepts
     // {date: null, event: ''} as the seed for a freshly-added row,
     // so the same shape drives this test) and verify buildPayload's
-    // filter strips them before sending.
+    // filter strips them before sending. A row with neither a date nor
+    // a day_offset has nowhere to sit on the timeline.
     const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
     const wrapper = await mountDialog({
       job: {
@@ -538,7 +559,7 @@ describe('JobFormDialog — submit', () => {
         timeline_md: null,
         timeline_events: [
           { date: '2025-02-23', event: '投遞' },
-          { date: null, event: '半填的' }, // missing date
+          { date: null, event: '半填的' }, // no position at all
           { date: '2025-03-05', event: '' }, // missing event text
           { date: '2025-04-17', event: '拿到 offer' },
         ],
@@ -548,10 +569,95 @@ describe('JobFormDialog — submit', () => {
     await wrapper.find('[data-test="save-button"]').trigger('click')
     await flushPromises()
 
-    expect(update.mock.calls[0][1].timeline_events).toEqual([
-      { date: '2025-02-23', event: '投遞' },
-      { date: '2025-04-17', event: '拿到 offer' },
-    ])
+    expect(update.mock.calls[0][1].timeline_events).toEqual(
+      sent([
+        { date: '2025-02-23', event: '投遞' },
+        { date: '2025-04-17', event: '拿到 offer' },
+      ]),
+    )
+  })
+
+  it('keeps a row whose only position is a relative day', async () => {
+    // These used to be dropped on the floor: the filter demanded a date,
+    // so "I only remember it was a week later" never reached the server.
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
+    const wrapper = await mountDialog({
+      job: {
+        ...baseJob(7),
+        timeline_events: [
+          { date: '2025-02-23', event: '投遞' },
+          { day_offset: 7, event: '線上測驗' },
+        ],
+      },
+    })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update.mock.calls[0][1].timeline_events).toEqual(
+      sent([
+        { date: '2025-02-23', event: '投遞' },
+        { day_offset: 7, event: '線上測驗' },
+      ]),
+    )
+  })
+
+  it('sorts dated and relative rows onto one day axis', async () => {
+    // Both kinds answer "how many days into the process", so they have to
+    // interleave — sorting the dates and then appending the offsets would
+    // put D+7 after an event three weeks later.
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
+    const wrapper = await mountDialog({
+      job: {
+        ...baseJob(7),
+        timeline_events: [
+          { date: '2025-03-22', event: '拿到 offer' },
+          { day_offset: 7, event: '線上測驗' },
+          { date: '2025-03-01', event: '投遞' },
+        ],
+      },
+    })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update.mock.calls[0][1].timeline_events.map((e) => e.event)).toEqual(
+      ['投遞', '線上測驗', '拿到 offer'],
+    )
+  })
+
+  it('sorts a timeline that has no dates at all by its offsets', async () => {
+    const update = vi.spyOn(jobsApi, 'update').mockResolvedValue({ id: 7 })
+    const wrapper = await mountDialog({
+      job: {
+        ...baseJob(7),
+        timeline_events: [
+          { day_offset: 21, event: '拿到 offer' },
+          { day_offset: 0, event: '投遞' },
+          { day_offset: -3, event: '看到職缺' },
+        ],
+      },
+    })
+
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(update.mock.calls[0][1].timeline_events.map((e) => e.event)).toEqual(
+      ['看到職缺', '投遞', '拿到 offer'],
+    )
+  })
+
+  it('does not paint the timeline in the experience field error state', async () => {
+    // The form-item for experience_md used to wrap the whole tab set, so
+    // Element Plus pushed its error ring onto every input in every tab —
+    // typing a timeline entry with the body still empty made the page
+    // look broken.
+    const wrapper = await mountDialog({
+      job: { ...baseJob(7), experience_md: '', timeline_events: [] },
+    })
+    const editor = wrapper.findComponent({ name: 'TimelineEditor' })
+    expect(editor.exists()).toBe(true)
+    expect(editor.element.closest('.el-form-item')).toBeNull()
   })
 
   it('sends category in the payload when filled, null when empty', async () => {

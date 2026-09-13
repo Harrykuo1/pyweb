@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 
 import TimelineEditor from './TimelineEditor.vue'
 
@@ -18,6 +18,10 @@ function mountEditor(modelValue = []) {
   })
   return { wrapper, getValue: () => value }
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('TimelineEditor', () => {
   it('shows the empty hint when the list is empty', () => {
@@ -46,7 +50,7 @@ describe('TimelineEditor', () => {
     await wrapper.find('[data-test="timeline-add"]').trigger('click')
 
     expect(getValue()).toHaveLength(1)
-    expect(getValue()[0]).toEqual({ date: null, event: '' })
+    expect(getValue()[0]).toEqual({ date: null, day_offset: null, event: '' })
     expect(wrapper.findAll('[data-test="timeline-row"]')).toHaveLength(1)
   })
 
@@ -60,8 +64,8 @@ describe('TimelineEditor', () => {
     await deleteButtons[1].trigger('click')
 
     expect(getValue()).toEqual([
-      { date: '2025-02-23', event: 'a' },
-      { date: '2025-04-05', event: 'c' },
+      { date: '2025-02-23', day_offset: null, event: 'a' },
+      { date: '2025-04-05', day_offset: null, event: 'c' },
     ])
   })
 
@@ -79,7 +83,7 @@ describe('TimelineEditor', () => {
     const emitted = getValue()
     expect(emitted).toHaveLength(2)
     for (const entry of emitted) {
-      expect(Object.keys(entry).sort()).toEqual(['date', 'event'])
+      expect(Object.keys(entry).sort()).toEqual(['date', 'day_offset', 'event'])
     }
   })
 
@@ -106,5 +110,167 @@ describe('TimelineEditor', () => {
       'second (Jan 2026)',
       'third (back to Nov 2025)',
     ])
+  })
+})
+
+describe('TimelineEditor — one mode for the whole timeline', () => {
+  function offsetInput(wrapper, index = 0) {
+    return wrapper
+      .findAll('[data-test="timeline-row-offset"]')
+      [index].find('input')
+  }
+
+  async function switchTo(wrapper, mode) {
+    await wrapper
+      .findComponent({ name: 'ElRadioGroup' })
+      .vm.$emit('change', mode)
+    await flushPromises()
+  }
+
+  it('opens in date mode for a timeline written with dates', () => {
+    const { wrapper } = mountEditor([{ date: '2025-03-01', event: '投遞' }])
+    expect(wrapper.findAll('[data-test="timeline-row-date"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(0)
+  })
+
+  it('opens in relative mode for a timeline written with offsets', () => {
+    // Reopening must land on the way it was written, not on a default
+    // that hides what is there.
+    const { wrapper } = mountEditor([{ day_offset: 7, event: '線上測驗' }])
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="timeline-row-date"]')).toHaveLength(0)
+    expect(offsetInput(wrapper).element.value).toBe('7')
+  })
+
+  it('shows one position input per row, never both', () => {
+    // The pair was the whole problem: two boxes where only one could be
+    // used, and filling one silently wiped the other.
+    const { wrapper } = mountEditor([
+      { date: '2025-03-01', event: 'a' },
+      { date: '2025-03-08', event: 'b' },
+    ])
+    expect(wrapper.findAll('[data-test="timeline-row-date"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(0)
+  })
+
+  it('converts dates into offsets when switching to relative mode', async () => {
+    // Lossless in this direction: D+N is what the viewer already showed
+    // beside each date, so nothing is invented.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+      { date: '2025-03-08', event: '測驗' },
+      { date: '2025-03-22', event: 'offer' },
+    ])
+    await switchTo(wrapper, 'offset')
+
+    expect(getValue().map((e) => e.day_offset)).toEqual([0, 7, 21])
+    expect(getValue().every((e) => e.date === null)).toBe(true)
+  })
+
+  it('measures the conversion from the earliest date, not from row 0', async () => {
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-08', event: 'later' },
+      { date: '2025-03-01', event: 'earlier' },
+    ])
+    await switchTo(wrapper, 'offset')
+
+    expect(getValue().map((e) => e.day_offset)).toEqual([7, 0])
+  })
+
+  it('switching back and forth loses nothing', async () => {
+    // The whole point of holding both drafts: go and look at the other
+    // column, come back, and what you typed is still there. The earlier
+    // version wiped it on the way out and needed a warning to say so.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+      { date: '2025-03-08', event: '測驗' },
+    ])
+    await switchTo(wrapper, 'offset')
+    await offsetInput(wrapper, 1).setValue('10')
+    await switchTo(wrapper, 'date')
+
+    // dates intact, and they are what gets saved in date mode
+    expect(getValue().map((e) => e.date)).toEqual(['2025-03-01', '2025-03-08'])
+    expect(getValue().every((e) => e.day_offset === null)).toBe(true)
+
+    await switchTo(wrapper, 'offset')
+    expect(offsetInput(wrapper, 1).element.value).toBe('10')
+  })
+
+  it('saves only the active column, so no entry ever claims both', async () => {
+    // The API refuses an entry carrying a date and an offset; the other
+    // draft has to stay behind rather than ride along.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+    ])
+    await switchTo(wrapper, 'offset')
+
+    expect(getValue()[0]).toEqual({ date: null, day_offset: 0, event: '投遞' })
+  })
+
+  it('does not re-seed an offset the editor already typed', async () => {
+    // Seeding is a convenience for a blank column, not a recomputation
+    // that overwrites what someone deliberately entered.
+    const { wrapper } = mountEditor([{ date: '2025-03-01', event: 'x' }])
+    await switchTo(wrapper, 'offset')
+    await offsetInput(wrapper, 0).setValue('5')
+    await switchTo(wrapper, 'date')
+    await switchTo(wrapper, 'offset')
+
+    expect(offsetInput(wrapper, 0).element.value).toBe('5')
+  })
+
+  it('keeps the hidden draft across edits to the visible column', async () => {
+    // Every keystroke re-emits, and the emitted row omits the hidden
+    // column — the hydration guard has to know that, or it re-reads the
+    // list as a foreign change and throws the draft away.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+    ])
+    await switchTo(wrapper, 'offset')
+    await wrapper
+      .find('[data-test="timeline-row-event"] input')
+      .setValue('投遞履歷')
+    await switchTo(wrapper, 'date')
+
+    expect(getValue()[0].date).toBe('2025-03-01')
+    expect(getValue()[0].event).toBe('投遞履歷')
+  })
+
+  it('accepts the forms people actually type', async () => {
+    // A bare number is the common case; the rest gets pasted in from a
+    // message thread.
+    for (const [typed, expected] of [
+      ['7', 7],
+      ['+7', 7],
+      ['-3', -3],
+      ['D+7', 7],
+      ['d-3', -3],
+    ]) {
+      const { wrapper, getValue } = mountEditor([{ day_offset: 0, event: 'x' }])
+      await offsetInput(wrapper).setValue(typed)
+      expect(getValue()[0].day_offset).toBe(expected)
+    }
+  })
+
+  it('treats an emptied offset field as no offset rather than zero', async () => {
+    // Clearing the box must not silently pin the entry to D+0.
+    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
+    await offsetInput(wrapper).setValue('')
+
+    expect(getValue()[0].day_offset).toBeNull()
+  })
+
+  it('prompts for 0 on the first row so the anchor is obvious', async () => {
+    // Nothing else tells someone a relative timeline should start at D+0.
+    const { wrapper } = mountEditor([
+      { day_offset: 0, event: 'a' },
+      { day_offset: 7, event: 'b' },
+    ])
+    await offsetInput(wrapper, 0).setValue('')
+    await offsetInput(wrapper, 1).setValue('')
+
+    expect(offsetInput(wrapper, 0).attributes('placeholder')).toBe('0')
+    expect(offsetInput(wrapper, 1).attributes('placeholder')).toBe('7')
   })
 })

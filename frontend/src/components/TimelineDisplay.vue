@@ -4,8 +4,13 @@ import { computed } from 'vue'
 // Read-only renderer for a structured timeline. Each event is a
 // card aligned along a gradient spine; the first event gets a
 // violet treatment (start), the last gets emerald (closure / offer),
-// the rest are indigo. D+N relative to the first event is a tabular
-// pill in the card's header.
+// the rest are indigo.
+//
+// An entry sits at a date or at a day offset. A dated one shows its
+// date plus D+N measured from the earliest date on the timeline; a
+// relative one shows the offset it was given and no date at all,
+// because deriving one would put a guess on the page next to
+// recorded facts.
 //
 // Display order is the order events were entered. The editor never
 // auto-sorts; the viewer must not either.
@@ -36,29 +41,48 @@ function _formatFullDate(date) {
   return `${y}/${m}/${d}`
 }
 
+function _offsetLabel(days) {
+  return days >= 0 ? `D+${days}` : `D${days}`
+}
+
 const enriched = computed(() => {
   const list = props.events ?? []
   if (list.length === 0) return []
-  const firstDate = _parseISODate(list[0].date)
-  if (!firstDate) return []
+  // Measured from the earliest date present, not from the first entry:
+  // a timeline can now open with a relative entry, and anchoring on a
+  // row that has no date would leave every D+N unanswerable.
+  const anchor = list
+    .map((e) => e.date)
+    .filter(Boolean)
+    .sort()[0]
+  const anchorDate = _parseISODate(anchor)
 
   return list.map((entry, index) => {
-    const target = _parseISODate(entry.date)
-    if (!target) {
+    const position = _positionFor(index, list.length)
+    if (Number.isInteger(entry.day_offset)) {
       return {
-        offsetLabel: '?',
-        dateLabel: entry.date ?? '?',
+        offsetLabel: _offsetLabel(entry.day_offset),
+        dateLabel: null,
         event: entry.event,
-        position: _positionFor(index, list.length),
+        position,
       }
     }
-    const diffDays = Math.round((target - firstDate) / _msPerDay())
-    const offsetLabel = diffDays >= 0 ? `D+${diffDays}` : `D${diffDays}`
+    const target = _parseISODate(entry.date)
+    if (!target || !anchorDate) {
+      return {
+        offsetLabel: null,
+        dateLabel: entry.date ?? null,
+        event: entry.event,
+        position,
+      }
+    }
     return {
-      offsetLabel,
+      offsetLabel: _offsetLabel(
+        Math.round((target - anchorDate) / _msPerDay()),
+      ),
       dateLabel: _formatFullDate(target),
       event: entry.event,
-      position: _positionFor(index, list.length),
+      position,
     }
   })
 })
@@ -89,10 +113,18 @@ function _positionFor(index, total) {
         </span>
         <div class="timeline-content">
           <div class="timeline-header">
-            <span class="timeline-date" data-test="timeline-display-date">
+            <span
+              v-if="entry.dateLabel"
+              class="timeline-date"
+              data-test="timeline-display-date"
+            >
               {{ entry.dateLabel }}
             </span>
-            <span class="timeline-offset" data-test="timeline-display-offset">
+            <span
+              v-if="entry.offsetLabel"
+              class="timeline-offset"
+              data-test="timeline-display-offset"
+            >
               {{ entry.offsetLabel }}
             </span>
           </div>

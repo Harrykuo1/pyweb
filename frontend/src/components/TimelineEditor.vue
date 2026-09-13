@@ -1,10 +1,29 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { ElButton, ElDatePicker, ElIcon, ElInput } from 'element-plus'
+import {
+  ElButton,
+  ElDatePicker,
+  ElIcon,
+  ElInput,
+  ElRadioButton,
+  ElRadioGroup,
+} from 'element-plus'
 import { Delete, InfoFilled, Plus } from '@element-plus/icons-vue'
 
 // Structured timeline editor: a vertical list of rows where each row
-// is { date: "YYYY-MM-DD" | null, event: string }.
+// is { date: "YYYY-MM-DD", event } or { dayOffset: number, event }.
+//
+// Two ways to place an entry because people write these up months
+// later: some remember the calendar date, some only remember "the
+// test was a week after I applied". A relative entry stays relative —
+// no date is derived for it, since that would put a guess on record.
+//
+// Which one is a property of the whole timeline, not of each row:
+// somebody who has forgotten the dates has forgotten all of them. So
+// the choice is made once, at the top, and every row carries the same
+// kind. Offering both on every row meant a decision repeated per row,
+// two boxes where only one could ever be used, and — worst — filling
+// one silently wiped the other.
 //
 // The editor preserves entry order so the admin's caret never jumps
 // mid-typing — the actual chronological sort happens in the parent
@@ -40,11 +59,26 @@ function _newId() {
 }
 
 const rows = ref([])
+// 'date' | 'offset'. Derived from the loaded rows rather than defaulting,
+// so reopening a timeline lands on the way it was written.
+const mode = ref('date')
+
+function _modeFor(list) {
+  const positioned = (list ?? []).filter(
+    (e) => e.date != null || e.day_offset != null,
+  )
+  if (positioned.length === 0) return 'date'
+  // Any relative row at all means the timeline was written relatively:
+  // dated rows convert into offsets without inventing anything, while
+  // the reverse cannot be done at all.
+  return positioned.some((e) => e.day_offset != null) ? 'offset' : 'date'
+}
 
 function _hydrate(list) {
   return (list ?? []).map((entry) => ({
     _id: _newId(),
     date: entry.date ?? null,
+    dayOffset: entry.day_offset ?? null,
     event: entry.event ?? '',
   }))
 }
@@ -57,31 +91,49 @@ watch(
     // rows on every keystroke. Hydrate only when the parent
     // genuinely replaces the list (resetForm on dialog open).
     if (_matchesCurrent(next)) return
+    mode.value = _modeFor(next)
     rows.value = _hydrate(next)
+    if (mode.value === 'offset') _seedOffsetsFromDates()
   },
   { immediate: true },
 )
 
+// Compares against what we would emit, not against the raw row. The row
+// also holds the inactive column's draft, which never leaves here —
+// comparing that would make every keystroke look like a foreign change
+// and re-hydrate, discarding the draft this whole design exists to keep.
 function _matchesCurrent(next) {
   if (!Array.isArray(next)) return false
   if (next.length !== rows.value.length) return false
   return next.every((entry, i) => {
     const r = rows.value[i]
+    if (!r) return false
     return (
-      r && r.date === (entry.date ?? null) && r.event === (entry.event ?? '')
+      (mode.value === 'date' ? r.date : null) === (entry.date ?? null) &&
+      (mode.value === 'offset' ? r.dayOffset : null) ===
+        (entry.day_offset ?? null) &&
+      r.event === (entry.event ?? '')
     )
   })
 }
 
+// A row holds both drafts; the mode decides which one is real. Masking
+// here rather than clearing as you switch is what makes switching safe:
+// go and look at the other column, come back, nothing is gone. The saved
+// entry still carries exactly one position, which is all the API allows.
 function emitToParent() {
   emit(
     'update:modelValue',
-    rows.value.map(({ date, event }) => ({ date, event })),
+    rows.value.map(({ date, dayOffset, event }) => ({
+      date: mode.value === 'date' ? date : null,
+      day_offset: mode.value === 'offset' ? dayOffset : null,
+      event,
+    })),
   )
 }
 
 function addRow() {
-  rows.value.push({ _id: _newId(), date: null, event: '' })
+  rows.value.push({ _id: _newId(), date: null, dayOffset: null, event: '' })
   emitToParent()
 }
 
@@ -93,6 +145,54 @@ function removeRow(index) {
 function patchRow(index, patch) {
   rows.value[index] = { ...rows.value[index], ...patch }
   emitToParent()
+}
+
+function setDate(index, value) {
+  patchRow(index, { date: value || null })
+}
+
+function setDayOffset(index, value) {
+  patchRow(index, { dayOffset: _parseOffset(value) })
+}
+
+// Arriving in relative mode with dates already entered, fill the blank
+// offsets from them: an entry's distance from the earliest date is
+// exactly the D+N the viewer has always shown beside it, so this
+// invents nothing. Offsets already typed are left alone — they are the
+// more recent statement of intent for this column.
+function _seedOffsetsFromDates() {
+  const earliest = rows.value
+    .map((r) => r.date)
+    .filter(Boolean)
+    .sort()[0]
+  if (!earliest) return
+  const base = _parseISODate(earliest)
+  rows.value = rows.value.map((r) => {
+    if (r.dayOffset !== null || !r.date) return r
+    const days = Math.round((_parseISODate(r.date) - base) / 86400000)
+    return { ...r, dayOffset: days }
+  })
+}
+
+// No confirmation, because nothing is destroyed: the other column's
+// values stay in the row and come back when you switch back. Only what
+// is saved follows the mode.
+function setMode(next) {
+  if (next === mode.value) return
+  mode.value = next
+  if (next === 'offset') _seedOffsetsFromDates()
+  emitToParent()
+}
+
+// Accepts what people actually type into a "D+" box: 7, +7, -3, and
+// the whole label (D+7 / d-3) pasted in from somewhere else.
+function _parseOffset(raw) {
+  if (raw === null || raw === undefined) return null
+  const text = String(raw).trim()
+  if (text === '') return null
+  const match = /^[Dd]?\s*([+-]?\d{1,3})$/.exec(text)
+  if (!match) return null
+  return Number(match[1])
 }
 
 // When the admin clicks an empty row's date picker, anchor the
@@ -128,10 +228,27 @@ const accentForRow = computed(() => (index) => {
 
 <template>
   <div class="timeline-editor" data-test="timeline-editor">
-    <p class="timeline-helper">
-      <el-icon :size="13"><InfoFilled /></el-icon>
-      點選或直接輸入日期，例：2025/03/15。儲存時會自動依日期排序。
-    </p>
+    <div class="timeline-mode">
+      <el-radio-group
+        :model-value="mode"
+        size="small"
+        data-test="timeline-mode"
+        @change="setMode"
+      >
+        <el-radio-button value="date" data-test="timeline-mode-date">
+          用日期
+        </el-radio-button>
+        <el-radio-button value="offset" data-test="timeline-mode-offset">
+          用 D+ 天數
+        </el-radio-button>
+      </el-radio-group>
+
+      <p class="timeline-helper">
+        <el-icon :size="13"><InfoFilled /></el-icon>
+        <span v-if="mode === 'date'">儲存時自動依日期排序</span>
+        <span v-else>投履歷那天填 0，一週後填 7，之前的事填 -3</span>
+      </p>
+    </div>
 
     <ol v-if="rows.length > 0" class="timeline-rows">
       <li
@@ -142,8 +259,11 @@ const accentForRow = computed(() => (index) => {
         data-test="timeline-row"
       >
         <span class="row-accent" aria-hidden="true" />
-        <span class="row-index">{{ index + 1 }}</span>
-        <div class="row-date" data-test="timeline-row-date">
+        <div
+          v-if="mode === 'date'"
+          class="row-date"
+          data-test="timeline-row-date"
+        >
           <el-date-picker
             :model-value="entry.date"
             type="date"
@@ -152,8 +272,23 @@ const accentForRow = computed(() => (index) => {
             placeholder="YYYY/MM/DD"
             :default-value="defaultPickerDateFor(index)"
             class="row-date-picker"
-            @update:model-value="(d) => patchRow(index, { date: d ?? null })"
+            @update:model-value="(d) => setDate(index, d)"
           />
+        </div>
+        <div v-else class="row-offset" data-test="timeline-row-offset">
+          <el-input
+            :model-value="
+              entry.dayOffset === null ? '' : String(entry.dayOffset)
+            "
+            :placeholder="index === 0 ? '0' : '7'"
+            maxlength="5"
+            aria-label="相對天數"
+            @update:model-value="(v) => setDayOffset(index, v)"
+          >
+            <template #prefix>
+              <span class="offset-prefix">D+</span>
+            </template>
+          </el-input>
         </div>
         <div class="row-event" data-test="timeline-row-event">
           <el-input
@@ -198,16 +333,23 @@ const accentForRow = computed(() => (index) => {
   min-width: 0;
 }
 
+.timeline-mode {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Sits beside the switch rather than in its own tinted banner: the hint
+   is one short line, and a full-width band of colour above the rows was
+   competing with the fields for attention. */
 .timeline-helper {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
-  padding: 8px 12px;
   font-size: 12px;
-  color: #4f46e5;
-  background: rgba(99, 102, 241, 0.07);
-  border-radius: 8px;
+  color: var(--el-text-color-secondary);
 }
 
 .timeline-rows {
@@ -216,7 +358,6 @@ const accentForRow = computed(() => (index) => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 /* ------- Row card ------- */
@@ -226,72 +367,40 @@ const accentForRow = computed(() => (index) => {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 10px 14px 10px 18px;
-  border-radius: 12px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.92),
-    rgba(248, 250, 252, 0.78)
-  );
-  border: 1px solid rgba(99, 102, 241, 0.14);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition:
-    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 200ms ease;
-  overflow: hidden;
+  padding: 6px 4px 6px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
+.timeline-row:last-child {
+  border-bottom: none;
+}
+
+/* Hover only lifts the row's own ground — no transform, so a list of
+   rows never nudges its neighbours while the pointer travels down it. */
 .timeline-row:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 6px 18px rgba(99, 102, 241, 0.12);
-  border-color: rgba(99, 102, 241, 0.28);
+  background: var(--el-fill-color-lighter);
 }
 
-/* Left accent strip — colour story matches the read-only display. */
+/* A 2px tick rather than a full-height strip: it marks where the row
+   starts and echoes the read-only display's colour story without
+   bracketing the whole row like a card. */
 .row-accent {
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #6366f1, #818cf8);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 18px;
+  border-radius: 1px;
+  background: #818cf8;
 }
 
 .is-first .row-accent {
-  background: linear-gradient(180deg, #a855f7, #7c3aed);
+  background: #a855f7;
 }
 
 .is-last .row-accent {
-  background: linear-gradient(180deg, #10b981, #059669);
-}
-
-/* ------- Row index chip ------- */
-.row-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: rgba(99, 102, 241, 0.12);
-  color: #4338ca;
-}
-
-.is-first .row-index {
-  background: rgba(168, 85, 247, 0.16);
-  color: #7e22ce;
-}
-
-.is-last .row-index {
-  background: rgba(16, 185, 129, 0.16);
-  color: #047857;
+  background: #10b981;
 }
 
 /* ------- Date picker slot ------- */
@@ -301,6 +410,22 @@ const accentForRow = computed(() => (index) => {
 
 .row-date :deep(.el-date-editor) {
   width: 100%;
+}
+
+/* ------- Relative-day slot: narrow, it only ever holds a small number ------- */
+.row-offset {
+  flex: 0 0 116px;
+}
+
+/* Inside the field, not a grey attached block: el-input's prepend paints
+   a filled panel that reads as disabled next to a white input. */
+.offset-prefix {
+  font-weight: 600;
+  color: #6366f1;
+}
+
+.row-offset :deep(.el-input__inner) {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ------- Event input slot ------- */
