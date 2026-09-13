@@ -1,12 +1,18 @@
 # syntax=docker/dockerfile:1.7
 FROM python:3.13-slim
 
-# bcrypt and a few transitive deps prefer wheels but fall back to sdist
-# builds, which need a C toolchain. Office-format conversion now runs
-# in the dedicated onlyoffice service, so we don't ship LibreOffice or
-# its fonts in the backend image anymore.
+# ffmpeg transcodes uploaded event videos to H.264/AAC MP4 and pulls their
+# poster frame. Phones record HEVC by default, which Chrome and Firefox will
+# not play, so serving the original is not an option. The same binary also
+# decodes HEIC stills, which iPhones shoot by default and no browser renders
+# — one dependency, two problems.
+#
+# build-essential used to sit here for packages that fell back to sdist
+# builds. Every dependency now ships a wheel, so the toolchain was 137 MB of
+# compiler that never ran. Office conversion likewise moved to the onlyoffice
+# service, so LibreOffice and its fonts are long gone too.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
