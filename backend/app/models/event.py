@@ -83,6 +83,11 @@ class Event(Base):
         back_populates="event",
         cascade="all, delete-orphan",
     )
+    videos: Mapped[list["EventVideo"]] = relationship(  # noqa: F821
+        back_populates="event",
+        cascade="all, delete-orphan",
+        order_by="EventVideo.id",
+    )
 
 
 class EventTag(Base):

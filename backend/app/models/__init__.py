@@ -1,5 +1,6 @@
 from app.models.app_config import AppConfig
 from app.models.event import Event, EventComment, EventLike, EventPhoto, EventTag
+from app.models.event_video import EventVideo, VideoKind, VideoStatus
 from app.models.job import Job, JobComment, JobKind, JobLike
 from app.models.job_attachment import JobAttachment
 from app.models.member import Member
@@ -16,6 +17,7 @@ __all__ = [
     "EventLike",
     "EventPhoto",
     "EventTag",
+    "EventVideo",
     "Job",
     "JobAttachment",
     "JobComment",
@@ -28,4 +30,6 @@ __all__ = [
     "SiteSetting",
     "User",
     "UserRole",
+    "VideoKind",
+    "VideoStatus",
 ]
