@@ -242,18 +242,13 @@ const accentForRow = computed(() => (index) => {
           用 D+ 天數
         </el-radio-button>
       </el-radio-group>
-    </div>
 
-    <p class="timeline-helper">
-      <el-icon :size="13"><InfoFilled /></el-icon>
-      <span v-if="mode === 'date'">
-        點選或直接輸入日期，例：2025/03/15。儲存時自動依日期排序。
-      </span>
-      <span v-else>
-        只記得隔幾天就用這個：投履歷那天填 0，一週後的線上測驗填 7。
-        投履歷前發生的事填負數，例如 -3。
-      </span>
-    </p>
+      <p class="timeline-helper">
+        <el-icon :size="13"><InfoFilled /></el-icon>
+        <span v-if="mode === 'date'">儲存時自動依日期排序</span>
+        <span v-else>投履歷那天填 0，一週後填 7，之前的事填 -3</span>
+      </p>
+    </div>
 
     <ol v-if="rows.length > 0" class="timeline-rows">
       <li
@@ -264,7 +259,6 @@ const accentForRow = computed(() => (index) => {
         data-test="timeline-row"
       >
         <span class="row-accent" aria-hidden="true" />
-        <span class="row-index">{{ index + 1 }}</span>
         <div
           v-if="mode === 'date'"
           class="row-date"
@@ -291,7 +285,9 @@ const accentForRow = computed(() => (index) => {
             aria-label="相對天數"
             @update:model-value="(v) => setDayOffset(index, v)"
           >
-            <template #prepend>D+</template>
+            <template #prefix>
+              <span class="offset-prefix">D+</span>
+            </template>
           </el-input>
         </div>
         <div class="row-event" data-test="timeline-row-event">
@@ -339,18 +335,21 @@ const accentForRow = computed(() => (index) => {
 
 .timeline-mode {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
+/* Sits beside the switch rather than in its own tinted banner: the hint
+   is one short line, and a full-width band of colour above the rows was
+   competing with the fields for attention. */
 .timeline-helper {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
-  padding: 8px 12px;
   font-size: 12px;
-  color: #4f46e5;
-  background: rgba(99, 102, 241, 0.07);
-  border-radius: 8px;
+  color: var(--el-text-color-secondary);
 }
 
 .timeline-rows {
@@ -359,7 +358,6 @@ const accentForRow = computed(() => (index) => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 /* ------- Row card ------- */
@@ -369,72 +367,40 @@ const accentForRow = computed(() => (index) => {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 10px 14px 10px 18px;
-  border-radius: 12px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.92),
-    rgba(248, 250, 252, 0.78)
-  );
-  border: 1px solid rgba(99, 102, 241, 0.14);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition:
-    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 200ms ease;
-  overflow: hidden;
+  padding: 6px 4px 6px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
+.timeline-row:last-child {
+  border-bottom: none;
+}
+
+/* Hover only lifts the row's own ground — no transform, so a list of
+   rows never nudges its neighbours while the pointer travels down it. */
 .timeline-row:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 6px 18px rgba(99, 102, 241, 0.12);
-  border-color: rgba(99, 102, 241, 0.28);
+  background: var(--el-fill-color-lighter);
 }
 
-/* Left accent strip — colour story matches the read-only display. */
+/* A 2px tick rather than a full-height strip: it marks where the row
+   starts and echoes the read-only display's colour story without
+   bracketing the whole row like a card. */
 .row-accent {
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #6366f1, #818cf8);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 18px;
+  border-radius: 1px;
+  background: #818cf8;
 }
 
 .is-first .row-accent {
-  background: linear-gradient(180deg, #a855f7, #7c3aed);
+  background: #a855f7;
 }
 
 .is-last .row-accent {
-  background: linear-gradient(180deg, #10b981, #059669);
-}
-
-/* ------- Row index chip ------- */
-.row-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: rgba(99, 102, 241, 0.12);
-  color: #4338ca;
-}
-
-.is-first .row-index {
-  background: rgba(168, 85, 247, 0.16);
-  color: #7e22ce;
-}
-
-.is-last .row-index {
-  background: rgba(16, 185, 129, 0.16);
-  color: #047857;
+  background: #10b981;
 }
 
 /* ------- Date picker slot ------- */
@@ -448,13 +414,18 @@ const accentForRow = computed(() => (index) => {
 
 /* ------- Relative-day slot: narrow, it only ever holds a small number ------- */
 .row-offset {
-  flex: 0 0 120px;
+  flex: 0 0 116px;
 }
 
-.row-offset :deep(.el-input-group__prepend) {
-  padding: 0 10px;
+/* Inside the field, not a grey attached block: el-input's prepend paints
+   a filled panel that reads as disabled next to a white input. */
+.offset-prefix {
   font-weight: 600;
-  color: #4f46e5;
+  color: #6366f1;
+}
+
+.row-offset :deep(.el-input__inner) {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ------- Event input slot ------- */
