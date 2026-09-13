@@ -255,3 +255,94 @@ describe('EventPhotosManager', () => {
     expect(update).not.toHaveBeenCalled()
   })
 })
+
+describe('EventPhotosManager — videos in the grid', () => {
+  const VIDEOS = [
+    {
+      id: 7,
+      kind: 'upload',
+      status: 'ready',
+      caption: null,
+      has_poster: true,
+      youtube_id: null,
+      duration_seconds: 12,
+    },
+    {
+      id: 8,
+      kind: 'upload',
+      status: 'processing',
+      caption: null,
+      has_poster: false,
+      youtube_id: null,
+      duration_seconds: null,
+    },
+    {
+      id: 9,
+      kind: 'youtube',
+      status: 'ready',
+      caption: null,
+      has_poster: false,
+      youtube_id: 'dQw4w9WgXcQ',
+      duration_seconds: null,
+    },
+  ]
+
+  it('renders videos beside photos rather than only photos', async () => {
+    // The grid iterated photos alone, so an uploaded video could not be
+    // captioned or deleted from the editor at all — it was simply invisible.
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue(VIDEOS)
+    const wrapper = await mountManager()
+
+    const cells = wrapper.findAll('[data-test="photo-cell"]')
+    expect(cells.length).toBe(PHOTOS.length + VIDEOS.length)
+    const types = cells.map((c) => c.attributes('data-media-type'))
+    expect(types.filter((t) => t === 'video')).toHaveLength(3)
+
+    expect(wrapper.find('[data-test="manager-processing"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-test="manager-video-flag"]')).toHaveLength(2)
+  })
+
+  it('sends a caption edit to the video endpoint, not the photo one', async () => {
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([VIDEOS[0]])
+    const updateVideo = vi
+      .spyOn(eventsApi, 'updateVideoCaption')
+      .mockResolvedValue({ ...VIDEOS[0], caption: '開場' })
+    const updatePhoto = vi.spyOn(eventsApi, 'updatePhotoCaption')
+    const wrapper = await mountManager()
+
+    // PHOTOS come first in the grid, so the video's caption box is the one
+    // after them. data-test lands on the inner <input> (ElInput forwards attrs).
+    const boxes = wrapper.element.querySelectorAll(
+      '[data-test="caption-input"]',
+    )
+    const host = boxes[PHOTOS.length]
+    const native = host.tagName === 'INPUT' ? host : host.querySelector('input')
+    native.dispatchEvent(new Event('focus', { bubbles: true }))
+    setNativeValue(native, '開場')
+    native.dispatchEvent(new Event('blur', { bubbles: true }))
+    await flushPromises()
+
+    expect(updateVideo).toHaveBeenCalledWith(1, 7, '開場')
+    expect(updatePhoto).not.toHaveBeenCalled()
+  })
+
+  it('sends a delete to the video endpoint, not the photo one', async () => {
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([VIDEOS[0]])
+    const removeVideo = vi.spyOn(eventsApi, 'removeVideo').mockResolvedValue()
+    const removePhoto = vi.spyOn(eventsApi, 'removePhoto')
+    const wrapper = await mountManager()
+
+    const videoCell = wrapper
+      .findAll('[data-test="photo-cell"]')
+      .find((c) => c.attributes('data-media-type') === 'video')
+    await videoCell.find('[data-test="delete-photo-button"]').trigger('click')
+    await flushPromises()
+    await wrapper
+      .findComponent(DeleteWithPasswordDialog)
+      .vm.$emit('confirm', undefined)
+    await flushPromises()
+
+    expect(removeVideo).toHaveBeenCalledWith(1, 7, undefined)
+    expect(removePhoto).not.toHaveBeenCalled()
+  })
+})

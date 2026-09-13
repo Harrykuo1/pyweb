@@ -62,6 +62,32 @@ const atVideoCapacity = computed(
   () => videoCount.value >= limits.value.max_videos_per_event,
 )
 
+// Photos and videos are managed in one grid, matching how the detail page
+// shows them. Uploading a video and then not being able to caption or delete
+// it — because the manager only ever rendered photos — was the gap this
+// closes.
+const mediaItems = computed(() => [
+  ...photos.value.map((p) => ({
+    type: 'photo',
+    key: `photo-${p.id}`,
+    row: p,
+    thumbUrl: eventsApi.photoUrl(props.eventId, p.id),
+    status: 'ready',
+  })),
+  ...videos.value.map((v) => ({
+    type: 'video',
+    key: `video-${v.id}`,
+    row: v,
+    thumbUrl: v.youtube_id
+      ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
+      : v.has_poster
+        ? eventsApi.videoPosterUrl(props.eventId, v.id)
+        : null,
+    status: v.status,
+    isYoutube: !!v.youtube_id,
+  })),
+])
+
 async function load() {
   loading.value = true
   try {
@@ -145,21 +171,22 @@ async function onFilesChosen(event) {
 
 // Caption is saved on blur — only when it actually changed, to avoid a
 // redundant PUT every time the field loses focus.
-async function onCaptionBlur(photo) {
-  const next = (photo._draftCaption ?? '').trim()
-  const current = photo.caption ?? ''
+async function onCaptionBlur(item) {
+  const row = item.row
+  const next = (row._draftCaption ?? '').trim()
+  const current = row.caption ?? ''
   if (next === current) return
+  const save =
+    item.type === 'video'
+      ? eventsApi.updateVideoCaption
+      : eventsApi.updatePhotoCaption
   try {
-    const updated = await eventsApi.updatePhotoCaption(
-      props.eventId,
-      photo.id,
-      next,
-    )
-    photo.caption = updated.caption
-    photo._draftCaption = updated.caption ?? ''
+    const updated = await save(props.eventId, row.id, next)
+    row.caption = updated.caption
+    row._draftCaption = updated.caption ?? ''
   } catch {
     ElMessage.error('說明儲存失敗')
-    photo._draftCaption = current
+    row._draftCaption = current
   }
 }
 
@@ -168,8 +195,8 @@ const deleteTarget = ref(null)
 const deleteSubmitting = ref(false)
 const deleteError = ref('')
 
-function askDelete(photo) {
-  deleteTarget.value = photo
+function askDelete(item) {
+  deleteTarget.value = item
   deleteError.value = ''
   deleteOpen.value = true
 }
@@ -180,8 +207,10 @@ async function onDeleteConfirm(password) {
   deleteSubmitting.value = true
   deleteError.value = ''
   try {
-    await eventsApi.removePhoto(props.eventId, target.id, password)
-    ElMessage.success('已刪除照片')
+    const remove =
+      target.type === 'video' ? eventsApi.removeVideo : eventsApi.removePhoto
+    await remove(props.eventId, target.row.id, password)
+    ElMessage.success(target.type === 'video' ? '已刪除影片' : '已刪除照片')
     deleteOpen.value = false
     deleteTarget.value = null
     await load()
@@ -325,12 +354,14 @@ onMounted(() => {
       />
     </div>
 
-    <p class="manager-tip">
-      第一張照片會成為活動封面。照片支援 PNG / JPG / WebP / GIF / HEIC，單張上限
-      {{ limits.max_photo_mb }} MB；影片單支上限
-      {{ limits.max_video_mb }} MB（約 4K 一分鐘或 1080p
-      四分鐘），上傳後需要一點 時間轉檔才能播放。
-    </p>
+    <ul class="manager-tip">
+      <li>第一張照片會成為活動封面</li>
+      <li>
+        照片 PNG / JPG / WebP / GIF / HEIC，單張上限
+        {{ limits.max_photo_mb }} MB
+      </li>
+      <li>影片單支上限 {{ limits.max_video_mb }} MB，上傳後需轉檔才能播放</li>
+    </ul>
 
     <p
       v-if="uploading && uploadPercent > 0"
@@ -350,19 +381,46 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else-if="photos.length > 0" class="photo-grid">
+    <div v-else-if="mediaItems.length > 0" class="photo-grid">
       <figure
-        v-for="(p, idx) in photos"
-        :key="p.id"
+        v-for="(m, idx) in mediaItems"
+        :key="m.key"
         class="photo-cell"
         data-test="photo-cell"
+        :data-media-type="m.type"
       >
-        <div class="photo-thumb">
+        <div class="photo-thumb" :class="{ 'is-blank': !m.thumbUrl }">
           <img
-            :src="thumbUrl(p)"
-            :alt="p.caption || '活動照片'"
+            v-if="m.thumbUrl"
+            :src="m.thumbUrl"
+            :alt="
+              m.row.caption || (m.type === 'video' ? '活動影片' : '活動照片')
+            "
             loading="lazy"
           />
+          <span
+            v-if="m.status === 'processing'"
+            class="media-state"
+            data-test="manager-processing"
+          >
+            轉檔中…
+          </span>
+          <span
+            v-else-if="m.status === 'failed'"
+            class="media-state is-failed"
+            data-test="manager-failed"
+          >
+            轉檔失敗
+          </span>
+          <span
+            v-else-if="m.type === 'video'"
+            class="video-flag"
+            data-test="manager-video-flag"
+          >
+            <el-icon :size="11"><VideoCamera /></el-icon>
+            {{ m.isYoutube ? 'YouTube' : '影片' }}
+          </span>
+
           <span v-if="idx === 0" class="cover-flag">
             <el-icon :size="11"><Star /></el-icon>
             封面
@@ -370,29 +428,31 @@ onMounted(() => {
           <button
             type="button"
             class="del-btn"
-            aria-label="刪除照片"
+            :aria-label="m.type === 'video' ? '刪除影片' : '刪除照片'"
             data-test="delete-photo-button"
-            @click="askDelete(p)"
+            @click="askDelete(m)"
           >
             <el-icon :size="14"><Delete /></el-icon>
           </button>
         </div>
         <el-input
-          v-model="p._draftCaption"
+          v-model="m.row._draftCaption"
           size="small"
           maxlength="200"
           placeholder="加上說明（選填）"
           class="caption-input"
           data-test="caption-input"
-          @focus="p._draftCaption = p._draftCaption ?? p.caption ?? ''"
-          @blur="onCaptionBlur(p)"
+          @focus="
+            m.row._draftCaption = m.row._draftCaption ?? m.row.caption ?? ''
+          "
+          @blur="onCaptionBlur(m)"
         />
       </figure>
     </div>
 
     <div v-else class="photos-empty" data-test="photos-empty">
       <el-icon :size="26"><Plus /></el-icon>
-      <p>還沒有照片，點「加入照片」開始上傳。</p>
+      <p>還沒有內容，點上方按鈕加入照片或影片。</p>
     </div>
 
     <DeleteWithPasswordDialog
@@ -427,6 +487,11 @@ onMounted(() => {
 }
 
 .manager-tip {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   margin: 0;
   font-size: 12px;
   color: var(--ink-500);
@@ -460,6 +525,36 @@ onMounted(() => {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* A video tile with nothing to show yet still has to hold its shape. */
+.photo-thumb.is-blank {
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+}
+
+.media-state {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.media-state.is-failed {
+  color: var(--el-color-danger, #c45656);
+}
+
+.video-flag {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 11px;
 }
 
 .cover-flag {
