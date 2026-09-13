@@ -13,6 +13,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.deps import (
@@ -20,6 +21,7 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.media import HEIC_MIME_TYPES, MediaConversionError, heic_to_jpeg
 from app.core.runtime_config import get_int
 from app.core.uploads import stream_to_disk
 from app.database import get_db
@@ -33,12 +35,16 @@ from app.schemas import (
 router = APIRouter(prefix="/api/events", tags=["event_photos"])
 
 # Mirror the member-photo allowlist plus GIF, which is common for event
-# snapshots. Each maps to the canonical extension we store on disk.
+# snapshots. Each maps to the canonical extension we store on disk — HEIC
+# maps to .jpg because it is converted on the way in rather than stored as
+# shot; see the upload handler.
 PHOTO_MIME_TO_EXT: dict[str, str] = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "image/heic": ".jpg",
+    "image/heif": ".jpg",
 }
 
 
@@ -172,7 +178,16 @@ async def upload_photo(
 
     ext = PHOTO_MIME_TO_EXT[file.content_type]
     photo.filename = f"{photo.id}{ext}"
-    target = event_uploads_dir(uploads_root, event_id) / photo.filename
+    event_dir = event_uploads_dir(uploads_root, event_id)
+    target = event_dir / photo.filename
+
+    # HEIC has to be decoded before it is stored, so it lands in a staging
+    # file first — ffmpeg cannot read and write the same path. The size cap
+    # is checked against what was uploaded, not what comes out of the
+    # converter, since the cap exists to bound the request.
+    needs_transcode = file.content_type in HEIC_MIME_TYPES
+    staged = event_dir / f"{photo.id}.src" if needs_transcode else target
+
     # The row had to be flushed before the bytes could land, so a rejected
     # upload has to undo it explicitly. Leaving it to the session's lifetime
     # would work in production and quietly not in anything that shares a
@@ -180,12 +195,28 @@ async def upload_photo(
     try:
         photo.size_bytes = await stream_to_disk(
             file,
-            target,
+            staged,
             max_bytes=max_mb * 1024 * 1024,
             too_large_detail=f"照片大小超過 {max_mb} MB 上限",
         )
+        if needs_transcode:
+            try:
+                await run_in_threadpool(heic_to_jpeg, staged, target)
+            except MediaConversionError as e:
+                # Storing the original would mean an upload that "succeeds"
+                # and then shows as a broken image on the event page, which
+                # is far harder to trace back than a refusal here.
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail="這張照片無法處理，請改用 JPEG 或 PNG 重新上傳",
+                ) from e
+            finally:
+                staged.unlink(missing_ok=True)
+            photo.mime_type = "image/jpeg"
+            photo.size_bytes = target.stat().st_size
     except BaseException:
         db.rollback()
+        target.unlink(missing_ok=True)
         raise
 
     db.commit()
