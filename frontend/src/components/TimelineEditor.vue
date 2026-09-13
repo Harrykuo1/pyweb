@@ -243,10 +243,13 @@ const accentForRow = computed(() => (index) => {
         </el-radio-button>
       </el-radio-group>
 
+      <!-- The one thing neither mode can show for itself. The D+ prefix
+           and the row placeholders already demonstrate the format, so
+           spelling out example numbers here only read as a maths lesson.
+           Same line in both modes, so it does not jump on switch. -->
       <p class="timeline-helper">
         <el-icon :size="13"><InfoFilled /></el-icon>
-        <span v-if="mode === 'date'">儲存時自動依日期排序</span>
-        <span v-else>投履歷那天填 0，一週後填 7，之前的事填 -3</span>
+        儲存時自動排序
       </p>
     </div>
 
