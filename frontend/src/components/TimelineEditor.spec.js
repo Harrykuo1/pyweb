@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { ElMessageBox } from 'element-plus'
 
 import TimelineEditor from './TimelineEditor.vue'
 
@@ -18,6 +19,10 @@ function mountEditor(modelValue = []) {
   })
   return { wrapper, getValue: () => value }
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('TimelineEditor', () => {
   it('shows the empty hint when the list is empty', () => {
@@ -109,48 +114,104 @@ describe('TimelineEditor', () => {
   })
 })
 
-describe('TimelineEditor — date or D+N', () => {
+describe('TimelineEditor — one mode for the whole timeline', () => {
   function offsetInput(wrapper, index = 0) {
     return wrapper
       .findAll('[data-test="timeline-row-offset"]')
       [index].find('input')
   }
 
-  it('records a row that only has a relative day', async () => {
-    // The whole point: someone remembers "a week after I applied" and
-    // nothing more precise.
-    const { wrapper, getValue } = mountEditor([
-      { date: null, event: '線上測驗' },
-    ])
-    await offsetInput(wrapper).setValue('7')
+  async function switchTo(wrapper, mode) {
+    await wrapper
+      .findComponent({ name: 'ElRadioGroup' })
+      .vm.$emit('change', mode)
+    await flushPromises()
+  }
 
-    expect(getValue()[0]).toEqual({
-      date: null,
-      day_offset: 7,
-      event: '線上測驗',
-    })
+  it('opens in date mode for a timeline written with dates', () => {
+    const { wrapper } = mountEditor([{ date: '2025-03-01', event: '投遞' }])
+    expect(wrapper.findAll('[data-test="timeline-row-date"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(0)
   })
 
-  it('clears the date when a relative day is entered', async () => {
-    // An entry sits at one position or the other; keeping both would
-    // leave the reader with two answers and the API refuses it anyway.
-    const { wrapper, getValue } = mountEditor([
-      { date: '2025-03-01', event: '投遞履歷' },
-    ])
-    await offsetInput(wrapper).setValue('7')
+  it('opens in relative mode for a timeline written with offsets', () => {
+    // Reopening must land on the way it was written, not on a default
+    // that hides what is there.
+    const { wrapper } = mountEditor([{ day_offset: 7, event: '線上測驗' }])
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="timeline-row-date"]')).toHaveLength(0)
+    expect(offsetInput(wrapper).element.value).toBe('7')
+  })
 
-    expect(getValue()[0].date).toBeNull()
+  it('shows one position input per row, never both', () => {
+    // The pair was the whole problem: two boxes where only one could be
+    // used, and filling one silently wiped the other.
+    const { wrapper } = mountEditor([
+      { date: '2025-03-01', event: 'a' },
+      { date: '2025-03-08', event: 'b' },
+    ])
+    expect(wrapper.findAll('[data-test="timeline-row-date"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(0)
+  })
+
+  it('converts dates into offsets when switching to relative mode', async () => {
+    // Lossless in this direction: D+N is what the viewer already showed
+    // beside each date, so nothing is invented.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+      { date: '2025-03-08', event: '測驗' },
+      { date: '2025-03-22', event: 'offer' },
+    ])
+    await switchTo(wrapper, 'offset')
+
+    expect(getValue().map((e) => e.day_offset)).toEqual([0, 7, 21])
+    expect(getValue().every((e) => e.date === null)).toBe(true)
+  })
+
+  it('measures the conversion from the earliest date, not from row 0', async () => {
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-08', event: 'later' },
+      { date: '2025-03-01', event: 'earlier' },
+    ])
+    await switchTo(wrapper, 'offset')
+
+    expect(getValue().map((e) => e.day_offset)).toEqual([7, 0])
+  })
+
+  it('asks before switching back to dates, because nothing can be converted', async () => {
+    // A calendar date would have to be invented for every row, so the
+    // offsets are simply lost — say so rather than wiping them quietly.
+    const confirm = vi
+      .spyOn(ElMessageBox, 'confirm')
+      .mockResolvedValue('confirm')
+    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
+    await switchTo(wrapper, 'date')
+
+    expect(confirm).toHaveBeenCalled()
+    expect(getValue()[0].day_offset).toBeNull()
+  })
+
+  it('keeps the offsets when that switch is cancelled', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue(new Error('cancel'))
+    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
+    await switchTo(wrapper, 'date')
+
     expect(getValue()[0].day_offset).toBe(7)
+    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(1)
   })
 
-  it('hydrates an existing relative entry back into the offset field', async () => {
-    const { wrapper } = mountEditor([{ day_offset: 14, event: '一面' }])
-    expect(offsetInput(wrapper).element.value).toBe('14')
+  it('does not ask when there is nothing to lose', async () => {
+    const confirm = vi.spyOn(ElMessageBox, 'confirm')
+    const { wrapper } = mountEditor([{ day_offset: null, event: '' }])
+    await switchTo(wrapper, 'offset')
+    await switchTo(wrapper, 'date')
+
+    expect(confirm).not.toHaveBeenCalled()
   })
 
   it('accepts the forms people actually type', async () => {
-    // A bare number is the common case; the rest is what gets pasted in
-    // from a message thread.
+    // A bare number is the common case; the rest gets pasted in from a
+    // message thread.
     for (const [typed, expected] of [
       ['7', 7],
       ['+7', 7],
@@ -158,7 +219,7 @@ describe('TimelineEditor — date or D+N', () => {
       ['D+7', 7],
       ['d-3', -3],
     ]) {
-      const { wrapper, getValue } = mountEditor([{ date: null, event: 'x' }])
+      const { wrapper, getValue } = mountEditor([{ day_offset: 0, event: 'x' }])
       await offsetInput(wrapper).setValue(typed)
       expect(getValue()[0].day_offset).toBe(expected)
     }
@@ -170,15 +231,18 @@ describe('TimelineEditor — date or D+N', () => {
     await offsetInput(wrapper).setValue('')
 
     expect(getValue()[0].day_offset).toBeNull()
-    expect(getValue()[0].date).toBeNull()
   })
 
-  it('leaves the offset alone when a date is picked back', async () => {
-    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
-    wrapper.vm.setDate(0, '2025-03-01')
-    await wrapper.vm.$nextTick()
+  it('prompts for 0 on the first row so the anchor is obvious', async () => {
+    // Nothing else tells someone a relative timeline should start at D+0.
+    const { wrapper } = mountEditor([
+      { day_offset: 0, event: 'a' },
+      { day_offset: 7, event: 'b' },
+    ])
+    await offsetInput(wrapper, 0).setValue('')
+    await offsetInput(wrapper, 1).setValue('')
 
-    expect(getValue()[0].date).toBe('2025-03-01')
-    expect(getValue()[0].day_offset).toBeNull()
+    expect(offsetInput(wrapper, 0).attributes('placeholder')).toBe('0')
+    expect(offsetInput(wrapper, 1).attributes('placeholder')).toBe('7')
   })
 })

@@ -1,6 +1,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { ElButton, ElDatePicker, ElIcon, ElInput } from 'element-plus'
+import {
+  ElButton,
+  ElDatePicker,
+  ElIcon,
+  ElInput,
+  ElMessageBox,
+  ElRadioButton,
+  ElRadioGroup,
+} from 'element-plus'
 import { Delete, InfoFilled, Plus } from '@element-plus/icons-vue'
 
 // Structured timeline editor: a vertical list of rows where each row
@@ -10,6 +18,13 @@ import { Delete, InfoFilled, Plus } from '@element-plus/icons-vue'
 // later: some remember the calendar date, some only remember "the
 // test was a week after I applied". A relative entry stays relative —
 // no date is derived for it, since that would put a guess on record.
+//
+// Which one is a property of the whole timeline, not of each row:
+// somebody who has forgotten the dates has forgotten all of them. So
+// the choice is made once, at the top, and every row carries the same
+// kind. Offering both on every row meant a decision repeated per row,
+// two boxes where only one could ever be used, and — worst — filling
+// one silently wiped the other.
 //
 // The editor preserves entry order so the admin's caret never jumps
 // mid-typing — the actual chronological sort happens in the parent
@@ -45,6 +60,20 @@ function _newId() {
 }
 
 const rows = ref([])
+// 'date' | 'offset'. Derived from the loaded rows rather than defaulting,
+// so reopening a timeline lands on the way it was written.
+const mode = ref('date')
+
+function _modeFor(list) {
+  const positioned = (list ?? []).filter(
+    (e) => e.date != null || e.day_offset != null,
+  )
+  if (positioned.length === 0) return 'date'
+  // Any relative row at all means the timeline was written relatively:
+  // dated rows convert into offsets without inventing anything, while
+  // the reverse cannot be done at all.
+  return positioned.some((e) => e.day_offset != null) ? 'offset' : 'date'
+}
 
 function _hydrate(list) {
   return (list ?? []).map((entry) => ({
@@ -63,7 +92,9 @@ watch(
     // rows on every keystroke. Hydrate only when the parent
     // genuinely replaces the list (resetForm on dialog open).
     if (_matchesCurrent(next)) return
+    mode.value = _modeFor(next)
     rows.value = _hydrate(next)
+    if (mode.value === 'offset') _convertDatesToOffsets()
   },
   { immediate: true },
 )
@@ -108,22 +139,60 @@ function patchRow(index, patch) {
   emitToParent()
 }
 
-// The two fields say different things about where an entry sits, so
-// filling one clears the other rather than leaving a row that claims
-// both — which the API refuses anyway.
+// A row only ever shows the input for the active mode, so each setter
+// clears the other side rather than leaving a row claiming both — which
+// the API refuses anyway.
 function setDate(index, value) {
-  patchRow(index, {
-    date: value || null,
-    ...(value ? { dayOffset: null } : {}),
-  })
+  patchRow(index, { date: value || null, dayOffset: null })
 }
 
 function setDayOffset(index, value) {
-  const parsed = _parseOffset(value)
-  patchRow(index, {
-    dayOffset: parsed,
-    ...(parsed === null ? {} : { date: null }),
+  patchRow(index, { dayOffset: _parseOffset(value), date: null })
+}
+
+// Dates carry their offsets already — the viewer has always shown D+N
+// next to them — so this direction loses the calendar but invents
+// nothing. Measured from the earliest date, which is the D+0 a reader
+// sees.
+function _convertDatesToOffsets() {
+  const earliest = rows.value
+    .map((r) => r.date)
+    .filter(Boolean)
+    .sort()[0]
+  const base = earliest ? _parseISODate(earliest) : null
+  rows.value = rows.value.map((r) => {
+    if (r.dayOffset !== null || !r.date || !base) {
+      return { ...r, date: null }
+    }
+    const days = Math.round((_parseISODate(r.date) - base) / 86400000)
+    return { ...r, date: null, dayOffset: days }
   })
+}
+
+const hasRelativeContent = computed(() =>
+  rows.value.some((r) => r.dayOffset !== null),
+)
+
+async function setMode(next) {
+  if (next === mode.value) return
+  // Going back to dates cannot convert: a calendar date would have to be
+  // invented for every row. Say so before throwing the numbers away.
+  if (next === 'date' && hasRelativeContent.value) {
+    try {
+      await ElMessageBox.confirm(
+        '改用日期後，已填的 D+ 天數會被清空，需要重新填寫日期。',
+        '改用日期？',
+        { confirmButtonText: '清空並改用日期', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+    rows.value = rows.value.map((r) => ({ ...r, dayOffset: null }))
+  } else if (next === 'offset') {
+    _convertDatesToOffsets()
+  }
+  mode.value = next
+  emitToParent()
 }
 
 // Accepts what people actually type into a "D+" box: 7, +7, -3, and
@@ -170,10 +239,31 @@ const accentForRow = computed(() => (index) => {
 
 <template>
   <div class="timeline-editor" data-test="timeline-editor">
+    <div class="timeline-mode">
+      <el-radio-group
+        :model-value="mode"
+        size="small"
+        data-test="timeline-mode"
+        @change="setMode"
+      >
+        <el-radio-button value="date" data-test="timeline-mode-date">
+          用日期
+        </el-radio-button>
+        <el-radio-button value="offset" data-test="timeline-mode-offset">
+          用 D+ 天數
+        </el-radio-button>
+      </el-radio-group>
+    </div>
+
     <p class="timeline-helper">
       <el-icon :size="13"><InfoFilled /></el-icon>
-      填日期或 D+ 天數，擇一即可。只記得「投履歷後一週」就填 D+7，
-      填了其中一邊會清掉另一邊。儲存時自動排序。
+      <span v-if="mode === 'date'">
+        點選或直接輸入日期，例：2025/03/15。儲存時自動依日期排序。
+      </span>
+      <span v-else>
+        只記得隔幾天就用這個：投履歷那天填 0，一週後的線上測驗填 7。
+        投履歷前發生的事填負數，例如 -3。
+      </span>
     </p>
 
     <ol v-if="rows.length > 0" class="timeline-rows">
@@ -186,7 +276,11 @@ const accentForRow = computed(() => (index) => {
       >
         <span class="row-accent" aria-hidden="true" />
         <span class="row-index">{{ index + 1 }}</span>
-        <div class="row-date" data-test="timeline-row-date">
+        <div
+          v-if="mode === 'date'"
+          class="row-date"
+          data-test="timeline-row-date"
+        >
           <el-date-picker
             :model-value="entry.date"
             type="date"
@@ -198,17 +292,17 @@ const accentForRow = computed(() => (index) => {
             @update:model-value="(d) => setDate(index, d)"
           />
         </div>
-        <div class="row-offset" data-test="timeline-row-offset">
+        <div v-else class="row-offset" data-test="timeline-row-offset">
           <el-input
             :model-value="
               entry.dayOffset === null ? '' : String(entry.dayOffset)
             "
-            placeholder="D+7"
+            :placeholder="index === 0 ? '0' : '7'"
             maxlength="5"
             aria-label="相對天數"
             @update:model-value="(v) => setDayOffset(index, v)"
           >
-            <template #prepend>D</template>
+            <template #prepend>D+</template>
           </el-input>
         </div>
         <div class="row-event" data-test="timeline-row-event">
@@ -252,6 +346,10 @@ const accentForRow = computed(() => (index) => {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.timeline-mode {
+  display: flex;
 }
 
 .timeline-helper {
@@ -361,7 +459,7 @@ const accentForRow = computed(() => (index) => {
 
 /* ------- Relative-day slot: narrow, it only ever holds a small number ------- */
 .row-offset {
-  flex: 0 0 104px;
+  flex: 0 0 120px;
 }
 
 .row-offset :deep(.el-input-group__prepend) {
