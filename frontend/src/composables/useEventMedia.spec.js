@@ -177,15 +177,13 @@ describe('useEventMedia — YouTube references', () => {
 
   it('never polls for a YouTube reference', async () => {
     // There is nothing to transcode, so the row is ready on arrival.
-    const listVideos = vi
-      .spyOn(eventsApi, 'listVideos')
-      .mockResolvedValue([
-        readyVideo({
-          kind: 'youtube',
-          youtube_id: 'dQw4w9WgXcQ',
-          has_poster: false,
-        }),
-      ])
+    const listVideos = vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      readyVideo({
+        kind: 'youtube',
+        youtube_id: 'dQw4w9WgXcQ',
+        has_poster: false,
+      }),
+    ])
     const { api } = host()
     await api().load()
 

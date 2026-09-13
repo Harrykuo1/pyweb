@@ -199,8 +199,13 @@ watch(active, (next) => {
           class="settings-section__body"
           :data-test="`settings-active-sub-${active}`"
         >
+          <!-- Keyed by the leaf, not just the component: 求職參數 and
+               活動參數 are the same component with different props, so
+               without this Vue reuses the instance and the composable keeps
+               whichever group it was given at setup. -->
           <component
             :is="activeComponent"
+            :key="active"
             v-bind="activeProps"
             @generate-invite="goToInvites"
           />
