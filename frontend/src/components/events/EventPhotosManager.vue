@@ -11,6 +11,7 @@ import { Delete, Link, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
 import { settingsApi } from '../../api/settings'
+import { bySortOrder } from '../../composables/useEventMedia'
 import { useMediaReorder } from '../../composables/useMediaReorder'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { useAuthStore } from '../../stores/auth'
@@ -72,27 +73,31 @@ const atVideoCapacity = computed(
 // the server still holds rather than leaving the grid lying.
 const localOrder = ref(null)
 
-const serverMedia = computed(() => [
-  ...photos.value.map((p) => ({
-    type: 'photo',
-    key: `photo-${p.id}`,
-    row: p,
-    thumbUrl: eventsApi.photoUrl(props.eventId, p.id),
-    status: 'ready',
-  })),
-  ...videos.value.map((v) => ({
-    type: 'video',
-    key: `video-${v.id}`,
-    row: v,
-    thumbUrl: v.youtube_id
-      ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
-      : v.has_poster
-        ? eventsApi.videoPosterUrl(props.eventId, v.id)
-        : null,
-    status: v.status,
-    isYoutube: !!v.youtube_id,
-  })),
-])
+const serverMedia = computed(() =>
+  [
+    ...photos.value.map((p) => ({
+      type: 'photo',
+      key: `photo-${p.id}`,
+      row: p,
+      thumbUrl: eventsApi.photoUrl(props.eventId, p.id),
+      status: 'ready',
+      sortOrder: p.sort_order ?? 0,
+    })),
+    ...videos.value.map((v) => ({
+      type: 'video',
+      key: `video-${v.id}`,
+      row: v,
+      thumbUrl: v.youtube_id
+        ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
+        : v.has_poster
+          ? eventsApi.videoPosterUrl(props.eventId, v.id)
+          : null,
+      status: v.status,
+      isYoutube: !!v.youtube_id,
+      sortOrder: v.sort_order ?? 0,
+    })),
+  ].sort(bySortOrder),
+)
 
 const mediaItems = computed(() => localOrder.value ?? serverMedia.value)
 

@@ -99,6 +99,7 @@ def _serialize(video: EventVideo, *, is_admin: bool) -> EventVideoResponse:
         status=video.status.value,
         caption=video.caption,
         uploaded_at=video.uploaded_at,
+        sort_order=video.sort_order,
         duration_seconds=video.duration_seconds,
         size_bytes=video.size_bytes,
         has_poster=video.poster_filename is not None,
@@ -175,7 +176,7 @@ def list_videos(
     is_admin = current_user.role is UserRole.ADMIN
     return [
         _serialize(v, is_admin=is_admin)
-        for v in query.order_by(EventVideo.id.asc()).all()
+        for v in query.order_by(EventVideo.sort_order.asc(), EventVideo.id.asc()).all()
     ]
 
 

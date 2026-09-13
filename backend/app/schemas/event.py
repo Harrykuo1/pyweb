@@ -70,6 +70,10 @@ class EventUpdate(BaseModel):
 class EventPhotoResponse(BaseModel):
     id: int
     event_id: int
+    # Photos and videos share one sequence; the client merges the two lists
+    # on this rather than concatenating them, which would always put every
+    # photo before every video no matter how they were arranged.
+    sort_order: int
     filename: str
     mime_type: str
     size_bytes: int
@@ -119,6 +123,7 @@ class EventVideoResponse(BaseModel):
     status: Literal["processing", "ready", "failed"]
     caption: str | None
     uploaded_at: datetime
+    sort_order: int
 
     # kind=upload, and only once transcoding succeeded.
     duration_seconds: int | None = None

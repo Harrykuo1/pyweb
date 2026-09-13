@@ -92,7 +92,7 @@ def list_photos(
     return (
         db.query(EventPhoto)
         .filter_by(event_id=event_id)
-        .order_by(EventPhoto.id.asc())
+        .order_by(EventPhoto.sort_order.asc(), EventPhoto.id.asc())
         .all()
     )
 

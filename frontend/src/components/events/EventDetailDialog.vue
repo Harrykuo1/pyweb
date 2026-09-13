@@ -662,9 +662,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 }
 
 .gallery-cell-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  /* The caption is absolutely positioned over the bottom of its own tile.
+     It used to sit inside the gallery-cell button, which supplied that
+     containing block; moving it out to sit beside the tile left it
+     positioning against the dialog instead, where it covered the footer
+     buttons and swallowed their clicks. */
+  position: relative;
 }
 
 .lb-embed {

@@ -191,3 +191,45 @@ describe('useEventMedia — YouTube references', () => {
     expect(listVideos).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('useEventMedia — merged ordering', () => {
+  it('interleaves by sort_order rather than putting all photos first', async () => {
+    // Concatenating the two lists would always give photo, photo, video no
+    // matter what the editor arranged — which is the bug this replaced.
+    vi.spyOn(eventsApi, 'listPhotos').mockResolvedValue([
+      { id: 1, caption: 'a', sort_order: 0 },
+      { id: 2, caption: 'b', sort_order: 2 },
+    ])
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      readyVideo({ id: 7, sort_order: 1 }),
+    ])
+    const { api } = host()
+    await api().load()
+
+    expect(api().items.value.map((i) => i.key)).toEqual([
+      'photo-1',
+      'video-7',
+      'photo-2',
+    ])
+  })
+
+  it('falls back to a stable order when sort_order ties', async () => {
+    // Media uploaded before any reordering all sits at 0, so the tiebreak
+    // has to be deterministic rather than dependent on fetch timing.
+    vi.spyOn(eventsApi, 'listPhotos').mockResolvedValue([
+      { id: 5, caption: null, sort_order: 0 },
+      { id: 3, caption: null, sort_order: 0 },
+    ])
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      readyVideo({ id: 9, sort_order: 0 }),
+    ])
+    const { api } = host()
+    await api().load()
+
+    expect(api().items.value.map((i) => i.key)).toEqual([
+      'photo-3',
+      'photo-5',
+      'video-9',
+    ])
+  })
+})

@@ -19,6 +19,17 @@ const POLL_INTERVAL_MS = 3000
  * events, so an id captured at setup would go stale the moment the viewer
  * opened a different one.
  */
+// Merged on sort_order, not concatenated: the two lists come from separate
+// tables sharing one sequence, so appending one to the other would always
+// put every photo before every video regardless of how they were arranged.
+// Ties fall back to type then id so the result is stable for media that
+// predates any reordering, where everything still sits at 0.
+export function bySortOrder(a, b) {
+  return (
+    a.sortOrder - b.sortOrder || a.type.localeCompare(b.type) || a.id - b.id
+  )
+}
+
 export function useEventMedia(getEventId) {
   const eventId = () => getEventId()
   const photos = ref([])
@@ -26,45 +37,49 @@ export function useEventMedia(getEventId) {
   const loading = ref(false)
   let pollTimer = null
 
-  const items = computed(() => [
-    ...photos.value.map((p) => ({
-      type: 'photo',
-      id: p.id,
-      key: `photo-${p.id}`,
-      caption: p.caption,
-      thumbUrl: eventsApi.photoUrl(eventId(), p.id),
-      raw: p,
-    })),
-    ...videos.value.map((v) => ({
-      type: 'video',
-      id: v.id,
-      key: `video-${v.id}`,
-      caption: v.caption,
-      status: v.status,
-      durationSeconds: v.duration_seconds,
-      errorDetail: v.error_detail,
-      youtubeId: v.youtube_id,
-      fileUrl:
-        v.kind === 'upload' && v.status === 'ready'
-          ? eventsApi.videoFileUrl(eventId(), v.id)
+  const items = computed(() =>
+    [
+      ...photos.value.map((p) => ({
+        type: 'photo',
+        id: p.id,
+        key: `photo-${p.id}`,
+        caption: p.caption,
+        thumbUrl: eventsApi.photoUrl(eventId(), p.id),
+        raw: p,
+        sortOrder: p.sort_order ?? 0,
+      })),
+      ...videos.value.map((v) => ({
+        type: 'video',
+        id: v.id,
+        key: `video-${v.id}`,
+        caption: v.caption,
+        status: v.status,
+        durationSeconds: v.duration_seconds,
+        errorDetail: v.error_detail,
+        youtubeId: v.youtube_id,
+        fileUrl:
+          v.kind === 'upload' && v.status === 'ready'
+            ? eventsApi.videoFileUrl(eventId(), v.id)
+            : null,
+        kind: v.kind,
+        // Rebuilt from the stored id rather than echoed from anything a user
+        // typed, so the only thing reaching an iframe src is 11 characters of
+        // a fixed alphabet. nocookie keeps YouTube's trackers off the page
+        // until the viewer actually presses play.
+        embedUrl: v.youtube_id
+          ? `https://www.youtube-nocookie.com/embed/${v.youtube_id}`
           : null,
-      kind: v.kind,
-      // Rebuilt from the stored id rather than echoed from anything a user
-      // typed, so the only thing reaching an iframe src is 11 characters of
-      // a fixed alphabet. nocookie keeps YouTube's trackers off the page
-      // until the viewer actually presses play.
-      embedUrl: v.youtube_id
-        ? `https://www.youtube-nocookie.com/embed/${v.youtube_id}`
-        : null,
-      // YouTube serves its own thumbnail, so no poster is stored for it.
-      thumbUrl: v.youtube_id
-        ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
-        : v.has_poster
-          ? eventsApi.videoPosterUrl(eventId(), v.id)
-          : null,
-      raw: v,
-    })),
-  ])
+        // YouTube serves its own thumbnail, so no poster is stored for it.
+        thumbUrl: v.youtube_id
+          ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
+          : v.has_poster
+            ? eventsApi.videoPosterUrl(eventId(), v.id)
+            : null,
+        raw: v,
+        sortOrder: v.sort_order ?? 0,
+      })),
+    ].sort(bySortOrder),
+  )
 
   const hasProcessing = computed(() =>
     videos.value.some((v) => v.status === 'processing'),
