@@ -10,6 +10,7 @@ from app.routers import auth as auth_router
 from app.routers import event_comments as event_comments_router
 from app.routers import event_likes as event_likes_router
 from app.routers import event_photos as event_photos_router
+from app.routers import event_videos as event_videos_router
 from app.routers import events as events_router
 from app.routers import internal as internal_router
 from app.routers import job_attachments as job_attachments_router
@@ -97,6 +98,7 @@ app.include_router(jobs_router.router)
 app.include_router(job_attachments_router.router)
 app.include_router(job_comments_router.router)
 app.include_router(job_likes_router.router)
+app.include_router(event_videos_router.router)
 app.include_router(events_router.router)
 app.include_router(event_photos_router.router)
 app.include_router(event_comments_router.router)

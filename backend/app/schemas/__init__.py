@@ -20,6 +20,8 @@ from app.schemas.event import (
     EventPhotoResponse,
     EventResponse,
     EventUpdate,
+    EventVideoCaptionUpdate,
+    EventVideoResponse,
 )
 from app.schemas.job import (
     JobCreate,
@@ -69,6 +71,8 @@ __all__ = [
     "EventCreate",
     "EventPhotoCaptionUpdate",
     "EventPhotoResponse",
+    "EventVideoCaptionUpdate",
+    "EventVideoResponse",
     "EventResponse",
     "EventUpdate",
     "GuildConfigResponse",

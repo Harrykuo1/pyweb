@@ -13,6 +13,7 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.event_media import event_uploads_dir
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.database import get_db
@@ -26,7 +27,7 @@ from app.models import (
     User,
     UserRole,
 )
-from app.routers.event_photos import event_uploads_dir, get_uploads_root
+from app.routers.event_photos import get_uploads_root
 from app.schemas import (
     EventCreate,
     EventResponse,

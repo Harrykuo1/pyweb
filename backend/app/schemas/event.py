@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -109,3 +110,30 @@ class EventResponse(BaseModel):
     author_user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EventVideoResponse(BaseModel):
+    id: int
+    event_id: int
+    kind: Literal["upload", "youtube"]
+    status: Literal["processing", "ready", "failed"]
+    caption: str | None
+    uploaded_at: datetime
+
+    # kind=upload, and only once transcoding succeeded.
+    duration_seconds: int | None = None
+    size_bytes: int | None = None
+    has_poster: bool = False
+
+    # kind=youtube. The id, not a URL — the embed src is rebuilt client-side
+    # so nothing a user typed ever reaches an iframe attribute.
+    youtube_id: str | None = None
+
+    # ffmpeg's own words, admin-only: it names paths and codec parameters.
+    error_detail: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EventVideoCaptionUpdate(BaseModel):
+    caption: str | None = Field(default=None, max_length=200)

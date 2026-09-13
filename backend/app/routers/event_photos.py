@@ -21,6 +21,7 @@ from app.core.deps import (
     require_completed_member,
     require_posting_member,
 )
+from app.core.event_media import event_uploads_dir
 from app.core.media import HEIC_MIME_TYPES, MediaConversionError, heic_to_jpeg
 from app.core.runtime_config import get_int
 from app.core.uploads import stream_to_disk
@@ -54,11 +55,6 @@ def get_uploads_root() -> Path:
     Exposed so tests can override it via ``app.dependency_overrides``,
     matching the members / job_attachments routers."""
     return Path(settings.uploads_dir)
-
-
-def event_uploads_dir(uploads_root: Path, event_id: int) -> Path:
-    """Per-event photo directory under the shared uploads tree."""
-    return uploads_root / "events" / str(event_id)
 
 
 def _get_event_or_404(db: Session, event_id: int) -> Event:
