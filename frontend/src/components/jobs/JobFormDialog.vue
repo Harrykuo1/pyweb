@@ -647,9 +647,15 @@ async function handleSubmit() {
         </el-form-item>
       </div>
 
-      <el-form-item prop="experience_md" :show-message="false">
-        <el-tabs v-model="activeTab" class="md-tabs">
-          <el-tab-pane label="心得" name="experience">
+      <!-- The form-item wraps only the field it is about. Wrapping the
+           whole tab set painted every input in every tab with this
+           field's error ring, so typing a timeline entry made the page
+           look broken because the experience body was still empty. The
+           submit guard checks experience_md by hand anyway — el-form-item
+           cannot see an MdEditor-bound value. -->
+      <el-tabs v-model="activeTab" class="md-tabs">
+        <el-tab-pane label="心得" name="experience">
+          <el-form-item prop="experience_md" :show-message="false">
             <button
               v-if="isMobileWidth && !isExperienceFullscreen"
               type="button"
@@ -673,58 +679,54 @@ async function handleSubmit() {
             <p v-if="!form.experience_md.trim()" class="md-required-hint">
               心得為必填
             </p>
-          </el-tab-pane>
-          <el-tab-pane label="時程表（選填）" name="timeline">
-            <TimelineEditor
-              v-model="form.timeline_events"
-              :default-date="timelineDefaultDate"
-              data-test="form-timeline-editor"
-            />
-          </el-tab-pane>
-          <el-tab-pane
-            name="attachments"
-            :disabled="!isEdit"
-            data-test="tab-attachments"
-          >
-            <!-- Custom label so we can wrap a tooltip around the
+          </el-form-item>
+        </el-tab-pane>
+        <el-tab-pane label="時程表（選填）" name="timeline">
+          <TimelineEditor
+            v-model="form.timeline_events"
+            :default-date="timelineDefaultDate"
+            data-test="form-timeline-editor"
+          />
+        </el-tab-pane>
+        <el-tab-pane
+          name="attachments"
+          :disabled="!isEdit"
+          data-test="tab-attachments"
+        >
+          <!-- Custom label so we can wrap a tooltip around the
                  disabled state. el-tab-pane's disabled flag stops
                  activation but doesn't tell the user *why*; the
                  tooltip mirrors the locked-placeholder copy in a
                  hover-discoverable spot. -->
-            <template #label>
-              <el-tooltip
-                v-if="!isEdit"
-                content="先按「新增」建立紀錄後可上傳附件"
-                placement="top"
-                :show-after="200"
-                data-test="attachments-tab-tooltip"
-              >
-                <span>附件</span>
-              </el-tooltip>
-              <span v-else>附件</span>
-            </template>
-            <!-- :key forces a fresh manager (and a fresh GET) every
+          <template #label>
+            <el-tooltip
+              v-if="!isEdit"
+              content="先按「新增」建立紀錄後可上傳附件"
+              placement="top"
+              :show-after="200"
+              data-test="attachments-tab-tooltip"
+            >
+              <span>附件</span>
+            </el-tooltip>
+            <span v-else>附件</span>
+          </template>
+          <!-- :key forces a fresh manager (and a fresh GET) every
                  time the dialog opens, so the manager picks up server
                  state added between sessions — including the previous
                  job's attachments not bleeding through. -->
-            <JobAttachmentsManager
-              v-if="isEdit"
-              :key="`${currentJob.id}-${openCounter}`"
-              :job-id="currentJob.id"
-            />
-            <div
-              v-else
-              class="attachments-locked"
-              data-test="attachments-locked"
-            >
-              <p class="attachments-locked-title">先儲存基本資料</p>
-              <p class="attachments-locked-sub">
-                按下方「新增」建立紀錄後即可上傳附件。
-              </p>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-      </el-form-item>
+          <JobAttachmentsManager
+            v-if="isEdit"
+            :key="`${currentJob.id}-${openCounter}`"
+            :job-id="currentJob.id"
+          />
+          <div v-else class="attachments-locked" data-test="attachments-locked">
+            <p class="attachments-locked-title">先儲存基本資料</p>
+            <p class="attachments-locked-sub">
+              按下方「新增」建立紀錄後即可上傳附件。
+            </p>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </el-form>
 
     <template #footer>

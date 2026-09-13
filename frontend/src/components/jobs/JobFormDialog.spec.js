@@ -647,6 +647,19 @@ describe('JobFormDialog — submit', () => {
     )
   })
 
+  it('does not paint the timeline in the experience field error state', async () => {
+    // The form-item for experience_md used to wrap the whole tab set, so
+    // Element Plus pushed its error ring onto every input in every tab —
+    // typing a timeline entry with the body still empty made the page
+    // look broken.
+    const wrapper = await mountDialog({
+      job: { ...baseJob(7), experience_md: '', timeline_events: [] },
+    })
+    const editor = wrapper.findComponent({ name: 'TimelineEditor' })
+    expect(editor.exists()).toBe(true)
+    expect(editor.element.closest('.el-form-item')).toBeNull()
+  })
+
   it('sends category in the payload when filled, null when empty', async () => {
     const create = vi.spyOn(jobsApi, 'create').mockResolvedValue({ id: 1 })
     const wrapper = await mountDialog()
