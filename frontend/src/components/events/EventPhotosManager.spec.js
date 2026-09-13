@@ -318,6 +318,59 @@ describe('EventPhotosManager — videos in the grid', () => {
     expect(cells[1].find('.cover-flag').exists()).toBe(true)
   })
 
+  it('says so when the list could not be loaded', async () => {
+    // An empty grid and a failed request look identical otherwise, and the
+    // difference is whether the editor thinks their photos are gone.
+    vi.spyOn(eventsApi, 'listVideos').mockRejectedValue(new Error('offline'))
+    const error = vi.spyOn(ElMessage, 'error').mockImplementation(() => {})
+    await mountManager([])
+    expect(error).toHaveBeenCalledWith('載入媒體失敗')
+  })
+
+  it('picks up a transcode result without the dialog being reopened', async () => {
+    // The manager held its own copy of the list and never re-fetched, so an
+    // uploaded clip sat on 轉檔中… forever — and a failure, the one thing the
+    // uploader needs to see, never appeared here at all.
+    const processing = { ...VIDEOS[1], id: 20 }
+    const listVideos = vi
+      .spyOn(eventsApi, 'listVideos')
+      .mockResolvedValue([processing])
+    vi.useFakeTimers()
+    const wrapper = await mountManager([])
+    expect(wrapper.text()).toContain('轉檔中')
+
+    listVideos.mockResolvedValue([{ ...processing, status: 'failed' }])
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(listVideos.mock.calls.length).toBeGreaterThan(1)
+    expect(wrapper.text()).not.toContain('轉檔中')
+    vi.useRealTimers()
+  })
+
+  it('stops polling once the transcode has landed', async () => {
+    // Starts armed, so this pins the shutdown rather than never having run:
+    // an editor left open must not keep issuing a request every 3 seconds
+    // for a clip that finished.
+    const processing = { ...VIDEOS[1], id: 21 }
+    const listVideos = vi
+      .spyOn(eventsApi, 'listVideos')
+      .mockResolvedValue([processing])
+    vi.useFakeTimers()
+    await mountManager([])
+
+    listVideos.mockResolvedValue([{ ...processing, status: 'ready' }])
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    const afterItLanded = listVideos.mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(3000 * 4)
+    await flushPromises()
+
+    expect(listVideos.mock.calls.length).toBe(afterItLanded)
+    vi.useRealTimers()
+  })
+
   it('sends a caption edit to the video endpoint, not the photo one', async () => {
     vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([VIDEOS[0]])
     const updateVideo = vi

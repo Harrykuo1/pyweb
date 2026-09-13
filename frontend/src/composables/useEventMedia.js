@@ -112,6 +112,8 @@ export function useEventMedia(getEventId) {
     syncPolling()
   }
 
+  // Reports whether the fetch worked. The editor says so out loud when it
+  // did not, because an empty grid there reads as "my photos are gone".
   async function load() {
     loading.value = true
     try {
@@ -121,9 +123,11 @@ export function useEventMedia(getEventId) {
       ])
       photos.value = p
       videos.value = v
+      return true
     } catch {
       photos.value = []
       videos.value = []
+      return false
     } finally {
       loading.value = false
       syncPolling()

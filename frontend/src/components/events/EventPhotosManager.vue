@@ -11,7 +11,7 @@ import { Delete, Link, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
 import { settingsApi } from '../../api/settings'
-import { bySortOrder } from '../../composables/useEventMedia'
+import { useEventMedia } from '../../composables/useEventMedia'
 import { useMediaReorder } from '../../composables/useMediaReorder'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { useAuthStore } from '../../stores/auth'
@@ -42,9 +42,14 @@ const limits = ref({
   max_video_mb: 240,
 })
 
-const photos = ref([])
-const videos = ref([])
-const loading = ref(true)
+// The same composable the detail gallery uses: it merges the two tables on
+// the shared sort_order and, crucially here, polls while anything is
+// transcoding. Managing its own copies meant an uploaded clip sat on
+// 轉檔中… until the dialog was reopened — and a failure never surfaced at
+// all in the one place the uploader was looking.
+const media = useEventMedia(() => props.eventId)
+const { photos, videos, loading } = media
+
 const uploading = ref(false)
 const uploadStatus = ref('')
 const uploadPercent = ref(0)
@@ -64,42 +69,12 @@ const atVideoCapacity = computed(
   () => videoCount.value >= limits.value.max_videos_per_event,
 )
 
-// Photos and videos are managed in one grid, matching how the detail page
-// shows them. Uploading a video and then not being able to caption or delete
-// it — because the manager only ever rendered photos — was the gap this
-// closes.
 // Drag writes an explicit order here; until then the merged list is the
 // server's. Keeping it separate means a failed save can drop back to what
 // the server still holds rather than leaving the grid lying.
 const localOrder = ref(null)
 
-const serverMedia = computed(() =>
-  [
-    ...photos.value.map((p) => ({
-      type: 'photo',
-      key: `photo-${p.id}`,
-      row: p,
-      thumbUrl: eventsApi.photoUrl(props.eventId, p.id),
-      status: 'ready',
-      sortOrder: p.sort_order ?? 0,
-    })),
-    ...videos.value.map((v) => ({
-      type: 'video',
-      key: `video-${v.id}`,
-      row: v,
-      thumbUrl: v.youtube_id
-        ? eventsApi.youtubeThumbUrl(v.youtube_id)
-        : v.has_poster
-          ? eventsApi.videoPosterUrl(props.eventId, v.id)
-          : null,
-      status: v.status,
-      isYoutube: !!v.youtube_id,
-      sortOrder: v.sort_order ?? 0,
-    })),
-  ].sort(bySortOrder),
-)
-
-const mediaItems = computed(() => localOrder.value ?? serverMedia.value)
+const mediaItems = computed(() => localOrder.value ?? media.items.value)
 
 // The card skips anything with no still to show — a clip mid-transcode, or a
 // failed one — so the star has to land where the cover actually lands.
@@ -114,20 +89,8 @@ const { container: gridRef } = useMediaReorder({
 })
 
 async function load() {
-  loading.value = true
-  try {
-    const [p, v] = await Promise.all([
-      eventsApi.listPhotos(props.eventId),
-      eventsApi.listVideos(props.eventId),
-    ])
-    photos.value = p
-    videos.value = v
-    localOrder.value = null
-  } catch {
-    ElMessage.error('載入媒體失敗')
-  } finally {
-    loading.value = false
-  }
+  if (!(await media.load())) ElMessage.error('載入媒體失敗')
+  localOrder.value = null
 }
 
 async function loadLimits() {
@@ -194,7 +157,7 @@ async function onFilesChosen(event) {
 // Caption is saved on blur — only when it actually changed, to avoid a
 // redundant PUT every time the field loses focus.
 async function onCaptionBlur(item) {
-  const row = item.row
+  const row = item.raw
   const next = (row._draftCaption ?? '').trim()
   const current = row.caption ?? ''
   if (next === current) return
@@ -231,7 +194,7 @@ async function onDeleteConfirm(password) {
   try {
     const remove =
       target.type === 'video' ? eventsApi.removeVideo : eventsApi.removePhoto
-    await remove(props.eventId, target.row.id, password)
+    await remove(props.eventId, target.raw.id, password)
     ElMessage.success(target.type === 'video' ? '已刪除影片' : '已刪除照片')
     deleteOpen.value = false
     deleteTarget.value = null
@@ -420,7 +383,7 @@ onMounted(() => {
             v-if="m.thumbUrl"
             :src="m.thumbUrl"
             :alt="
-              m.row.caption || (m.type === 'video' ? '活動影片' : '活動照片')
+              m.raw.caption || (m.type === 'video' ? '活動影片' : '活動照片')
             "
             loading="lazy"
           />
@@ -444,7 +407,7 @@ onMounted(() => {
             data-test="manager-video-flag"
           >
             <el-icon :size="11"><VideoCamera /></el-icon>
-            {{ m.isYoutube ? 'YouTube' : '影片' }}
+            {{ m.youtubeId ? 'YouTube' : '影片' }}
           </span>
 
           <span v-if="m.key === coverKey" class="cover-flag">
@@ -462,14 +425,14 @@ onMounted(() => {
           </button>
         </div>
         <el-input
-          v-model="m.row._draftCaption"
+          v-model="m.raw._draftCaption"
           size="small"
           maxlength="200"
           placeholder="加上說明（選填）"
           class="caption-input"
           data-test="caption-input"
           @focus="
-            m.row._draftCaption = m.row._draftCaption ?? m.row.caption ?? ''
+            m.raw._draftCaption = m.raw._draftCaption ?? m.raw.caption ?? ''
           "
           @blur="onCaptionBlur(m)"
         />
