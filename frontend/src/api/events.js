@@ -129,6 +129,12 @@ export const eventsApi = {
     })
     return data
   },
+  async reorderMedia(eventId, items) {
+    // The complete order, not a move: photos and videos live in two tables
+    // sharing one sequence, and renumbering the whole event in one request
+    // is what keeps the halves from describing different orders.
+    await client.put(`/events/${eventId}/media/order`, { items })
+  },
   videoFileUrl(eventId, videoId) {
     return `/api/events/${eventId}/videos/${videoId}/file`
   },

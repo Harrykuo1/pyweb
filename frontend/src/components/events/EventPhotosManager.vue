@@ -11,6 +11,7 @@ import { Delete, Link, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
 import { settingsApi } from '../../api/settings'
+import { useMediaReorder } from '../../composables/useMediaReorder'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { useAuthStore } from '../../stores/auth'
 
@@ -66,7 +67,12 @@ const atVideoCapacity = computed(
 // shows them. Uploading a video and then not being able to caption or delete
 // it — because the manager only ever rendered photos — was the gap this
 // closes.
-const mediaItems = computed(() => [
+// Drag writes an explicit order here; until then the merged list is the
+// server's. Keeping it separate means a failed save can drop back to what
+// the server still holds rather than leaving the grid lying.
+const localOrder = ref(null)
+
+const serverMedia = computed(() => [
   ...photos.value.map((p) => ({
     type: 'photo',
     key: `photo-${p.id}`,
@@ -88,6 +94,16 @@ const mediaItems = computed(() => [
   })),
 ])
 
+const mediaItems = computed(() => localOrder.value ?? serverMedia.value)
+
+const { container: gridRef, saving: reordering } = useMediaReorder({
+  getEventId: () => props.eventId,
+  getItems: () => mediaItems.value,
+  onReordered: (items) => {
+    localOrder.value = items
+  },
+})
+
 async function load() {
   loading.value = true
   try {
@@ -97,6 +113,7 @@ async function load() {
     ])
     photos.value = p
     videos.value = v
+    localOrder.value = null
   } catch {
     ElMessage.error('載入媒體失敗')
   } finally {
@@ -355,7 +372,7 @@ onMounted(() => {
     </div>
 
     <ul class="manager-tip">
-      <li>第一張照片會成為活動封面</li>
+      <li>拖曳縮圖可調整順序，第一張照片會成為活動封面</li>
       <li>
         照片 PNG / JPG / WebP / GIF / HEIC，單張上限
         {{ limits.max_photo_mb }} MB
@@ -381,7 +398,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else-if="mediaItems.length > 0" class="photo-grid">
+    <div v-else-if="mediaItems.length > 0" ref="gridRef" class="photo-grid">
       <figure
         v-for="(m, idx) in mediaItems"
         :key="m.key"
@@ -389,7 +406,11 @@ onMounted(() => {
         data-test="photo-cell"
         :data-media-type="m.type"
       >
-        <div class="photo-thumb" :class="{ 'is-blank': !m.thumbUrl }">
+        <div
+          class="photo-thumb"
+          :class="{ 'is-blank': !m.thumbUrl }"
+          data-drag-handle
+        >
           <img
             v-if="m.thumbUrl"
             :src="m.thumbUrl"
@@ -528,6 +549,19 @@ onMounted(() => {
 }
 
 /* A video tile with nothing to show yet still has to hold its shape. */
+.photo-thumb {
+  cursor: grab;
+}
+
+.photo-thumb:active {
+  cursor: grabbing;
+}
+
+/* The placeholder Sortable leaves where the dragged cell will land. */
+.media-drag-ghost {
+  opacity: 0.4;
+}
+
 .photo-thumb.is-blank {
   display: grid;
   place-items: center;
