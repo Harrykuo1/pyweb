@@ -1,7 +1,12 @@
-from datetime import UTC, date, datetime
+# Aliased: the TimelineEvent field is also called `date`, and for an
+# annotated assignment Python binds the target before evaluating the
+# annotation — so a bare `date: date | None = None` would resolve the
+# annotation against the freshly-bound None and fail at import.
+from datetime import UTC, datetime
+from datetime import date as date_type
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MIN_JOB_YEAR = 2000
 
@@ -20,14 +25,38 @@ TIMELINE_EVENTS_MAX = 50
 MARKDOWN_MAX_LENGTH = 100_000
 
 
+# A recruitment process can run for months, and someone recalling one
+# from memory is not going to be off by more than a year in either
+# direction. The bound exists to keep a typo out of the display, not
+# to express a rule.
+DAY_OFFSET_MIN = -400
+DAY_OFFSET_MAX = 400
+
+
 class TimelineEvent(BaseModel):
-    # Full ISO date so a recruitment process that spans the year
-    # boundary (Dec → Jan) records honestly without having to bake
-    # the year into the surrounding job context. D+N is computed at
-    # display time as a simple Date subtraction, which keeps leap
-    # years correct for free.
-    date: date
+    """One step of a recruitment process, placed either absolutely or relatively.
+
+    People writing these up months later routinely remember "the online
+    test was a week after I applied" but not the calendar date, so an
+    entry carries a full ISO date **or** a day offset, never both and
+    never neither. A relative entry stays relative: no date is derived
+    for it, because inventing one would present a guess as a record.
+
+    The date is a full ISO date rather than month/day so a process that
+    crosses the year boundary (Dec → Jan) records honestly without
+    depending on the surrounding job context, and so the D+N shown for a
+    dated entry is a plain Date subtraction — leap years included.
+    """
+
+    date: date_type | None = None
+    day_offset: int | None = Field(default=None, ge=DAY_OFFSET_MIN, le=DAY_OFFSET_MAX)
     event: str = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _exactly_one_position(self) -> "TimelineEvent":
+        if (self.date is None) == (self.day_offset is None):
+            raise ValueError("timeline entry needs either a date or a day_offset")
+        return self
 
 
 def _max_job_year() -> int:

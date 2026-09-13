@@ -953,6 +953,15 @@ def test_update_404(client_factory):
 # ---------- timeline_events ----------
 
 
+def _as_stored(events):
+    """Input entries as the response returns them.
+
+    An entry now carries either a date or a day_offset, so the field the
+    caller left out comes back explicitly null rather than being absent.
+    """
+    return [{"date": None, "day_offset": None, **e} for e in events]
+
+
 def test_create_with_timeline_events_round_trips(client_factory):
     client, login_as = client_factory
     login_as("admin")
@@ -973,7 +982,7 @@ def test_create_with_timeline_events_round_trips(client_factory):
         },
     )
     assert r.status_code == 201, r.text
-    assert r.json()["timeline_events"] == events
+    assert r.json()["timeline_events"] == _as_stored(events)
 
 
 def test_create_with_cross_year_timeline_events(client_factory):
@@ -999,7 +1008,7 @@ def test_create_with_cross_year_timeline_events(client_factory):
         },
     )
     assert r.status_code == 201, r.text
-    assert r.json()["timeline_events"] == events
+    assert r.json()["timeline_events"] == _as_stored(events)
 
 
 def test_create_without_timeline_events_returns_null(client_factory):
@@ -1111,11 +1120,11 @@ def test_update_replaces_timeline_events(client_factory, db_session):
 
     r1 = client.put("/api/jobs/1", json={"timeline_events": first})
     assert r1.status_code == 200
-    assert r1.json()["timeline_events"] == first
+    assert r1.json()["timeline_events"] == _as_stored(first)
 
     r2 = client.put("/api/jobs/1", json={"timeline_events": second})
     assert r2.status_code == 200
-    assert r2.json()["timeline_events"] == second
+    assert r2.json()["timeline_events"] == _as_stored(second)
 
 
 def test_update_clears_timeline_events_with_null(client_factory, db_session):
@@ -1155,7 +1164,9 @@ def test_legacy_timeline_md_and_new_timeline_events_are_independent(
     assert r.status_code == 200
     body = r.json()
     assert body["timeline_md"] == "- 投遞 2/23"
-    assert body["timeline_events"] == [{"date": "2025-02-23", "event": "投遞"}]
+    assert body["timeline_events"] == _as_stored(
+        [{"date": "2025-02-23", "event": "投遞"}]
+    )
 
 
 # ---------- delete ----------
@@ -1338,3 +1349,70 @@ def test_delete_succeeds_when_no_uploads_dir_exists(
         assert r.status_code == 204
     finally:
         app.dependency_overrides.pop(get_uploads_root, None)
+
+
+def test_create_with_relative_timeline_events_round_trips(client_factory):
+    """A process recalled from memory records as offsets and stays that way —
+    nothing derives a date for it, because that would be a guess on record."""
+    client, login_as = client_factory
+    login_as("admin")
+    events = [
+        {"day_offset": 0, "event": "投遞履歷"},
+        {"day_offset": 7, "event": "線上測驗"},
+        {"day_offset": 21, "event": "拿到 offer"},
+    ]
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": events,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["timeline_events"] == _as_stored(events)
+
+
+def test_create_with_a_mix_of_dated_and_relative_entries(client_factory):
+    # The common shape: the date of applying is on record, the rest is
+    # remembered only as "about a week later".
+    client, login_as = client_factory
+    login_as("admin")
+    events = [
+        {"date": "2025-03-01", "event": "投遞履歷"},
+        {"day_offset": 7, "event": "線上測驗"},
+        {"date": "2025-04-17", "event": "拿到 offer"},
+    ]
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": events,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["timeline_events"] == _as_stored(events)
+
+
+def test_a_timeline_entry_with_no_position_is_rejected(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    r = client.post(
+        "/api/jobs",
+        json={
+            "job_year": 2025,
+            "job_month": 4,
+            "company": "Acme",
+            "kind": "internship",
+            "experience_md": "x",
+            "timeline_events": [{"event": "投遞履歷"}],
+        },
+    )
+    assert r.status_code == 422

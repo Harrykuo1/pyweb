@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from datetime import date as date_type
 
 import pytest
 from pydantic import ValidationError
@@ -242,3 +243,60 @@ def test_list_response_carries_items_and_total():
     page = ListResponse[JobResponse](items=[item], total=1)
     assert page.total == 1
     assert page.items[0].kind == "internship"
+
+
+# ---------- timeline entry: a date or a D+N, never both ----------
+
+
+def _job_with_timeline(events):
+    return JobCreate(**_payload(timeline_events=events))
+
+
+def test_a_timeline_entry_can_be_a_plain_day_offset():
+    """Someone writing up a process months later often remembers "the test
+    was a week after I applied" and nothing more precise."""
+    job = _job_with_timeline([{"day_offset": 7, "event": "線上測驗"}])
+    entry = job.timeline_events[0]
+    assert entry.day_offset == 7
+    assert entry.date is None
+
+
+def test_dated_and_relative_entries_coexist_in_one_timeline():
+    # The realistic case: the date of applying is on record, the rest is
+    # remembered as "about a week later".
+    job = _job_with_timeline(
+        [
+            {"date": "2025-03-01", "event": "投遞履歷"},
+            {"day_offset": 7, "event": "線上測驗"},
+        ]
+    )
+    assert [e.date for e in job.timeline_events] == [date_type(2025, 3, 1), None]
+    assert [e.day_offset for e in job.timeline_events] == [None, 7]
+
+
+def test_an_entry_carrying_both_a_date_and_an_offset_is_refused():
+    """The two say different things about where the entry sits, and nothing
+    downstream could decide which one the reader meant."""
+    with pytest.raises(ValidationError):
+        _job_with_timeline(
+            [{"date": "2025-03-01", "day_offset": 7, "event": "投遞履歷"}]
+        )
+
+
+def test_an_entry_with_neither_is_refused():
+    # It would render as an event floating at no position at all.
+    with pytest.raises(ValidationError):
+        _job_with_timeline([{"event": "投遞履歷"}])
+
+
+def test_a_negative_offset_is_allowed():
+    # "I saw the posting three days before I applied" is a real thing people
+    # record, and the viewer already renders D-3.
+    job = _job_with_timeline([{"day_offset": -3, "event": "看到職缺"}])
+    assert job.timeline_events[0].day_offset == -3
+
+
+def test_an_absurd_offset_is_refused():
+    # Guards a typo (700 for 70) from reaching the display, nothing more.
+    with pytest.raises(ValidationError):
+        _job_with_timeline([{"day_offset": 5000, "event": "面試"}])
