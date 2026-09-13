@@ -72,7 +72,7 @@ class Event(Base):
     photos: Mapped[list["EventPhoto"]] = relationship(
         back_populates="event",
         cascade="all, delete-orphan",
-        order_by="EventPhoto.id",
+        order_by="EventPhoto.sort_order, EventPhoto.id",
     )
     comments: Mapped[list["EventComment"]] = relationship(
         back_populates="event",
@@ -86,7 +86,7 @@ class Event(Base):
     videos: Mapped[list["EventVideo"]] = relationship(  # noqa: F821
         back_populates="event",
         cascade="all, delete-orphan",
-        order_by="EventVideo.id",
+        order_by="EventVideo.sort_order, EventVideo.id",
     )
 
 
@@ -121,6 +121,13 @@ class EventPhoto(Base):
     # acts as the event's cover.
     filename: Mapped[str] = mapped_column(String(256), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Position within the event's media, shared with event_videos rather than
+    # scoped to photos: the two render as one grid, so ordering only means
+    # anything across both. Backfilled from id, so existing events keep the
+    # order they already had.
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0", index=True
+    )
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     caption: Mapped[str | None] = mapped_column(String(200), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(

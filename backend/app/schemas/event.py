@@ -144,3 +144,15 @@ class EventVideoLinkCreate(BaseModel):
     # long enough to run through the parser.
     url: str = Field(min_length=1, max_length=500)
     caption: str | None = Field(default=None, max_length=200)
+
+
+class MediaOrderItem(BaseModel):
+    type: Literal["photo", "video"]
+    id: int
+
+
+class MediaOrderUpdate(BaseModel):
+    # The full order, not a delta. Renumbering everything in one request is
+    # what keeps two tables holding one sequence consistent — a partial update
+    # would leave the halves able to disagree.
+    items: list[MediaOrderItem] = Field(max_length=200)

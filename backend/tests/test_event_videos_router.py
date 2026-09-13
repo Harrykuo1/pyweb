@@ -365,3 +365,160 @@ def test_an_admin_must_confirm_a_video_deletion_with_the_password(ctx, db_sessio
     )
     assert r.status_code == 204
     assert db_session.query(EventVideo).count() == 0
+
+
+def _photo_row(db, event_id, n, order=0):
+    from app.models import EventPhoto
+
+    row = EventPhoto(
+        event_id=event_id,
+        filename=f"{n}.jpg",
+        mime_type="image/jpeg",
+        size_bytes=1,
+        sort_order=order,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _order(db, event_id):
+    """The merged order the grid would render."""
+    from app.models import EventPhoto
+
+    rows = [
+        ("photo", p.id, p.sort_order)
+        for p in db.query(EventPhoto).filter_by(event_id=event_id)
+    ] + [
+        ("video", v.id, v.sort_order)
+        for v in db.query(EventVideo).filter_by(event_id=event_id)
+    ]
+    return [(k, i) for k, i, _ in sorted(rows, key=lambda r: (r[2], r[0], r[1]))]
+
+
+def test_reorder_interleaves_photos_and_videos(ctx, db_session):
+    """The two tables hold one sequence, so a position has to be able to put
+    a video between two photos."""
+    client, login, event = ctx
+    p1 = _photo_row(db_session, event.id, 1)
+    p2 = _photo_row(db_session, event.id, 2)
+    video = EventVideo(
+        event_id=event.id,
+        kind=VideoKind.YOUTUBE,
+        status=VideoStatus.READY,
+        youtube_id="dQw4w9WgXcQ",
+    )
+    db_session.add(video)
+    db_session.commit()
+
+    login("author-pw")
+    r = client.put(
+        "/api/events/1/media/order",
+        json={
+            "items": [
+                {"type": "photo", "id": p1.id},
+                {"type": "video", "id": video.id},
+                {"type": "photo", "id": p2.id},
+            ]
+        },
+    )
+    assert r.status_code == 204, r.text
+    assert _order(db_session, event.id) == [
+        ("photo", p1.id),
+        ("video", video.id),
+        ("photo", p2.id),
+    ]
+
+
+def test_media_the_client_did_not_know_about_lands_after_the_listed_items(
+    ctx, db_session
+):
+    """Something uploaded between the client's read and its write must end up
+    after everything ordered, not wherever its old number happens to fall.
+
+    The unlisted row starts at sort_order 0, the same value the first listed
+    item is about to be given — so leaving it alone would put it second,
+    decided by a tiebreaker rather than by anything the user asked for.
+    """
+    client, login, event = ctx
+    p1 = _photo_row(db_session, event.id, 1, order=5)
+    p2 = _photo_row(db_session, event.id, 2, order=6)
+    unseen = EventVideo(
+        event_id=event.id,
+        kind=VideoKind.YOUTUBE,
+        status=VideoStatus.READY,
+        youtube_id="dQw4w9WgXcQ",
+        sort_order=0,
+    )
+    db_session.add(unseen)
+    db_session.commit()
+
+    login("author-pw")
+    r = client.put(
+        "/api/events/1/media/order",
+        json={
+            "items": [
+                {"type": "photo", "id": p2.id},
+                {"type": "photo", "id": p1.id},
+            ]
+        },
+    )
+    assert r.status_code == 204
+    assert _order(db_session, event.id) == [
+        ("photo", p2.id),
+        ("photo", p1.id),
+        ("video", unseen.id),
+    ]
+
+
+def test_reorder_rejects_media_from_another_event(ctx, db_session):
+    client, login, event = ctx
+    from app.models import Event
+
+    other = Event(
+        id=2, title="另一場", event_date=event.event_date, status=PostStatus.ACCEPTED
+    )
+    db_session.add(other)
+    db_session.flush()
+    foreign = _photo_row(db_session, other.id, 1)
+    db_session.commit()
+
+    login("author-pw")
+    r = client.put(
+        "/api/events/1/media/order",
+        json={"items": [{"type": "photo", "id": foreign.id}]},
+    )
+    assert r.status_code == 404
+
+
+def test_reorder_rejects_a_duplicated_item(ctx, db_session):
+    # Two positions for one row would make the resulting order depend on
+    # iteration order rather than on what the client asked for.
+    client, login, event = ctx
+    p1 = _photo_row(db_session, event.id, 1)
+    db_session.commit()
+
+    login("author-pw")
+    r = client.put(
+        "/api/events/1/media/order",
+        json={
+            "items": [
+                {"type": "photo", "id": p1.id},
+                {"type": "photo", "id": p1.id},
+            ]
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_a_member_who_is_not_the_author_cannot_reorder(ctx, db_session):
+    client, login, event = ctx
+    p1 = _photo_row(db_session, event.id, 1)
+    db_session.commit()
+
+    login("other-pw")
+    r = client.put(
+        "/api/events/1/media/order",
+        json={"items": [{"type": "photo", "id": p1.id}]},
+    )
+    assert r.status_code == 403

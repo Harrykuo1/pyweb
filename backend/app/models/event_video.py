@@ -79,6 +79,10 @@ class EventVideo(Base):
         index=True,
     )
     caption: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Shares one sequence with event_photos.sort_order — see the note there.
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0", index=True
+    )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

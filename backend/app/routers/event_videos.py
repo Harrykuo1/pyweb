@@ -33,11 +33,20 @@ from app.core.runtime_config import get_int
 from app.core.uploads import stream_to_disk
 from app.core.youtube import parse_video_id
 from app.database import SessionLocal, get_db
-from app.models import Event, EventVideo, User, UserRole, VideoKind, VideoStatus
+from app.models import (
+    Event,
+    EventPhoto,
+    EventVideo,
+    User,
+    UserRole,
+    VideoKind,
+    VideoStatus,
+)
 from app.schemas import (
     EventVideoCaptionUpdate,
     EventVideoLinkCreate,
     EventVideoResponse,
+    MediaOrderUpdate,
     PasswordConfirmRequest,
 )
 
@@ -302,6 +311,65 @@ def add_youtube_video(
     db.commit()
     db.refresh(video)
     return _serialize(video, is_admin=current_user.role is UserRole.ADMIN)
+
+
+@router.put("/{event_id}/media/order", status_code=status.HTTP_204_NO_CONTENT)
+def reorder_media(
+    event_id: int,
+    payload: MediaOrderUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_posting_member),
+) -> Response:
+    """Rewrite the whole media order for one event.
+
+    Photos and videos live in separate tables but share one sequence, so the
+    request carries the complete order rather than a move. Renumbering
+    everything in a single transaction is what keeps the two halves from
+    drifting apart; a partial update could leave them describing different
+    orders with no way to tell which was right.
+
+    Anything the client omitted keeps its position after the listed items,
+    so a stale client cannot silently drop media it did not know about.
+    """
+    event = visible_event_or_404(db, event_id, current_user)
+    _require_event_editor(event, current_user)
+
+    photos = {p.id: p for p in db.query(EventPhoto).filter_by(event_id=event_id)}
+    videos = {v.id: v for v in db.query(EventVideo).filter_by(event_id=event_id)}
+
+    seen: set[tuple[str, int]] = set()
+    position = 0
+    for item in payload.items:
+        target = photos.get(item.id) if item.type == "photo" else videos.get(item.id)
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"找不到{'照片' if item.type == 'photo' else '影片'}",
+            )
+        key = (item.type, item.id)
+        if key in seen:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="順序中有重複的項目",
+            )
+        seen.add(key)
+        target.sort_order = position
+        position += 1
+
+    # Media uploaded between the client's read and this write is not in the
+    # list; it keeps a position after everything ordered rather than being
+    # renumbered to the front.
+    # Media uploaded between the client's read and this write is not in the
+    # list; it keeps a position after everything ordered rather than being
+    # renumbered to the front.
+    for kind, rows in (("photo", photos.values()), ("video", videos.values())):
+        for row in rows:
+            if (kind, row.id) not in seen:
+                row.sort_order = position
+                position += 1
+
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{event_id}/videos/{video_id}/file")

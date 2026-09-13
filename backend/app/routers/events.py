@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import extract, func
-from sqlalchemy.orm import Session
+from sqlalchemy import extract, func, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.deps import (
     require_admin,
@@ -79,21 +79,37 @@ def _tags_map(db: Session, event_ids: list[int]) -> dict[int, list[str]]:
 
 def _photo_aggregates(db: Session, event_ids: list[int]) -> dict[int, tuple[int, int]]:
     """Return {event_id: (photo_count, cover_photo_id)} in one query.
-    Cover is the earliest photo by id; events with no photos are absent
-    from the map so the caller defaults via dict.get."""
+
+    The cover follows the media order the editor arranged, so it is the first
+    photo by sort_order rather than the lowest id. It cannot be a video yet:
+    that would change what cover_photo_id means for the hover-peek strip and
+    for the "N 張照片" count, which is a separate change from ordering.
+
+    Events with no photos are absent from the map so the caller defaults via
+    dict.get.
+    """
     if not event_ids:
         return {}
+    inner = aliased(EventPhoto)
+    cover = (
+        select(inner.id)
+        .where(inner.event_id == EventPhoto.event_id)
+        .order_by(inner.sort_order, inner.id)
+        .limit(1)
+        .correlate(EventPhoto)
+        .scalar_subquery()
+    )
     rows = (
         db.query(
             EventPhoto.event_id,
             func.count(EventPhoto.id),
-            func.min(EventPhoto.id),
+            cover,
         )
         .filter(EventPhoto.event_id.in_(event_ids))
         .group_by(EventPhoto.event_id)
         .all()
     )
-    return {event_id: (count, cover) for event_id, count, cover in rows}
+    return {event_id: (count, cover_id) for event_id, count, cover_id in rows}
 
 
 def _author_names(db: Session, author_ids: list[int | None]) -> dict[int, str]:
