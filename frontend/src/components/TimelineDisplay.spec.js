@@ -102,16 +102,73 @@ describe('TimelineDisplay', () => {
     expect(offsets[2].text()).toBe('D+50')
   })
 
-  it('renders a negative D-N when an event is dated earlier than the first', () => {
-    // The editor preserves input order, so a user who enters Mar 6
-    // first and Feb 23 second is intentionally accepting D-11 on the
-    // second row. Formatter must show that honestly.
+  it('measures D+N from the earliest date, not from whichever row is first', () => {
+    // The anchor cannot be "row 0": a timeline may now open with a
+    // relative entry, which has no date at all, and reading the offset
+    // off that row left every D+N unanswerable. Saved timelines are
+    // sorted, so for them the two rules agree; this pins the rule that
+    // survives unsorted input.
     const wrapper = mountDisplay([
-      { date: '2025-03-06', event: 'first' },
+      { date: '2025-03-06', event: 'later' },
       { date: '2025-02-23', event: 'earlier' },
     ])
     const offsets = wrapper.findAll('[data-test="timeline-display-offset"]')
-    expect(offsets[0].text()).toBe('D+0')
-    expect(offsets[1].text()).toBe('D-11')
+    expect(offsets[0].text()).toBe('D+11')
+    expect(offsets[1].text()).toBe('D+0')
+  })
+})
+
+describe('TimelineDisplay — relative entries', () => {
+  it('shows a relative entry as its own D+N with no date', () => {
+    // The offset is what the writer recorded. Deriving a date for it
+    // would put a guess on the page beside things actually on record.
+    const wrapper = mountDisplay([
+      { date: '2025-03-01', event: '投遞履歷' },
+      { day_offset: 7, event: '線上測驗' },
+    ])
+    const dates = wrapper.findAll('[data-test="timeline-display-date"]')
+    const offsets = wrapper.findAll('[data-test="timeline-display-offset"]')
+
+    expect(dates).toHaveLength(1)
+    expect(dates[0].text()).toBe('2025/3/1')
+    expect(offsets.map((o) => o.text())).toEqual(['D+0', 'D+7'])
+  })
+
+  it('renders a timeline that opens with a relative entry', () => {
+    // This used to render nothing at all: the anchor was read off row 0,
+    // which has no date here, and the whole list was discarded.
+    const wrapper = mountDisplay([
+      { day_offset: 0, event: '投遞履歷' },
+      { day_offset: 7, event: '線上測驗' },
+      { date: '2025-03-22', event: '拿到 offer' },
+    ])
+    expect(wrapper.findAll('[data-test="timeline-display-item"]')).toHaveLength(
+      3,
+    )
+    expect(wrapper.text()).toContain('投遞履歷')
+  })
+
+  it('renders a timeline with no dates at all', () => {
+    const wrapper = mountDisplay([
+      { day_offset: -3, event: '看到職缺' },
+      { day_offset: 0, event: '投遞履歷' },
+    ])
+    const offsets = wrapper.findAll('[data-test="timeline-display-offset"]')
+    expect(offsets.map((o) => o.text())).toEqual(['D-3', 'D+0'])
+    expect(wrapper.findAll('[data-test="timeline-display-date"]')).toHaveLength(
+      0,
+    )
+  })
+
+  it('keeps a relative entry at the offset it was given', () => {
+    // Not recomputed against the dated rows: D+7 means seven days into
+    // the process as the writer counted it, whatever the dates say.
+    const wrapper = mountDisplay([
+      { date: '2025-03-01', event: '投遞履歷' },
+      { day_offset: 7, event: '線上測驗' },
+      { date: '2025-03-22', event: '拿到 offer' },
+    ])
+    const offsets = wrapper.findAll('[data-test="timeline-display-offset"]')
+    expect(offsets.map((o) => o.text())).toEqual(['D+0', 'D+7', 'D+21'])
   })
 })
