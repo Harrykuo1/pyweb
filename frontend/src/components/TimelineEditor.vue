@@ -5,7 +5,6 @@ import {
   ElDatePicker,
   ElIcon,
   ElInput,
-  ElMessageBox,
   ElRadioButton,
   ElRadioGroup,
 } from 'element-plus'
@@ -94,31 +93,40 @@ watch(
     if (_matchesCurrent(next)) return
     mode.value = _modeFor(next)
     rows.value = _hydrate(next)
-    if (mode.value === 'offset') _convertDatesToOffsets()
+    if (mode.value === 'offset') _seedOffsetsFromDates()
   },
   { immediate: true },
 )
 
+// Compares against what we would emit, not against the raw row. The row
+// also holds the inactive column's draft, which never leaves here —
+// comparing that would make every keystroke look like a foreign change
+// and re-hydrate, discarding the draft this whole design exists to keep.
 function _matchesCurrent(next) {
   if (!Array.isArray(next)) return false
   if (next.length !== rows.value.length) return false
   return next.every((entry, i) => {
     const r = rows.value[i]
+    if (!r) return false
     return (
-      r &&
-      r.date === (entry.date ?? null) &&
-      r.dayOffset === (entry.day_offset ?? null) &&
+      (mode.value === 'date' ? r.date : null) === (entry.date ?? null) &&
+      (mode.value === 'offset' ? r.dayOffset : null) ===
+        (entry.day_offset ?? null) &&
       r.event === (entry.event ?? '')
     )
   })
 }
 
+// A row holds both drafts; the mode decides which one is real. Masking
+// here rather than clearing as you switch is what makes switching safe:
+// go and look at the other column, come back, nothing is gone. The saved
+// entry still carries exactly one position, which is all the API allows.
 function emitToParent() {
   emit(
     'update:modelValue',
     rows.value.map(({ date, dayOffset, event }) => ({
-      date,
-      day_offset: dayOffset,
+      date: mode.value === 'date' ? date : null,
+      day_offset: mode.value === 'offset' ? dayOffset : null,
       event,
     })),
   )
@@ -139,59 +147,40 @@ function patchRow(index, patch) {
   emitToParent()
 }
 
-// A row only ever shows the input for the active mode, so each setter
-// clears the other side rather than leaving a row claiming both — which
-// the API refuses anyway.
 function setDate(index, value) {
-  patchRow(index, { date: value || null, dayOffset: null })
+  patchRow(index, { date: value || null })
 }
 
 function setDayOffset(index, value) {
-  patchRow(index, { dayOffset: _parseOffset(value), date: null })
+  patchRow(index, { dayOffset: _parseOffset(value) })
 }
 
-// Dates carry their offsets already — the viewer has always shown D+N
-// next to them — so this direction loses the calendar but invents
-// nothing. Measured from the earliest date, which is the D+0 a reader
-// sees.
-function _convertDatesToOffsets() {
+// Arriving in relative mode with dates already entered, fill the blank
+// offsets from them: an entry's distance from the earliest date is
+// exactly the D+N the viewer has always shown beside it, so this
+// invents nothing. Offsets already typed are left alone — they are the
+// more recent statement of intent for this column.
+function _seedOffsetsFromDates() {
   const earliest = rows.value
     .map((r) => r.date)
     .filter(Boolean)
     .sort()[0]
-  const base = earliest ? _parseISODate(earliest) : null
+  if (!earliest) return
+  const base = _parseISODate(earliest)
   rows.value = rows.value.map((r) => {
-    if (r.dayOffset !== null || !r.date || !base) {
-      return { ...r, date: null }
-    }
+    if (r.dayOffset !== null || !r.date) return r
     const days = Math.round((_parseISODate(r.date) - base) / 86400000)
-    return { ...r, date: null, dayOffset: days }
+    return { ...r, dayOffset: days }
   })
 }
 
-const hasRelativeContent = computed(() =>
-  rows.value.some((r) => r.dayOffset !== null),
-)
-
-async function setMode(next) {
+// No confirmation, because nothing is destroyed: the other column's
+// values stay in the row and come back when you switch back. Only what
+// is saved follows the mode.
+function setMode(next) {
   if (next === mode.value) return
-  // Going back to dates cannot convert: a calendar date would have to be
-  // invented for every row. Say so before throwing the numbers away.
-  if (next === 'date' && hasRelativeContent.value) {
-    try {
-      await ElMessageBox.confirm(
-        '改用日期後，已填的 D+ 天數會被清空，需要重新填寫日期。',
-        '改用日期？',
-        { confirmButtonText: '清空並改用日期', cancelButtonText: '取消' },
-      )
-    } catch {
-      return
-    }
-    rows.value = rows.value.map((r) => ({ ...r, dayOffset: null }))
-  } else if (next === 'offset') {
-    _convertDatesToOffsets()
-  }
   mode.value = next
+  if (next === 'offset') _seedOffsetsFromDates()
   emitToParent()
 }
 

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ElMessageBox } from 'element-plus'
 
 import TimelineEditor from './TimelineEditor.vue'
 
@@ -178,35 +177,64 @@ describe('TimelineEditor — one mode for the whole timeline', () => {
     expect(getValue().map((e) => e.day_offset)).toEqual([7, 0])
   })
 
-  it('asks before switching back to dates, because nothing can be converted', async () => {
-    // A calendar date would have to be invented for every row, so the
-    // offsets are simply lost — say so rather than wiping them quietly.
-    const confirm = vi
-      .spyOn(ElMessageBox, 'confirm')
-      .mockResolvedValue('confirm')
-    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
-    await switchTo(wrapper, 'date')
-
-    expect(confirm).toHaveBeenCalled()
-    expect(getValue()[0].day_offset).toBeNull()
-  })
-
-  it('keeps the offsets when that switch is cancelled', async () => {
-    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue(new Error('cancel'))
-    const { wrapper, getValue } = mountEditor([{ day_offset: 7, event: 'x' }])
-    await switchTo(wrapper, 'date')
-
-    expect(getValue()[0].day_offset).toBe(7)
-    expect(wrapper.findAll('[data-test="timeline-row-offset"]')).toHaveLength(1)
-  })
-
-  it('does not ask when there is nothing to lose', async () => {
-    const confirm = vi.spyOn(ElMessageBox, 'confirm')
-    const { wrapper } = mountEditor([{ day_offset: null, event: '' }])
+  it('switching back and forth loses nothing', async () => {
+    // The whole point of holding both drafts: go and look at the other
+    // column, come back, and what you typed is still there. The earlier
+    // version wiped it on the way out and needed a warning to say so.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+      { date: '2025-03-08', event: '測驗' },
+    ])
     await switchTo(wrapper, 'offset')
+    await offsetInput(wrapper, 1).setValue('10')
     await switchTo(wrapper, 'date')
 
-    expect(confirm).not.toHaveBeenCalled()
+    // dates intact, and they are what gets saved in date mode
+    expect(getValue().map((e) => e.date)).toEqual(['2025-03-01', '2025-03-08'])
+    expect(getValue().every((e) => e.day_offset === null)).toBe(true)
+
+    await switchTo(wrapper, 'offset')
+    expect(offsetInput(wrapper, 1).element.value).toBe('10')
+  })
+
+  it('saves only the active column, so no entry ever claims both', async () => {
+    // The API refuses an entry carrying a date and an offset; the other
+    // draft has to stay behind rather than ride along.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+    ])
+    await switchTo(wrapper, 'offset')
+
+    expect(getValue()[0]).toEqual({ date: null, day_offset: 0, event: '投遞' })
+  })
+
+  it('does not re-seed an offset the editor already typed', async () => {
+    // Seeding is a convenience for a blank column, not a recomputation
+    // that overwrites what someone deliberately entered.
+    const { wrapper } = mountEditor([{ date: '2025-03-01', event: 'x' }])
+    await switchTo(wrapper, 'offset')
+    await offsetInput(wrapper, 0).setValue('5')
+    await switchTo(wrapper, 'date')
+    await switchTo(wrapper, 'offset')
+
+    expect(offsetInput(wrapper, 0).element.value).toBe('5')
+  })
+
+  it('keeps the hidden draft across edits to the visible column', async () => {
+    // Every keystroke re-emits, and the emitted row omits the hidden
+    // column — the hydration guard has to know that, or it re-reads the
+    // list as a foreign change and throws the draft away.
+    const { wrapper, getValue } = mountEditor([
+      { date: '2025-03-01', event: '投遞' },
+    ])
+    await switchTo(wrapper, 'offset')
+    await wrapper
+      .find('[data-test="timeline-row-event"] input')
+      .setValue('投遞履歷')
+    await switchTo(wrapper, 'date')
+
+    expect(getValue()[0].date).toBe('2025-03-01')
+    expect(getValue()[0].event).toBe('投遞履歷')
   })
 
   it('accepts the forms people actually type', async () => {
