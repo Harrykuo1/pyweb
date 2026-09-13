@@ -16,7 +16,11 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import require_completed_member, require_posting_member
+from app.core.deps import (
+    require_admin_password,
+    require_completed_member,
+    require_posting_member,
+)
 from app.core.event_media import event_uploads_dir, video_files
 from app.core.media import (
     MediaConversionError,
@@ -34,6 +38,7 @@ from app.schemas import (
     EventVideoCaptionUpdate,
     EventVideoLinkCreate,
     EventVideoResponse,
+    PasswordConfirmRequest,
 )
 
 router = APIRouter(prefix="/api/events", tags=["event_videos"])
@@ -387,13 +392,22 @@ def delete_video(
     db: Session = Depends(get_db),
     uploads_root: Path = Depends(get_uploads_root),
     current_user: User = Depends(require_posting_member),
+    payload: PasswordConfirmRequest | None = None,
 ) -> Response:
     event = visible_event_or_404(db, event_id, current_user)
     _require_event_editor(event, current_user)
     video = _get_video_or_404(db, event_id, video_id)
-    # No password confirmation here, unlike photos: the common case is
-    # clearing a failed upload, and making that require the admin password
-    # would leave the failure sitting on the page until an admin got to it.
+    # Same confirmation as photos. They sit in one grid with one delete
+    # button each, so two buttons that look identical and behave differently
+    # is the wrong kind of surprise. The author still deletes without a
+    # password; only an admin acting on someone else's event re-authenticates.
+    if current_user.role is UserRole.ADMIN:
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Password is required",
+            )
+        require_admin_password(db, payload.password)
     for path in video_files(video, uploads_root):
         path.unlink(missing_ok=True)
     db.delete(video)

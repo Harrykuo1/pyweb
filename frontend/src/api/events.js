@@ -116,10 +116,11 @@ export const eventsApi = {
     })
     return data
   },
-  async removeVideo(eventId, videoId) {
-    // No password confirmation, unlike photos: the common case is clearing a
-    // failed upload, which should not wait on an admin.
-    await client.delete(`/events/${eventId}/videos/${videoId}`)
+  async removeVideo(eventId, videoId, password) {
+    // Same shape as removePhoto: admins re-authenticate, the event's author
+    // does not. The two share a grid, so they cannot ask for different things.
+    const config = password ? { data: { password } } : undefined
+    await client.delete(`/events/${eventId}/videos/${videoId}`, config)
   },
   async addYoutubeVideo(eventId, url, caption) {
     const { data } = await client.post(`/events/${eventId}/videos/youtube`, {

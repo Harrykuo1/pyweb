@@ -267,6 +267,7 @@ def test_delete_removes_the_row_and_every_file_it_owns(
     )
     db_session.commit()
 
+    # The author owns the event, so no password — same rule as photos.
     assert client.delete(f"/api/events/1/videos/{vid}").status_code == 204
     assert db_session.query(EventVideo).count() == 0
     # Including the staging upload, which is the copy worth hundreds of MB.
@@ -339,3 +340,28 @@ def test_a_member_who_is_not_the_author_cannot_add_a_link(ctx):
         json={"url": "https://youtu.be/dQw4w9WgXcQ"},
     )
     assert r.status_code == 403
+
+
+def test_an_admin_must_confirm_a_video_deletion_with_the_password(ctx, db_session):
+    """Photos and videos sit in one grid with one delete button each, so the
+    two cannot ask for different things."""
+    client, login, event = ctx
+    video = EventVideo(
+        event_id=event.id,
+        kind=VideoKind.YOUTUBE,
+        status=VideoStatus.READY,
+        youtube_id="dQw4w9WgXcQ",
+    )
+    db_session.add(video)
+    db_session.commit()
+
+    login("admin-pw")
+    assert client.delete(f"/api/events/1/videos/{video.id}").status_code == 422
+
+    r = client.request(
+        "DELETE",
+        f"/api/events/1/videos/{video.id}",
+        json={"password": "admin-pw"},
+    )
+    assert r.status_code == 204
+    assert db_session.query(EventVideo).count() == 0
