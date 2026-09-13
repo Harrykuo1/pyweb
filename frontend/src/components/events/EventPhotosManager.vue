@@ -1,7 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ElButton, ElIcon, ElInput, ElMessage } from 'element-plus'
-import { Delete, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
+import {
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
+import { Delete, Link, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
 import { settingsApi } from '../../api/settings'
@@ -193,6 +199,38 @@ function pickVideo() {
   videoInputRef.value?.click()
 }
 
+async function addYoutubeLink() {
+  // The upload cap is about a minute of 4K; anything longer belongs on
+  // YouTube, where it costs no storage and no transcoding here.
+  let url
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '貼上 YouTube 連結，長影片建議用這個方式。',
+      '加入 YouTube 影片',
+      {
+        confirmButtonText: '加入',
+        cancelButtonText: '取消',
+        inputPlaceholder: 'https://youtu.be/...',
+      },
+    )
+    url = value
+  } catch {
+    return // cancelled
+  }
+  if (!url?.trim()) return
+
+  try {
+    await eventsApi.addYoutubeVideo(props.eventId, url.trim(), null)
+    ElMessage.success('已加入 YouTube 影片')
+    await load()
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 422) ElMessage.error('請貼上有效的 YouTube 連結')
+    else if (status === 409) ElMessage.error('影片數量已達上限')
+    else ElMessage.error('加入失敗，請稍後再試')
+  }
+}
+
 async function onVideoChosen(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
@@ -259,6 +297,14 @@ onMounted(() => {
         @click="pickVideo"
       >
         加入影片
+      </el-button>
+      <el-button
+        :icon="Link"
+        :disabled="atVideoCapacity || uploading"
+        data-test="add-youtube-button"
+        @click="addYoutubeLink"
+      >
+        YouTube 連結
       </el-button>
       <input
         ref="fileInputRef"

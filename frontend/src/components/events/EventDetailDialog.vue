@@ -384,10 +384,24 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <el-icon :size="26"><ArrowLeft /></el-icon>
         </button>
         <figure class="lb-figure">
+          <!-- src is rebuilt from the stored 11-character id, never from
+               anything a user typed. nocookie so YouTube's trackers stay off
+               the page unless the viewer actually plays it. -->
+          <iframe
+            v-if="lightboxItem?.embedUrl"
+            :key="lightboxItem.key"
+            :src="lightboxItem.embedUrl"
+            class="lb-embed"
+            title="YouTube 影片"
+            allow="accelerometer; encrypted-media; picture-in-picture"
+            allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"
+            data-test="lightbox-youtube"
+          ></iframe>
           <!-- controls only, no autoplay: a video that starts talking the
                moment a gallery opens is the worst version of this. -->
           <video
-            v-if="lightboxItem?.type === 'video' && lightboxItem.fileUrl"
+            v-else-if="lightboxItem?.type === 'video' && lightboxItem.fileUrl"
             :key="lightboxItem.key"
             :src="lightboxItem.fileUrl"
             :poster="lightboxItem.thumbUrl || undefined"
@@ -651,6 +665,15 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.lb-embed {
+  width: min(90vw, 1100px);
+  aspect-ratio: 16 / 9;
+  max-height: 80vh;
+  border: 0;
+  display: block;
+  background: #000;
 }
 
 .lb-figure video {

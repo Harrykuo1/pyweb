@@ -271,3 +271,71 @@ def test_delete_removes_the_row_and_every_file_it_owns(
     assert db_session.query(EventVideo).count() == 0
     # Including the staging upload, which is the copy worth hundreds of MB.
     assert list(event_dir.iterdir()) == []
+
+
+def test_a_youtube_link_is_stored_as_an_id_and_is_ready_at_once(ctx, db_session):
+    """Nothing to transcode, so it is watchable the moment it is saved — and
+    only the id survives, never the URL that was pasted."""
+    client, login, _ = ctx
+    login("author-pw")
+
+    r = client.post(
+        "/api/events/1/videos/youtube",
+        json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["kind"] == "youtube"
+    assert body["status"] == "ready"
+    assert body["youtube_id"] == "dQw4w9WgXcQ"
+
+    row = db_session.query(EventVideo).one()
+    assert row.youtube_id == "dQw4w9WgXcQ"
+    # A YouTube row owns no file; the CHECK constraint depends on this.
+    assert row.filename is None
+
+
+@pytest.mark.parametrize(
+    "label,url",
+    [
+        ("a javascript scheme", "javascript:alert(1)"),
+        ("a lookalike host", "https://youtube.com.evil.test/watch?v=dQw4w9WgXcQ"),
+        ("not a video page", "https://www.youtube.com/@someone"),
+    ],
+)
+def test_anything_that_is_not_a_youtube_video_is_refused(ctx, db_session, label, url):
+    client, login, _ = ctx
+    login("author-pw")
+    r = client.post("/api/events/1/videos/youtube", json={"url": url})
+    assert r.status_code == 422, label
+    assert db_session.query(EventVideo).count() == 0
+
+
+def test_youtube_links_share_the_per_event_video_limit(ctx, db_session):
+    # One limit covers both kinds: to a viewer they are the same thing on
+    # the page, whatever the storage costs behind it.
+    client, login, _ = ctx
+    db_session.add(AppConfig(key="max_videos_per_event", value="1"))
+    db_session.commit()
+    login("author-pw")
+
+    first = client.post(
+        "/api/events/1/videos/youtube",
+        json={"url": "https://youtu.be/dQw4w9WgXcQ"},
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/api/events/1/videos/youtube",
+        json={"url": "https://youtu.be/oHg5SJYRHA0"},
+    )
+    assert second.status_code == 409
+
+
+def test_a_member_who_is_not_the_author_cannot_add_a_link(ctx):
+    client, login, _ = ctx
+    login("other-pw")
+    r = client.post(
+        "/api/events/1/videos/youtube",
+        json={"url": "https://youtu.be/dQw4w9WgXcQ"},
+    )
+    assert r.status_code == 403

@@ -44,10 +44,24 @@ export function useEventMedia(getEventId) {
       durationSeconds: v.duration_seconds,
       errorDetail: v.error_detail,
       youtubeId: v.youtube_id,
-      // A row that is still transcoding, or failed, has no poster to show.
-      thumbUrl: v.has_poster ? eventsApi.videoPosterUrl(eventId(), v.id) : null,
       fileUrl:
-        v.status === 'ready' ? eventsApi.videoFileUrl(eventId(), v.id) : null,
+        v.kind === 'upload' && v.status === 'ready'
+          ? eventsApi.videoFileUrl(eventId(), v.id)
+          : null,
+      kind: v.kind,
+      // Rebuilt from the stored id rather than echoed from anything a user
+      // typed, so the only thing reaching an iframe src is 11 characters of
+      // a fixed alphabet. nocookie keeps YouTube's trackers off the page
+      // until the viewer actually presses play.
+      embedUrl: v.youtube_id
+        ? `https://www.youtube-nocookie.com/embed/${v.youtube_id}`
+        : null,
+      // YouTube serves its own thumbnail, so no poster is stored for it.
+      thumbUrl: v.youtube_id
+        ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
+        : v.has_poster
+          ? eventsApi.videoPosterUrl(eventId(), v.id)
+          : null,
       raw: v,
     })),
   ])

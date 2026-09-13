@@ -10,6 +10,7 @@ const PHOTOS = [{ id: 1, caption: '合照' }]
 function readyVideo(overrides = {}) {
   return {
     id: 7,
+    kind: 'upload',
     status: 'ready',
     caption: null,
     duration_seconds: 65,
@@ -148,5 +149,47 @@ describe('useEventMedia', () => {
     id = 2
     await api().load()
     expect(listVideos).toHaveBeenLastCalledWith(2)
+  })
+})
+
+describe('useEventMedia — YouTube references', () => {
+  it('builds the embed URL from the id rather than any stored URL', async () => {
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      readyVideo({
+        kind: 'youtube',
+        youtube_id: 'dQw4w9WgXcQ',
+        has_poster: false,
+      }),
+    ])
+    const { api } = host()
+    await api().load()
+
+    const video = api().items.value[1]
+    // nocookie, and assembled here — nothing a user typed reaches the src.
+    expect(video.embedUrl).toBe(
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+    )
+    // A reference owns no file on our side.
+    expect(video.fileUrl).toBeNull()
+    // YouTube supplies its own thumbnail, so none is stored.
+    expect(video.thumbUrl).toContain('img.youtube.com/vi/dQw4w9WgXcQ')
+  })
+
+  it('never polls for a YouTube reference', async () => {
+    // There is nothing to transcode, so the row is ready on arrival.
+    const listVideos = vi
+      .spyOn(eventsApi, 'listVideos')
+      .mockResolvedValue([
+        readyVideo({
+          kind: 'youtube',
+          youtube_id: 'dQw4w9WgXcQ',
+          has_poster: false,
+        }),
+      ])
+    const { api } = host()
+    await api().load()
+
+    await vi.advanceTimersByTimeAsync(30000)
+    expect(listVideos).toHaveBeenCalledTimes(1)
   })
 })

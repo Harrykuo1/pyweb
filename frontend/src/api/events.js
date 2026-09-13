@@ -121,6 +121,13 @@ export const eventsApi = {
     // failed upload, which should not wait on an admin.
     await client.delete(`/events/${eventId}/videos/${videoId}`)
   },
+  async addYoutubeVideo(eventId, url, caption) {
+    const { data } = await client.post(`/events/${eventId}/videos/youtube`, {
+      url,
+      caption,
+    })
+    return data
+  },
   videoFileUrl(eventId, videoId) {
     return `/api/events/${eventId}/videos/${videoId}/file`
   },

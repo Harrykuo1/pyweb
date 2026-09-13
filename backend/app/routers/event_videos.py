@@ -27,9 +27,14 @@ from app.core.media import (
 from app.core.post_visibility import visible_event_or_404
 from app.core.runtime_config import get_int
 from app.core.uploads import stream_to_disk
+from app.core.youtube import parse_video_id
 from app.database import SessionLocal, get_db
 from app.models import Event, EventVideo, User, UserRole, VideoKind, VideoStatus
-from app.schemas import EventVideoCaptionUpdate, EventVideoResponse
+from app.schemas import (
+    EventVideoCaptionUpdate,
+    EventVideoLinkCreate,
+    EventVideoResponse,
+)
 
 router = APIRouter(prefix="/api/events", tags=["event_videos"])
 
@@ -232,6 +237,65 @@ async def upload_video(
     # times the clip's length, which no browser upload would survive waiting
     # for. The client polls the list endpoint until the status flips.
     background_tasks.add_task(transcode_in_background, video.id, source, uploads_root)
+    return _serialize(video, is_admin=current_user.role is UserRole.ADMIN)
+
+
+@router.post(
+    "/{event_id}/videos/youtube",
+    response_model=EventVideoResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_youtube_video(
+    event_id: int,
+    payload: EventVideoLinkCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_posting_member),
+) -> EventVideoResponse:
+    """Reference a video on YouTube instead of hosting one.
+
+    Costs no storage and no transcoding, which is what makes it the answer
+    for anything longer than the upload cap allows. Only the parsed id is
+    kept — the pasted URL is never stored and never echoed back into an
+    iframe.
+    """
+    event = visible_event_or_404(db, event_id, current_user)
+    _require_event_editor(event, current_user)
+
+    video_id = parse_video_id(payload.url)
+    if video_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="請貼上有效的 YouTube 連結",
+        )
+
+    max_count = get_int(db, "max_videos_per_event")
+    current_count = (
+        db.query(EventVideo)
+        .filter(
+            EventVideo.event_id == event_id,
+            EventVideo.status != VideoStatus.FAILED,
+        )
+        .count()
+    )
+    if current_count >= max_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"影片數量已達上限（最多 {max_count} 支）",
+        )
+
+    caption = payload.caption.strip() if payload.caption else ""
+    video = EventVideo(
+        event_id=event_id,
+        kind=VideoKind.YOUTUBE,
+        # Nothing to transcode, so it is watchable the moment it is saved.
+        status=VideoStatus.READY,
+        youtube_id=video_id,
+        caption=caption or None,
+        uploaded_at=datetime.now(UTC),
+    )
+    db.add(video)
+    db.commit()
+    db.refresh(video)
     return _serialize(video, is_admin=current_user.role is UserRole.ADMIN)
 
 

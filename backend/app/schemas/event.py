@@ -137,3 +137,10 @@ class EventVideoResponse(BaseModel):
 
 class EventVideoCaptionUpdate(BaseModel):
     caption: str | None = Field(default=None, max_length=200)
+
+
+class EventVideoLinkCreate(BaseModel):
+    # Bounded because only the parsed id is kept; the raw string exists just
+    # long enough to run through the parser.
+    url: str = Field(min_length=1, max_length=500)
+    caption: str | None = Field(default=None, max_length=200)
