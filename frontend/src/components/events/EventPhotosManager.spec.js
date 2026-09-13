@@ -302,6 +302,22 @@ describe('EventPhotosManager — videos in the grid', () => {
     expect(wrapper.findAll('[data-test="manager-video-flag"]')).toHaveLength(2)
   })
 
+  it('flags the first item with a thumbnail as the cover, not the first item', async () => {
+    // A clip still transcoding has no poster, so the card falls through to
+    // the next item — the star has to say the same thing the card shows.
+    vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([
+      { ...VIDEOS[1], sort_order: 0 },
+    ])
+    const wrapper = await mountManager(
+      PHOTOS.map((p, i) => ({ ...p, sort_order: i + 1 })),
+    )
+
+    const cells = wrapper.findAll('[data-test="photo-cell"]')
+    expect(cells[0].attributes('data-media-type')).toBe('video')
+    expect(cells[0].find('.cover-flag').exists()).toBe(false)
+    expect(cells[1].find('.cover-flag').exists()).toBe(true)
+  })
+
   it('sends a caption edit to the video endpoint, not the photo one', async () => {
     vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([VIDEOS[0]])
     const updateVideo = vi

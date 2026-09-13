@@ -1,11 +1,12 @@
 import shutil
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import extract, func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import extract, func
+from sqlalchemy.orm import Session
 
 from app.core.deps import (
     require_admin,
@@ -22,10 +23,12 @@ from app.models import (
     EventLike,
     EventPhoto,
     EventTag,
+    EventVideo,
     Member,
     PostStatus,
     User,
     UserRole,
+    VideoStatus,
 )
 from app.routers.event_photos import get_uploads_root
 from app.schemas import (
@@ -77,39 +80,99 @@ def _tags_map(db: Session, event_ids: list[int]) -> dict[int, list[str]]:
     return out
 
 
-def _photo_aggregates(db: Session, event_ids: list[int]) -> dict[int, tuple[int, int]]:
-    """Return {event_id: (photo_count, cover_photo_id)} in one query.
+@dataclass(frozen=True)
+class MediaSummary:
+    """What the timeline card needs to know about an event's media."""
 
-    The cover follows the media order the editor arranged, so it is the first
-    photo by sort_order rather than the lowest id. It cannot be a video yet:
-    that would change what cover_photo_id means for the hover-peek strip and
-    for the "N 張照片" count, which is a separate change from ordering.
+    photo_count: int
+    media_count: int
+    cover_type: str | None
+    cover_id: int | None
+    # Set when the cover is a YouTube link: its thumbnail lives on YouTube's
+    # CDN, not on our disk, so the card builds a different URL.
+    cover_youtube_id: str | None
 
-    Events with no photos are absent from the map so the caller defaults via
-    dict.get.
+
+class _MediaRow(NamedTuple):
+    """One photo or video, ordered by the leading three fields."""
+
+    sort_order: int
+    type: str
+    id: int
+    has_thumbnail: bool
+    youtube_id: str | None
+
+
+def _media_summaries(db: Session, event_ids: list[int]) -> dict[int, MediaSummary]:
+    """Counts and cover for each event, in two queries.
+
+    The cover is the first item in the arranged order that has a thumbnail —
+    a clip can open an event the same way a photo can, and a video-only event
+    would otherwise show an empty card. One still transcoding has no poster
+    frame yet, so the cover falls through to the next item rather than
+    pointing the card at an image that 404s; it still counts, because the
+    event does hold it.
+
+    Failed videos are left out entirely: they hold nothing to show, and
+    counting them would have a card promise media it cannot display.
+
+    Events with no media are absent so the caller can default.
     """
     if not event_ids:
         return {}
-    inner = aliased(EventPhoto)
-    cover = (
-        select(inner.id)
-        .where(inner.event_id == EventPhoto.event_id)
-        .order_by(inner.sort_order, inner.id)
-        .limit(1)
-        .correlate(EventPhoto)
-        .scalar_subquery()
-    )
-    rows = (
-        db.query(
-            EventPhoto.event_id,
-            func.count(EventPhoto.id),
-            cover,
-        )
+
+    # Columns only: a list page walks every photo of every event on it, and
+    # hydrating ORM instances to read a few fields is pure overhead.
+    photos = (
+        db.query(EventPhoto.event_id, EventPhoto.id, EventPhoto.sort_order)
         .filter(EventPhoto.event_id.in_(event_ids))
-        .group_by(EventPhoto.event_id)
         .all()
     )
-    return {event_id: (count, cover_id) for event_id, count, cover_id in rows}
+    videos = (
+        db.query(
+            EventVideo.event_id,
+            EventVideo.id,
+            EventVideo.sort_order,
+            EventVideo.poster_filename,
+            EventVideo.youtube_id,
+        )
+        .filter(
+            EventVideo.event_id.in_(event_ids),
+            EventVideo.status != VideoStatus.FAILED,
+        )
+        .all()
+    )
+
+    per_event: dict[int, list[_MediaRow]] = {}
+    photo_counts: dict[int, int] = {}
+    for event_id, row_id, order in photos:
+        per_event.setdefault(event_id, []).append(
+            _MediaRow(order, "photo", row_id, True, None)
+        )
+        photo_counts[event_id] = photo_counts.get(event_id, 0) + 1
+    for event_id, row_id, order, poster, youtube_id in videos:
+        per_event.setdefault(event_id, []).append(
+            _MediaRow(
+                order,
+                "video",
+                row_id,
+                poster is not None or youtube_id is not None,
+                youtube_id,
+            )
+        )
+
+    out: dict[int, MediaSummary] = {}
+    for event_id, rows in per_event.items():
+        rows.sort()
+        cover = next((r for r in rows if r.has_thumbnail), None)
+        out[event_id] = MediaSummary(
+            photo_count=photo_counts.get(event_id, 0),
+            media_count=len(rows),
+            cover_type=cover.type if cover else None,
+            cover_id=cover.id if cover else None,
+            cover_youtube_id=cover.youtube_id if cover else None,
+        )
+    return out
 
 
 def _author_names(db: Session, author_ids: list[int | None]) -> dict[int, str]:
@@ -158,7 +221,10 @@ def _to_response(
     author_name: str | None,
     tags: list[str],
     photo_count: int,
-    cover_photo_id: int | None,
+    media_count: int,
+    cover_type: str | None,
+    cover_id: int | None,
+    cover_youtube_id: str | None,
     like_count: int,
     liked_by_me: bool,
 ) -> EventResponse:
@@ -177,7 +243,10 @@ def _to_response(
         created_at=event.created_at,
         tags=tags,
         photo_count=photo_count,
-        cover_photo_id=cover_photo_id,
+        media_count=media_count,
+        cover_media_type=cover_type,
+        cover_media_id=cover_id,
+        cover_youtube_id=cover_youtube_id,
         author_display_name=author_name,
         status=event.status.value,
         review_reason=event.review_reason if (is_admin or is_owner) else None,
@@ -193,12 +262,12 @@ def _serialize_many(
 ) -> list[EventResponse]:
     ids = [e.id for e in events]
     tags = _tags_map(db, ids)
-    aggregates = _photo_aggregates(db, ids)
+    summaries = _media_summaries(db, ids)
     authors = _author_names(db, [e.author_user_id for e in events])
     likes = _likes_map(db, ids, viewer_user_id)
     out = []
     for e in events:
-        count, cover = aggregates.get(e.id, (0, None))
+        summary = summaries.get(e.id)
         like_count, liked_by_me = likes.get(e.id, (0, False))
         out.append(
             _to_response(
@@ -207,8 +276,11 @@ def _serialize_many(
                 viewer_user_id=viewer_user_id,
                 author_name=authors.get(e.author_user_id),
                 tags=tags.get(e.id, []),
-                photo_count=count,
-                cover_photo_id=cover,
+                photo_count=summary.photo_count if summary else 0,
+                media_count=summary.media_count if summary else 0,
+                cover_type=summary.cover_type if summary else None,
+                cover_id=summary.cover_id if summary else None,
+                cover_youtube_id=summary.cover_youtube_id if summary else None,
                 like_count=like_count,
                 liked_by_me=liked_by_me,
             )
@@ -358,7 +430,10 @@ def create_event(
         author_name=names.get(obj.author_user_id),
         tags=payload.tags,
         photo_count=0,
-        cover_photo_id=None,
+        media_count=0,
+        cover_type=None,
+        cover_id=None,
+        cover_youtube_id=None,
         like_count=0,
         liked_by_me=False,
     )

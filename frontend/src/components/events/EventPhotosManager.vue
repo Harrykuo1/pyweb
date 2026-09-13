@@ -88,7 +88,7 @@ const serverMedia = computed(() =>
       key: `video-${v.id}`,
       row: v,
       thumbUrl: v.youtube_id
-        ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
+        ? eventsApi.youtubeThumbUrl(v.youtube_id)
         : v.has_poster
           ? eventsApi.videoPosterUrl(props.eventId, v.id)
           : null,
@@ -101,7 +101,11 @@ const serverMedia = computed(() =>
 
 const mediaItems = computed(() => localOrder.value ?? serverMedia.value)
 
-const { container: gridRef, saving: reordering } = useMediaReorder({
+// The card skips anything with no still to show — a clip mid-transcode, or a
+// failed one — so the star has to land where the cover actually lands.
+const coverKey = computed(() => mediaItems.value.find((m) => m.thumbUrl)?.key)
+
+const { container: gridRef } = useMediaReorder({
   getEventId: () => props.eventId,
   getItems: () => mediaItems.value,
   onReordered: (items) => {
@@ -136,10 +140,6 @@ async function loadLimits() {
     // Keep the defaults; the server rejects anything over its own limit
     // regardless, so the client copy is a courtesy, not the enforcement.
   }
-}
-
-function thumbUrl(p) {
-  return eventsApi.photoUrl(props.eventId, p.id)
 }
 
 function pickFiles() {
@@ -377,7 +377,7 @@ onMounted(() => {
     </div>
 
     <ul class="manager-tip">
-      <li>拖曳縮圖可調整順序，第一張照片會成為活動封面</li>
+      <li>拖曳縮圖可調整順序，排在第一個的就是活動封面</li>
       <li>
         照片 PNG / JPG / WebP / GIF / HEIC，單張上限
         {{ limits.max_photo_mb }} MB
@@ -405,7 +405,7 @@ onMounted(() => {
 
     <div v-else-if="mediaItems.length > 0" ref="gridRef" class="photo-grid">
       <figure
-        v-for="(m, idx) in mediaItems"
+        v-for="m in mediaItems"
         :key="m.key"
         class="photo-cell"
         data-test="photo-cell"
@@ -447,7 +447,7 @@ onMounted(() => {
             {{ m.isYoutube ? 'YouTube' : '影片' }}
           </span>
 
-          <span v-if="idx === 0" class="cover-flag">
+          <span v-if="m.key === coverKey" class="cover-flag">
             <el-icon :size="11"><Star /></el-icon>
             封面
           </span>

@@ -99,9 +99,17 @@ class EventResponse(BaseModel):
     # of triggering a per-row lazy load.
     tags: list[str] = Field(default_factory=list)
     photo_count: int = 0
-    # The cover thumbnail shown on the timeline — the earliest photo by id.
-    # None when the event has no photos yet.
-    cover_photo_id: int | None = None
+    # Photos plus ready videos: the card's badge answers "how much is in
+    # here", and an event holding only videos would otherwise read as empty.
+    media_count: int = 0
+    # The cover thumbnail shown on the timeline: the first item in the
+    # arranged order, whichever kind it is — a clip can open an event the
+    # same way a photo can. None until the event has media.
+    cover_media_type: Literal["photo", "video"] | None = None
+    cover_media_id: int | None = None
+    # Only for a YouTube cover: its thumbnail comes from YouTube's CDN
+    # rather than from the video-poster endpoint.
+    cover_youtube_id: str | None = None
     # Heart count + whether the current viewer has hearted it, stamped by the
     # router with grouped queries (no per-row lookup).
     like_count: int = 0

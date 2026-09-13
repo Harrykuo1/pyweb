@@ -63,7 +63,9 @@ const sample = [
     description_md: '很開心',
     tags: ['春酒', '聚餐'],
     photo_count: 3,
-    cover_photo_id: 10,
+    media_count: 3,
+    cover_media_type: 'photo',
+    cover_media_id: 10,
   },
   {
     id: 2,
@@ -73,7 +75,9 @@ const sample = [
     description_md: null,
     tags: ['出遊'],
     photo_count: 0,
-    cover_photo_id: null,
+    media_count: 0,
+    cover_media_type: null,
+    cover_media_id: null,
   },
 ]
 
@@ -331,5 +335,53 @@ describe('Events — filter params', () => {
     await vi.advanceTimersByTimeAsync(300)
     expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ q: '桌遊' }))
     vi.useRealTimers()
+  })
+})
+
+describe('Events.vue — video covers', () => {
+  it('uses the poster for a video cover and marks the card as playable', async () => {
+    // A card that opens into a player should say so before the click rather
+    // than surprising the viewer with one.
+    const wrapper = await mountPage([
+      {
+        ...sample[0],
+        media_count: 2,
+        photo_count: 1,
+        cover_media_type: 'video',
+        cover_media_id: 7,
+      },
+    ])
+    const entry = wrapper.findAll('[data-test="timeline-entry"]')[0]
+    expect(entry.find('.tl-thumb img').attributes('src')).toBe(
+      '/api/events/1/videos/7/poster',
+    )
+    expect(entry.find('.cover-play').exists()).toBe(true)
+  })
+
+  it('takes a YouTube cover thumbnail from YouTube, not the poster endpoint', async () => {
+    // A linked video has no poster on our disk, so asking for one would put
+    // a broken image on the card.
+    const wrapper = await mountPage([
+      {
+        ...sample[0],
+        cover_media_type: 'video',
+        cover_media_id: 7,
+        cover_youtube_id: 'dQw4w9WgXcQ',
+      },
+    ])
+    const entry = wrapper.findAll('[data-test="timeline-entry"]')[0]
+    expect(entry.find('.tl-thumb img').attributes('src')).toBe(
+      'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    )
+  })
+
+  it('counts videos in the card badge', async () => {
+    // photo_count alone would show 1 for an event holding a photo and two
+    // clips, and 0 — an empty-looking card — for one holding only video.
+    const wrapper = await mountPage([
+      { ...sample[0], photo_count: 1, media_count: 3 },
+    ])
+    const entry = wrapper.findAll('[data-test="timeline-entry"]')[0]
+    expect(entry.find('.photo-badge').text()).toContain('3')
   })
 })

@@ -141,6 +141,10 @@ export const eventsApi = {
   videoPosterUrl(eventId, videoId) {
     return `/api/events/${eventId}/videos/${videoId}/poster`
   },
+  // A linked video has no poster on our disk; YouTube serves the still.
+  youtubeThumbUrl(youtubeId) {
+    return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+  },
 
   // ---- comments ----
   async listComments(eventId) {

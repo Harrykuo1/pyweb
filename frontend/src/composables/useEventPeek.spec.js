@@ -27,7 +27,12 @@ describe('useEventPeek', () => {
   it('does not start a slideshow for events with fewer than 2 photos', async () => {
     const list = vi.spyOn(eventsApi, 'listPhotos')
     const vm = mountPeek().vm
-    vm.onCardEnter(fakeEnter, { id: 1, cover_photo_id: 10, photo_count: 1 })
+    vm.onCardEnter(fakeEnter, {
+      id: 1,
+      cover_media_type: 'photo',
+      cover_media_id: 10,
+      photo_count: 1,
+    })
     await flushPromises()
     expect(list).not.toHaveBeenCalled()
     expect(vm.peekLayers[1]).toBeUndefined()
@@ -45,7 +50,12 @@ describe('useEventPeek', () => {
     vi.useFakeTimers()
     const vm = mountPeek().vm
 
-    vm.onCardEnter(fakeEnter, { id: 1, cover_photo_id: 10, photo_count: 3 })
+    vm.onCardEnter(fakeEnter, {
+      id: 1,
+      cover_media_type: 'photo',
+      cover_media_id: 10,
+      photo_count: 3,
+    })
     await flushPromises() // resolve listPhotos, arm the interval
     // Layer record is initialized to the cover-only state.
     expect(vm.peekLayers[1]).toEqual({ a: null, b: null, active: 'a' })
@@ -53,6 +63,33 @@ describe('useEventPeek', () => {
     await vi.advanceTimersByTimeAsync(1800) // first tick paints a slide
     expect(vm.peekLayers[1].active).toBe('b')
     expect(vm.peekLayers[1].b).toBe('/api/events/1/photos/11')
+  })
+
+  it('includes the first photo when the cover is a video', async () => {
+    // The card shows a poster frame, so no photo is on screen yet — skipping
+    // the first one the way a photo cover requires would hide it entirely.
+    vi.spyOn(eventsApi, 'listPhotos').mockResolvedValue([
+      { id: 10 },
+      { id: 11 },
+    ])
+    vi.spyOn(eventsApi, 'photoUrl').mockImplementation(
+      (eid, pid) => `/api/events/${eid}/photos/${pid}`,
+    )
+    vi.useFakeTimers()
+    const vm = mountPeek().vm
+
+    vm.onCardEnter(fakeEnter, {
+      id: 1,
+      cover_media_type: 'video',
+      cover_media_id: 7,
+      photo_count: 2,
+    })
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(1800)
+    expect(vm.peekLayers[1].b).toBe('/api/events/1/photos/10')
+    await vi.advanceTimersByTimeAsync(1800)
+    expect(vm.peekLayers[1].a).toBe('/api/events/1/photos/11')
   })
 
   it('stops the interval on card leave', async () => {
@@ -65,7 +102,12 @@ describe('useEventPeek', () => {
     vi.useFakeTimers()
     const vm = mountPeek().vm
 
-    const ev = { id: 1, cover_photo_id: 10, photo_count: 3 }
+    const ev = {
+      id: 1,
+      cover_media_type: 'photo',
+      cover_media_id: 10,
+      photo_count: 3,
+    }
     vm.onCardEnter(fakeEnter, ev)
     await flushPromises()
     vm.onCardLeave(ev)

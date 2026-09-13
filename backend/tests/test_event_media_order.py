@@ -12,7 +12,7 @@ from app.models import (
     VideoKind,
     VideoStatus,
 )
-from app.routers.events import _photo_aggregates
+from app.routers.events import _media_summaries
 
 
 @pytest.fixture
@@ -43,11 +43,15 @@ def _photo(event_id, n, order):
 
 
 def _video(event_id, order):
+    # A READY upload always carries both files — the transcode writes them
+    # together and flips the status last.
     return EventVideo(
         event_id=event_id,
         kind=VideoKind.UPLOAD,
         status=VideoStatus.READY,
         sort_order=order,
+        filename="1.mp4",
+        poster_filename="1.jpg",
     )
 
 
@@ -107,9 +111,10 @@ def test_the_cover_follows_the_arranged_order_not_the_lowest_id(db_session, even
     db_session.add_all([first_uploaded, dragged_to_front])
     db_session.commit()
 
-    count, cover = _photo_aggregates(db_session, [event.id])[event.id]
-    assert count == 2
-    assert cover == dragged_to_front.id
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.photo_count == 2
+    assert summary.cover_id == dragged_to_front.id
+    assert summary.cover_type == "photo"
     assert dragged_to_front.id > first_uploaded.id  # so id order disagrees
 
 
@@ -121,5 +126,92 @@ def test_cover_falls_back_to_id_when_orders_tie(db_session, event):
     db_session.add_all([a, b])
     db_session.commit()
 
-    _, cover = _photo_aggregates(db_session, [event.id])[event.id]
-    assert cover == min(a.id, b.id)
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.cover_id == min(a.id, b.id)
+
+
+def test_a_video_can_be_the_cover(db_session, event):
+    """A clip opens an event the same way a photo can — the card shows its
+    poster rather than skipping to the first photo."""
+    db_session.add_all([_photo(event.id, 1, order=10), _video(event.id, order=5)])
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.cover_type == "video"
+    assert summary.media_count == 2
+    # The photo count still counts photos; the badge uses media_count.
+    assert summary.photo_count == 1
+
+
+def test_an_event_with_only_videos_is_not_empty(db_session, event):
+    # photo_count alone would be 0 and the card would render its empty state
+    # for an event that plainly has content.
+    db_session.add(_video(event.id, order=0))
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.media_count == 1
+    assert summary.cover_type == "video"
+
+
+def test_failed_videos_are_not_counted_or_shown_as_the_cover(db_session, event):
+    # A failed row holds nothing to display, so counting it would have the
+    # card promise media it cannot show.
+    failed = _video(event.id, order=0)
+    failed.status = VideoStatus.FAILED
+    db_session.add_all([failed, _photo(event.id, 1, order=10)])
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.media_count == 1
+    assert summary.cover_type == "photo"
+
+
+def test_a_video_still_transcoding_does_not_become_the_cover(db_session, event):
+    """It has no poster frame yet, so pointing the card at one would render a
+    broken image until the transcode lands."""
+    processing = _video(event.id, order=0)
+    processing.status = VideoStatus.PROCESSING
+    processing.filename = None
+    processing.poster_filename = None
+    db_session.add_all([processing, _photo(event.id, 1, order=10)])
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.cover_type == "photo"
+    # It is still part of the event, so the card counts it.
+    assert summary.media_count == 2
+
+
+def test_a_youtube_cover_carries_its_id_for_the_thumbnail(db_session, event):
+    # Its thumbnail lives on YouTube's CDN; without the id the card would ask
+    # our poster endpoint for a file that does not exist.
+    link = EventVideo(
+        event_id=event.id,
+        kind=VideoKind.YOUTUBE,
+        status=VideoStatus.READY,
+        sort_order=0,
+        youtube_id="dQw4w9WgXcQ",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.cover_type == "video"
+    assert summary.cover_youtube_id == "dQw4w9WgXcQ"
+
+
+def test_an_event_whose_only_media_is_transcoding_has_no_cover(db_session, event):
+    # Nothing to show yet, so the card renders its empty state rather than a
+    # broken thumbnail — but the count tells the uploader it arrived.
+    processing = _video(event.id, order=0)
+    processing.status = VideoStatus.PROCESSING
+    processing.filename = None
+    processing.poster_filename = None
+    db_session.add(processing)
+    db_session.commit()
+
+    summary = _media_summaries(db_session, [event.id])[event.id]
+    assert summary.cover_type is None
+    assert summary.cover_id is None
+    assert summary.media_count == 1

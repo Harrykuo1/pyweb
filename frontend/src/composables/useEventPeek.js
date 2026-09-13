@@ -37,6 +37,12 @@ export function useEventPeek() {
     tlProgress.value = Math.max(0, Math.min(1, nodeY / tlRect.height))
   }
 
+  // The card cover can be a video, whose poster frame is not one of these
+  // photos — then nothing in the album is on screen yet.
+  function coverPhotoId(ev) {
+    return ev.cover_media_type === 'photo' ? ev.cover_media_id : null
+  }
+
   const peekUrls = new Map() // ev.id -> [url, ...] | null (none/failed)
   const peekTimers = new Map() // ev.id -> intervalId
   // ev.id -> { a: url|null, b: url|null, active: 'a'|'b' }
@@ -52,10 +58,11 @@ export function useEventPeek() {
     peekUrls.set(ev.id, null) // in-flight sentinel
     try {
       const photos = await eventsApi.listPhotos(ev.id)
+      const coverId = coverPhotoId(ev)
       // Cover first, then the rest, so the slideshow walks the whole album.
       const ordered = [
-        ...photos.filter((p) => p.id === ev.cover_photo_id),
-        ...photos.filter((p) => p.id !== ev.cover_photo_id),
+        ...photos.filter((p) => p.id === coverId),
+        ...photos.filter((p) => p.id !== coverId),
       ]
       const urls = ordered.map((p) => eventsApi.photoUrl(ev.id, p.id))
       peekUrls.set(ev.id, urls.length > 1 ? urls : null)
@@ -68,18 +75,19 @@ export function useEventPeek() {
 
   async function startPeek(ev) {
     if (reducedMotion) return
-    if (!ev?.cover_photo_id || ev.photo_count < 2) return
+    if (!ev?.cover_media_id || ev.photo_count < 2) return
     if (peekTimers.has(ev.id)) return // already running
     const urls = await loadPeekUrls(ev)
     if (!urls || urls.length < 2) return
-    // With 2+ non-cover photos, loop ONLY the real photos so the last
-    // cross-dissolves straight back to the first (no dwell on the cover).
-    // With a single extra photo, alternate it with the cover so there are
-    // still two frames to animate between.
-    const rest = urls.slice(1)
-    const slides = rest.length >= 2 ? rest : urls
-    // startI is chosen so the very first tick lands on the first real photo.
-    let i = slides === urls ? 0 : -1
+    // Photos the card is not already showing.
+    const unseen = coverPhotoId(ev) ? urls.slice(1) : urls
+    // With 2+ of them, loop ONLY those so the last cross-dissolves straight
+    // back to the first (no dwell on the cover). With a single one there is
+    // nothing to dissolve between, so alternate it with the cover instead.
+    const slides = unseen.length >= 2 ? unseen : urls
+    // Start one before the first unseen photo so the very first tick lands
+    // on it rather than on something already on screen.
+    let i = slides.indexOf(unseen[0]) - 1
     // Fresh start: cover only (no peek layers yet) until the first tick.
     peekLayers.value = {
       ...peekLayers.value,

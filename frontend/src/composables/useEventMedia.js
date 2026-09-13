@@ -71,7 +71,7 @@ export function useEventMedia(getEventId) {
           : null,
         // YouTube serves its own thumbnail, so no poster is stored for it.
         thumbUrl: v.youtube_id
-          ? `https://img.youtube.com/vi/${v.youtube_id}/hqdefault.jpg`
+          ? eventsApi.youtubeThumbUrl(v.youtube_id)
           : v.has_poster
             ? eventsApi.videoPosterUrl(eventId(), v.id)
             : null,
@@ -106,9 +106,8 @@ export function useEventMedia(getEventId) {
     try {
       videos.value = await eventsApi.listVideos(eventId())
     } catch {
-      // A transient failure should not kill the poll loop; the next tick
-      // retries. A persistent one stops it via the status check below.
-      videos.value = videos.value
+      // A transient failure should not kill the poll loop: keep the last
+      // good list and let the next tick retry.
     }
     syncPolling()
   }
