@@ -24,7 +24,9 @@ const sample = {
   created_at: '2026-03-16T00:00:00+00:00',
   tags: ['春酒', '聚餐'],
   photo_count: 2,
-  cover_photo_id: 10,
+  media_count: 2,
+  cover_media_type: 'photo',
+  cover_media_id: 10,
   like_count: 3,
   liked_by_me: false,
 }
@@ -161,6 +163,23 @@ describe('EventDetailDialog — header', () => {
     expect(wrapper.find('[data-test="detail-location"]').text()).toContain(
       '台北',
     )
+  })
+
+  it('counts clips separately from photos in the header meta', async () => {
+    // media_count mixes both, so showing it raw next to the photo icon would
+    // claim an event with 2 photos and a clip holds 3 photos.
+    const wrapper = await mountDialog({
+      event: { ...sample, photo_count: 2, media_count: 3 },
+    })
+    expect(wrapper.find('[data-test="detail-videos"]').text()).toContain(
+      '1 部影片',
+    )
+    expect(wrapper.text()).toContain('2 張照片')
+  })
+
+  it('omits the clip count for an event that has none', async () => {
+    const wrapper = await mountDialog()
+    expect(wrapper.find('[data-test="detail-videos"]').exists()).toBe(false)
   })
 })
 

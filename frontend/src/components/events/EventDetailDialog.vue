@@ -10,6 +10,7 @@ import {
   Location,
   Picture,
   User,
+  VideoCamera,
 } from '@element-plus/icons-vue'
 import { MdPreview } from 'md-editor-v3'
 import { sanitizeHtml } from '../../utils/sanitizeHtml'
@@ -113,6 +114,12 @@ const { items: mediaItems, loading: loadingPhotos } = media
 // from that watcher would hit the temporal dead zone during setup.
 const lightboxIndex = ref(-1)
 
+// media_count covers photos and playable videos alike; the difference is
+// what the event holds in clips.
+const videoCount = computed(
+  () => (props.event?.media_count ?? 0) - (props.event?.photo_count ?? 0),
+)
+
 const hasDescription = computed(
   () =>
     !!props.event?.description_md &&
@@ -139,10 +146,6 @@ watch(
   },
   { immediate: true },
 )
-
-function photoUrl(p) {
-  return eventsApi.photoUrl(props.event.id, p.id)
-}
 
 // A tile that is still transcoding has nothing to open.
 function openMedia(item) {
@@ -262,6 +265,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <span v-if="event.photo_count" class="meta-item">
             <el-icon :size="14"><Picture /></el-icon>
             {{ event.photo_count }} 張照片
+          </span>
+          <span
+            v-if="videoCount > 0"
+            class="meta-item"
+            data-test="detail-videos"
+          >
+            <el-icon :size="14"><VideoCamera /></el-icon>
+            {{ videoCount }} 部影片
           </span>
         </div>
       </div>
