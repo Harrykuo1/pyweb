@@ -53,6 +53,8 @@ const PHOTOS = [
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(eventsApi, 'listPhotos').mockResolvedValue(PHOTOS)
+  // The gallery now merges photos with videos, so both endpoints are hit.
+  vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([])
   // The embedded comment section fetches on open; stub it so these tests
   // don't hit the real client.
   vi.spyOn(eventsApi, 'listComments').mockResolvedValue([])

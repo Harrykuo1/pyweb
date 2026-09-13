@@ -93,6 +93,41 @@ export const eventsApi = {
     return `/api/events/${eventId}/photos/${photoId}`
   },
 
+  // ---- videos ----
+  async listVideos(eventId) {
+    const { data } = await client.get(`/events/${eventId}/videos`)
+    return data
+  },
+  async uploadVideo(eventId, file, caption, onProgress) {
+    const form = new FormData()
+    form.append('file', file)
+    if (caption) form.append('caption', caption)
+    // A video is orders of magnitude larger than a photo — minutes on a home
+    // connection — so this upload reports progress rather than just spinning.
+    const { data } = await client.post(`/events/${eventId}/videos`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress,
+    })
+    return data
+  },
+  async updateVideoCaption(eventId, videoId, caption) {
+    const { data } = await client.put(`/events/${eventId}/videos/${videoId}`, {
+      caption,
+    })
+    return data
+  },
+  async removeVideo(eventId, videoId) {
+    // No password confirmation, unlike photos: the common case is clearing a
+    // failed upload, which should not wait on an admin.
+    await client.delete(`/events/${eventId}/videos/${videoId}`)
+  },
+  videoFileUrl(eventId, videoId) {
+    return `/api/events/${eventId}/videos/${videoId}/file`
+  },
+  videoPosterUrl(eventId, videoId) {
+    return `/api/events/${eventId}/videos/${videoId}/poster`
+  },
+
   // ---- comments ----
   async listComments(eventId) {
     const { data } = await client.get(`/events/${eventId}/comments`)

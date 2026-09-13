@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import EventPhotosManager from './EventPhotosManager.vue'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { eventsApi } from '../../api/events'
+import { settingsApi } from '../../api/settings'
 
 function setNativeValue(el, value) {
   el.value = value
@@ -50,8 +51,21 @@ const PHOTOS = [
   },
 ]
 
+const MOCK_PHOTO_MB = 15
+
 beforeEach(() => {
   setActivePinia(createPinia())
+  // The manager now also lists videos and reads the admin-tunable limits;
+  // without these the component reaches for a real server.
+  vi.spyOn(eventsApi, 'listVideos').mockResolvedValue([])
+  vi.spyOn(settingsApi, 'getConfig').mockResolvedValue({
+    fields: [
+      { key: 'max_photos_per_event', value: 30, group: 'event' },
+      { key: 'max_photo_mb', value: MOCK_PHOTO_MB, group: 'event' },
+      { key: 'max_videos_per_event', value: 5, group: 'event' },
+      { key: 'max_video_mb', value: 240, group: 'event' },
+    ],
+  })
 })
 
 afterEach(() => {
@@ -141,8 +155,11 @@ describe('EventPhotosManager', () => {
     const file = new File([new Uint8Array([1])], 'huge.png', {
       type: 'image/png',
     })
+    // Derived from the mocked config rather than a literal: the cap is
+    // admin-tunable now, so a hard-coded number here would just re-create
+    // the stale-copy problem the component was changed to avoid.
     Object.defineProperty(file, 'size', {
-      value: 8 * 1024 * 1024 + 1,
+      value: MOCK_PHOTO_MB * 1024 * 1024 + 1,
       configurable: true,
     })
     const input = wrapper.find('[data-test="photo-file-input"]')

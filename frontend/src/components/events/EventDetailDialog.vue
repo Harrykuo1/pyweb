@@ -16,6 +16,8 @@ import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import 'md-editor-v3/lib/preview.css'
 
 import { eventsApi } from '../../api/events'
+import { useEventMedia } from '../../composables/useEventMedia'
+import EventMediaTile from './EventMediaTile.vue'
 import CommentThread from '../CommentThread.vue'
 import LikeButton from '../LikeButton.vue'
 import LikersDialog from '../LikersDialog.vue'
@@ -101,8 +103,11 @@ const STATUS_META = {
   rejected: { label: '已退回', cls: 'is-rejected' },
 }
 
-const photos = ref([])
-const loadingPhotos = ref(false)
+// Photos and videos render as one grid — a ready video is a poster frame
+// until it is clicked, so separating them would only make the viewer pick
+// which half to look in.
+const media = useEventMedia(() => props.event?.id)
+const { items: mediaItems, loading: loadingPhotos } = media
 // Declared up here (not in the lightbox section below) because the
 // immediate modelValue watcher resets it on close — a forward reference
 // from that watcher would hit the temporal dead zone during setup.
@@ -116,23 +121,19 @@ const hasDescription = computed(
 
 async function loadPhotos() {
   if (!props.event) return
-  loadingPhotos.value = true
-  try {
-    photos.value = await eventsApi.listPhotos(props.event.id)
-  } catch {
-    photos.value = []
-  } finally {
-    loadingPhotos.value = false
-  }
+  await media.load()
 }
 
 watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      photos.value = []
+      media.reset()
       loadPhotos()
     } else {
+      // Closing the dialog must stop the transcode poll too, or it keeps
+      // firing against an event nobody is looking at.
+      media.reset()
       lightboxIndex.value = -1
     }
   },
@@ -141,6 +142,12 @@ watch(
 
 function photoUrl(p) {
   return eventsApi.photoUrl(props.event.id, p.id)
+}
+
+// A tile that is still transcoding has nothing to open.
+function openMedia(item) {
+  const idx = mediaItems.value.findIndex((m) => m.key === item.key)
+  if (idx >= 0) openLightbox(idx)
 }
 
 function close() {
@@ -166,8 +173,8 @@ function formatDate(iso) {
 
 // ---------- lightbox ----------
 const lightboxOpen = computed(() => lightboxIndex.value >= 0)
-const lightboxPhoto = computed(() =>
-  lightboxIndex.value >= 0 ? photos.value[lightboxIndex.value] : null,
+const lightboxItem = computed(() =>
+  lightboxIndex.value >= 0 ? mediaItems.value[lightboxIndex.value] : null,
 )
 
 function openLightbox(idx) {
@@ -177,13 +184,14 @@ function closeLightbox() {
   lightboxIndex.value = -1
 }
 function prevPhoto() {
-  if (photos.value.length === 0) return
-  lightboxIndex.value =
-    (lightboxIndex.value - 1 + photos.value.length) % photos.value.length
+  const n = mediaItems.value.length
+  if (n === 0) return
+  lightboxIndex.value = (lightboxIndex.value - 1 + n) % n
 }
 function nextPhoto() {
-  if (photos.value.length === 0) return
-  lightboxIndex.value = (lightboxIndex.value + 1) % photos.value.length
+  const n = mediaItems.value.length
+  if (n === 0) return
+  lightboxIndex.value = (lightboxIndex.value + 1) % n
 }
 
 function onKeydown(e) {
@@ -277,26 +285,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         ></div>
       </div>
       <div
-        v-else-if="photos.length > 0"
+        v-else-if="mediaItems.length > 0"
         class="gallery"
         data-test="detail-gallery"
       >
-        <button
-          v-for="(p, idx) in photos"
-          :key="p.id"
-          type="button"
-          class="gallery-cell"
-          :aria-label="p.caption || `查看第 ${idx + 1} 張照片`"
-          data-test="gallery-thumb"
-          @click="openLightbox(idx)"
-        >
-          <img
-            :src="photoUrl(p)"
-            :alt="p.caption || '活動照片'"
-            loading="lazy"
-          />
-          <span v-if="p.caption" class="cell-caption">{{ p.caption }}</span>
-        </button>
+        <div v-for="m in mediaItems" :key="m.key" class="gallery-cell-wrap">
+          <EventMediaTile :item="m" @open="openMedia" />
+          <span v-if="m.caption" class="cell-caption">{{ m.caption }}</span>
+        </div>
       </div>
 
       <!-- Description -->
@@ -315,7 +311,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
       </div>
 
       <div
-        v-else-if="!loadingPhotos && photos.length === 0"
+        v-else-if="!loadingPhotos && mediaItems.length === 0"
         class="detail-empty"
         data-test="detail-empty"
       >
@@ -379,7 +375,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <el-icon :size="22"><Close /></el-icon>
         </button>
         <button
-          v-if="photos.length > 1"
+          v-if="mediaItems.length > 1"
           type="button"
           class="lb-btn lb-prev"
           aria-label="上一張"
@@ -388,20 +384,32 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <el-icon :size="26"><ArrowLeft /></el-icon>
         </button>
         <figure class="lb-figure">
+          <!-- controls only, no autoplay: a video that starts talking the
+               moment a gallery opens is the worst version of this. -->
+          <video
+            v-if="lightboxItem?.type === 'video' && lightboxItem.fileUrl"
+            :key="lightboxItem.key"
+            :src="lightboxItem.fileUrl"
+            :poster="lightboxItem.thumbUrl || undefined"
+            controls
+            playsinline
+            preload="metadata"
+            data-test="lightbox-video"
+          ></video>
           <img
-            v-if="lightboxPhoto"
-            :src="photoUrl(lightboxPhoto)"
-            :alt="lightboxPhoto.caption || '活動照片'"
+            v-else-if="lightboxItem"
+            :src="lightboxItem.thumbUrl"
+            :alt="lightboxItem.caption || '活動照片'"
           />
-          <figcaption v-if="lightboxPhoto?.caption" class="lb-caption">
-            {{ lightboxPhoto.caption }}
+          <figcaption v-if="lightboxItem?.caption" class="lb-caption">
+            {{ lightboxItem.caption }}
           </figcaption>
           <span class="lb-counter"
-            >{{ lightboxIndex + 1 }} / {{ photos.length }}</span
+            >{{ lightboxIndex + 1 }} / {{ mediaItems.length }}</span
           >
         </figure>
         <button
-          v-if="photos.length > 1"
+          v-if="mediaItems.length > 1"
           type="button"
           class="lb-btn lb-next"
           aria-label="下一張"
@@ -637,6 +645,19 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   background: rgba(8, 11, 22, 0.92);
   backdrop-filter: blur(6px);
   padding: 24px;
+}
+
+.gallery-cell-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lb-figure video {
+  max-width: 100%;
+  max-height: 80vh;
+  display: block;
+  background: #000;
 }
 
 .lb-figure {

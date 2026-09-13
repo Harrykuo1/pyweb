@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElButton, ElIcon, ElInput, ElMessage } from 'element-plus'
-import { Delete, Plus, Star } from '@element-plus/icons-vue'
+import { Delete, Plus, Star, VideoCamera } from '@element-plus/icons-vue'
 
 import { eventsApi } from '../../api/events'
+import { settingsApi } from '../../api/settings'
 import DeleteWithPasswordDialog from '../DeleteWithPasswordDialog.vue'
 import { useAuthStore } from '../../stores/auth'
 
@@ -15,26 +16,71 @@ const props = defineProps({
 // event's author (a non-admin managing their own event) deletes without one.
 const auth = useAuthStore()
 
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
-const MAX_PHOTOS = 30
-const MAX_MB = 8
+// HEIC is accepted and converted server-side: iPhones shoot it by default
+// and leaving it out meant rejecting a file the user had every reason to
+// think was a photo.
+const PHOTO_ACCEPT =
+  'image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif'
+const VIDEO_ACCEPT = 'video/*'
+
+// These used to be constants here, duplicating values the backend also held.
+// They are admin-tunable now, so a stale copy would reject client-side what
+// the server would have accepted. Defaults only cover the window before the
+// config request lands.
+const limits = ref({
+  max_photos_per_event: 30,
+  max_photo_mb: 15,
+  max_videos_per_event: 5,
+  max_video_mb: 240,
+})
 
 const photos = ref([])
+const videos = ref([])
 const loading = ref(true)
 const uploading = ref(false)
 const uploadStatus = ref('')
+const uploadPercent = ref(0)
 const fileInputRef = ref(null)
+const videoInputRef = ref(null)
 
-const atCapacity = computed(() => photos.value.length >= MAX_PHOTOS)
+const atCapacity = computed(
+  () => photos.value.length >= limits.value.max_photos_per_event,
+)
+// A failed row holds no video, so it must not count here either — the
+// backend excludes it, and a mismatch would block an upload the server
+// would have allowed.
+const videoCount = computed(
+  () => videos.value.filter((v) => v.status !== 'failed').length,
+)
+const atVideoCapacity = computed(
+  () => videoCount.value >= limits.value.max_videos_per_event,
+)
 
 async function load() {
   loading.value = true
   try {
-    photos.value = await eventsApi.listPhotos(props.eventId)
+    const [p, v] = await Promise.all([
+      eventsApi.listPhotos(props.eventId),
+      eventsApi.listVideos(props.eventId),
+    ])
+    photos.value = p
+    videos.value = v
   } catch {
-    ElMessage.error('載入照片失敗')
+    ElMessage.error('載入媒體失敗')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadLimits() {
+  try {
+    const config = await settingsApi.getConfig()
+    for (const field of config.fields ?? []) {
+      if (field.key in limits.value) limits.value[field.key] = field.value
+    }
+  } catch {
+    // Keep the defaults; the server rejects anything over its own limit
+    // regardless, so the client copy is a courtesy, not the enforcement.
   }
 }
 
@@ -52,18 +98,22 @@ async function onFilesChosen(event) {
   event.target.value = ''
   if (files.length === 0) return
 
-  const room = MAX_PHOTOS - photos.value.length
+  const room = limits.value.max_photos_per_event - photos.value.length
   const queued = files.slice(0, Math.max(0, room))
   if (files.length > queued.length) {
-    ElMessage.warning(`最多 ${MAX_PHOTOS} 張，僅上傳前 ${queued.length} 張`)
+    ElMessage.warning(
+      `最多 ${limits.value.max_photos_per_event} 張，僅上傳前 ${queued.length} 張`,
+    )
   }
 
   uploading.value = true
   let done = 0
   try {
     for (const file of queued) {
-      if (file.size > MAX_MB * 1024 * 1024) {
-        ElMessage.warning(`「${file.name}」超過 ${MAX_MB} MB，已略過`)
+      if (file.size > limits.value.max_photo_mb * 1024 * 1024) {
+        ElMessage.warning(
+          `「${file.name}」超過 ${limits.value.max_photo_mb} MB，已略過`,
+        )
         continue
       }
       uploadStatus.value = `上傳中 ${done + 1}/${queued.length}…`
@@ -139,14 +189,58 @@ async function onDeleteConfirm(password) {
   }
 }
 
-onMounted(load)
+function pickVideo() {
+  videoInputRef.value?.click()
+}
+
+async function onVideoChosen(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  if (file.size > limits.value.max_video_mb * 1024 * 1024) {
+    ElMessage.warning(
+      `「${file.name}」超過 ${limits.value.max_video_mb} MB，請先裁剪或降低畫質`,
+    )
+    return
+  }
+
+  uploading.value = true
+  uploadPercent.value = 0
+  uploadStatus.value = '影片上傳中…'
+  try {
+    await eventsApi.uploadVideo(props.eventId, file, null, (e) => {
+      if (e.total) uploadPercent.value = Math.round((e.loaded / e.total) * 100)
+    })
+    // The row comes back as "processing" — transcoding runs server-side and
+    // the grid polls for it, so the message says queued rather than done.
+    ElMessage.success('影片已上傳，轉檔完成後就能播放')
+    await load()
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 413) ElMessage.error('影片檔案過大')
+    else if (status === 415) ElMessage.error('不支援的影片格式')
+    else if (status === 409) ElMessage.error('影片數量已達上限')
+    else ElMessage.error('影片上傳失敗')
+  } finally {
+    uploading.value = false
+    uploadPercent.value = 0
+    uploadStatus.value = ''
+  }
+}
+
+onMounted(() => {
+  loadLimits()
+  load()
+})
 </script>
 
 <template>
   <div class="photos-manager" data-test="event-photos-manager">
     <div class="manager-head">
       <span class="count-hint">
-        {{ photos.length }} / {{ MAX_PHOTOS }} 張
+        {{ photos.length }} / {{ limits.max_photos_per_event }} 張 ·
+        {{ videoCount }} / {{ limits.max_videos_per_event }} 支影片
       </span>
       <el-button
         type="primary"
@@ -158,20 +252,46 @@ onMounted(load)
       >
         {{ uploading ? uploadStatus || '上傳中…' : '加入照片' }}
       </el-button>
+      <el-button
+        :icon="VideoCamera"
+        :disabled="atVideoCapacity || uploading"
+        data-test="add-video-button"
+        @click="pickVideo"
+      >
+        加入影片
+      </el-button>
       <input
         ref="fileInputRef"
         type="file"
-        :accept="ACCEPT"
+        :accept="PHOTO_ACCEPT"
         multiple
         hidden
         data-test="photo-file-input"
         @change="onFilesChosen"
       />
+      <input
+        ref="videoInputRef"
+        type="file"
+        :accept="VIDEO_ACCEPT"
+        hidden
+        data-test="video-file-input"
+        @change="onVideoChosen"
+      />
     </div>
 
     <p class="manager-tip">
-      第一張照片會成為活動封面。支援 PNG / JPG / WebP / GIF，單張上限
-      {{ MAX_MB }} MB。
+      第一張照片會成為活動封面。照片支援 PNG / JPG / WebP / GIF / HEIC，單張上限
+      {{ limits.max_photo_mb }} MB；影片單支上限
+      {{ limits.max_video_mb }} MB（約 4K 一分鐘或 1080p
+      四分鐘），上傳後需要一點 時間轉檔才能播放。
+    </p>
+
+    <p
+      v-if="uploading && uploadPercent > 0"
+      class="manager-tip"
+      data-test="video-upload-progress"
+    >
+      影片上傳中 {{ uploadPercent }}%
     </p>
 
     <div v-if="loading" class="photo-grid">
