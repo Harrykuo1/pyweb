@@ -22,14 +22,24 @@ def resolve_viewer_member_id(db: Session, user: User) -> int | None:
     return row[0] if row is not None else None
 
 
+def event_visibility_filter(user_id: int, *, is_admin: bool):
+    return (
+        True
+        if is_admin
+        else ((Event.status == PostStatus.ACCEPTED) | (Event.author_user_id == user_id))
+    )
+
+
 def visible_event_or_404(db: Session, event_id: int, user: User) -> Event:
-    event = db.query(Event).filter_by(id=event_id).one_or_none()
+    event = (
+        db.query(Event)
+        .filter(
+            Event.id == event_id,
+            event_visibility_filter(user.id, is_admin=user.role is UserRole.ADMIN),
+        )
+        .one_or_none()
+    )
     if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
-    is_admin = user.role is UserRole.ADMIN
-    is_owner = event.author_user_id is not None and event.author_user_id == user.id
-    # 404 rather than 403: a pending post's existence is itself private.
-    if not is_admin and event.status is not PostStatus.ACCEPTED and not is_owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到活動")
     return event
 

@@ -216,6 +216,7 @@ async def upload_photo(
         target.unlink(missing_ok=True)
         raise
 
+    event.mark_edited(current_user.id)
     db.commit()
     db.refresh(photo)
     return photo
@@ -234,6 +235,7 @@ def update_photo_caption(
     photo = _get_photo_or_404(db, event_id, photo_id)
     caption = payload.caption.strip() if payload.caption else ""
     photo.caption = caption or None
+    event.mark_edited(current_user.id)
     db.commit()
     db.refresh(photo)
     return photo
@@ -268,6 +270,7 @@ def delete_photo(
         file_path.unlink()
 
     db.delete(photo)
+    event.mark_edited(current_user.id)
     db.commit()
 
     # Reap the per-event directory once its last photo is gone.

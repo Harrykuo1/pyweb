@@ -12,6 +12,7 @@ import {
 import {
   ArrowDown,
   Calendar,
+  ChatDotRound,
   Loading,
   OfficeBuilding,
   Promotion,
@@ -20,6 +21,8 @@ import {
 
 import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
+import { eventsApi } from '../api/events'
+import { EVENT_ACTIVITY_LABELS, timelineItemKey } from '../utils/timeline'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
 import { useAuthStore } from '../stores/auth'
@@ -190,6 +193,8 @@ function handleClick(item) {
     router.push(membersApi.focusRoute(item.member_id))
   } else if (item.type === 'job_created') {
     router.push(jobsApi.detailRoute(item.job_id))
+  } else if (item.event_id) {
+    router.push(eventsApi.detailRoute(item.event_id))
   }
 }
 
@@ -213,7 +218,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
         </span>
         <div>
           <h2 class="feed-title">社群動態</h2>
-          <p class="feed-subtitle">最近的成員加入與求職紀錄</p>
+          <p class="feed-subtitle">最近的成員加入、求職紀錄、活動與留言</p>
         </div>
       </div>
       <button
@@ -274,7 +279,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
           data-test="timeline-empty"
         >
           <el-empty
-            description="目前還沒有動態，新增成員或求職紀錄後會顯示在這裡"
+            description="目前還沒有動態，新增成員、求職紀錄、活動或留言後會顯示在這裡"
             :image-size="80"
           />
         </div>
@@ -282,7 +287,7 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
         <ul v-else ref="listRef" class="feed-list" data-test="timeline-list">
           <li
             v-for="item in items"
-            :key="`${item.type}:${item.type === 'member_joined' ? item.member_id : item.job_id}`"
+            :key="timelineItemKey(item)"
             :class="['feed-row', `feed-row--${item.type}`]"
             role="button"
             tabindex="0"
@@ -309,6 +314,16 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
               </span>
             </template>
             <span
+              v-else-if="item.event_id"
+              class="row-avatar row-avatar--event"
+              aria-hidden="true"
+            >
+              <el-icon :size="18">
+                <ChatDotRound v-if="item.comment_id" />
+                <Calendar v-else />
+              </el-icon>
+            </span>
+            <span
               v-else
               :class="[
                 'row-avatar',
@@ -326,6 +341,14 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
                 <template v-if="item.type === 'member_joined'">
                   <strong class="row-name">{{ item.real_name }}</strong>
                   <span class="row-verb">加入了社群</span>
+                </template>
+                <template v-else-if="item.event_id">
+                  <strong class="row-name">{{
+                    item.real_name || '未知成員'
+                  }}</strong>
+                  <span class="row-verb">{{
+                    EVENT_ACTIVITY_LABELS[item.type]
+                  }}</span>
                 </template>
                 <template v-else>
                   <strong
@@ -346,6 +369,13 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
                   <template v-if="item.position">
                     <span class="dot" aria-hidden="true">·</span>
                     <span>{{ item.position }}</span>
+                  </template>
+                </template>
+                <template v-else-if="item.event_id">
+                  <span class="row-company">{{ item.title }}</span>
+                  <template v-if="item.body">
+                    <span class="dot" aria-hidden="true">·</span>
+                    <span>{{ item.body }}</span>
                   </template>
                 </template>
                 <template v-else>
@@ -398,6 +428,10 @@ const skeletonRows = computed(() => Array.from({ length: 4 }))
 </template>
 
 <style scoped>
+.row-avatar--event {
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+}
+
 .timeline-feed {
   background: var(--surface-0);
   border: 1px solid rgba(15, 23, 42, 0.06);

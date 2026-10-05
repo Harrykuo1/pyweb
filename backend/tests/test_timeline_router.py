@@ -449,3 +449,141 @@ def test_admin_preview_renders_the_member_view(client_factory, db_session):
     assert "停權成員" not in names_p
     anon_p = next(i for i in p if i.get("company") == "Anon")
     assert anon_p["real_name"] is None
+
+
+def test_event_and_comment_lifecycle_in_timeline(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    response = client.post(
+        "/api/events", json={"title": "聚餐", "event_date": "2025-01-01"}
+    )
+    assert response.status_code == 201, response.text
+    event_id = response.json()["id"]
+    items = client.get("/api/timeline").json()["items"]
+    assert [i["type"] for i in items] == ["event_created"]
+    assert items[0]["title"] == "聚餐"
+    assert items[0]["real_name"] == "admin"
+
+    response = client.put(f"/api/events/{event_id}", json={"title": "春酒"})
+    assert response.status_code == 200, response.text
+    items = client.get("/api/timeline").json()["items"]
+    assert [i["type"] for i in items] == ["event_updated", "event_created"]
+    assert items[0]["title"] == "春酒"
+    assert items[0]["real_name"] == "admin"
+
+    response = client.post(f"/api/events/{event_id}/comments", json={"body": "期待！"})
+    assert response.status_code == 201, response.text
+    comment_id = response.json()["id"]
+    item = client.get("/api/timeline").json()["items"][0]
+    assert item["type"] == "event_comment_created"
+    assert item["comment_id"] == comment_id
+    assert item["event_id"] == event_id
+    assert item["body"] == "期待！"
+
+    response = client.put(
+        f"/api/events/{event_id}/comments/{comment_id}", json={"body": "一起參加！"}
+    )
+    assert response.status_code == 200, response.text
+    items = client.get("/api/timeline").json()["items"]
+    assert items[0]["type"] == "event_comment_updated"
+    assert items[0]["body"] == "一起參加！"
+    assert len([i for i in items if i.get("comment_id") == comment_id]) == 1
+
+    assert (
+        client.delete(f"/api/events/{event_id}/comments/{comment_id}").status_code
+        == 204
+    )
+    assert all(
+        "comment_id" not in i for i in client.get("/api/timeline").json()["items"]
+    )
+    assert (
+        client.request(
+            "DELETE", f"/api/events/{event_id}", json={"password": "admin-pw"}
+        ).status_code
+        == 204
+    )
+    assert client.get("/api/timeline").json()["items"] == []
+
+
+@pytest.mark.parametrize("post_status", list(PostStatus))
+@pytest.mark.parametrize(
+    ("role", "preview", "own"),
+    [
+        ("viewer", False, False),
+        ("viewer", False, True),
+        ("admin", False, False),
+        ("admin", True, False),
+    ],
+)
+def test_event_timeline_respects_parent_visibility(
+    client_factory, db_session, post_status, role, preview, own
+):
+    from app.models import Event, EventComment
+
+    client, login_as = client_factory
+    viewer = db_session.query(User).filter_by(username="viewer").one()
+    event = Event(
+        title="Private gathering",
+        event_date=datetime(2025, 1, 1).date(),
+        status=post_status,
+        author_user_id=viewer.id if own else None,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        edited_at=datetime(2025, 1, 2, tzinfo=UTC),
+    )
+    db_session.add(event)
+    db_session.flush()
+    db_session.add(EventComment(event_id=event.id, body="private comment"))
+    db_session.commit()
+    login_as(role)
+    response = client.get("/api/timeline", params={"preview": preview})
+    assert response.status_code == 200, response.text
+    visible = (
+        post_status is PostStatus.ACCEPTED or own or (role == "admin" and not preview)
+    )
+    assert len(response.json()["items"]) == (3 if visible else 0)
+
+
+def test_event_timeline_paginates_with_existing_sources(client_factory, db_session):
+    from app.models import Event, EventComment
+
+    client, login_as = client_factory
+    event = Event(
+        title="聚餐",
+        event_date=datetime(2020, 1, 1).date(),
+        status=PostStatus.ACCEPTED,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        edited_at=datetime(2025, 1, 4, tzinfo=UTC),
+    )
+    db_session.add(event)
+    db_session.flush()
+    db_session.add(
+        EventComment(
+            event_id=event.id,
+            body="hello",
+            created_at=datetime(2025, 1, 3, tzinfo=UTC),
+            edited_at=datetime(2025, 1, 5, tzinfo=UTC),
+        )
+    )
+    _add_job(db_session, company="Acme", created_at=datetime(2025, 1, 2, tzinfo=UTC))
+    _add_member(
+        db_session, real_name="Alice", joined_at=datetime(2025, 1, 3, tzinfo=UTC)
+    )
+    db_session.commit()
+    login_as("viewer")
+    items = []
+    params = {"limit": 2}
+    for _ in range(3):
+        response = client.get("/api/timeline", params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        items.extend(page["items"])
+        params["before"] = items[-1]["timestamp"]
+    assert not page["has_more"]
+    assert [i["type"] for i in items] == [
+        "event_comment_updated",
+        "event_updated",
+        "member_joined",
+        "job_created",
+        "event_created",
+    ]
+    assert items[0]["real_name"] is None

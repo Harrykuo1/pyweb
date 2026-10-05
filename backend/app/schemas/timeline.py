@@ -29,8 +29,26 @@ class JobCreatedItem(BaseModel):
     job_month: int
 
 
+class EventChangedItem(BaseModel):
+    type: Literal["event_created", "event_updated"]
+    timestamp: datetime
+    event_id: int
+    title: str
+    real_name: str | None
+
+
+class EventCommentItem(BaseModel):
+    type: Literal["event_comment_created", "event_comment_updated"]
+    timestamp: datetime
+    event_id: int
+    title: str
+    real_name: str | None
+    comment_id: int
+    body: str
+
+
 TimelineItem = Annotated[
-    MemberJoinedItem | JobCreatedItem,
+    MemberJoinedItem | JobCreatedItem | EventChangedItem | EventCommentItem,
     Field(discriminator="type"),
 ]
 

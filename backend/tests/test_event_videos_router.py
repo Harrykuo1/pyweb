@@ -554,3 +554,42 @@ def test_a_youtube_link_is_appended_not_put_first(ctx, db_session):
     )
     assert r.status_code == 201, r.text
     assert db_session.query(EventVideo).one().sort_order > 9
+
+
+def test_video_changes_refresh_event_timeline(ctx):
+    client, login, event = ctx
+    login("author-pw")
+    response = client.post(
+        f"/api/events/{event.id}/videos/youtube",
+        json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+    )
+    assert response.status_code == 201, response.text
+    video_id = response.json()["id"]
+
+    def latest_edit():
+        items = client.get("/api/timeline").json()["items"]
+        item = next(i for i in items if i["type"] == "event_updated")
+        assert item["event_id"] == event.id
+        assert item["real_name"] == "作者"
+        return item["timestamp"]
+
+    added_at = latest_edit()
+    assert (
+        client.put(
+            f"/api/events/{event.id}/videos/{video_id}", json={"caption": "新說明"}
+        ).status_code
+        == 200
+    )
+    captioned_at = latest_edit()
+    assert captioned_at > added_at
+    assert (
+        client.put(
+            f"/api/events/{event.id}/media/order",
+            json={"items": [{"type": "video", "id": video_id}]},
+        ).status_code
+        == 204
+    )
+    reordered_at = latest_edit()
+    assert reordered_at > captioned_at
+    assert client.delete(f"/api/events/{event.id}/videos/{video_id}").status_code == 204
+    assert latest_edit() > reordered_at

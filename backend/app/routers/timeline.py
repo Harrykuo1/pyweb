@@ -1,16 +1,21 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_completed_member
 from app.core.job_serialize import job_display_name
+from app.core.member_display import member_display_map
+from app.core.post_visibility import event_visibility_filter
 from app.database import get_db
-from app.models import Job, Member, PostStatus, User, UserRole
+from app.models import Event, EventComment, Job, Member, PostStatus, User, UserRole
 from app.schemas.timeline import (
+    EventChangedItem,
+    EventCommentItem,
     JobCreatedItem,
     MemberJoinedItem,
+    TimelineItem,
     TimelineResponse,
 )
 
@@ -43,8 +48,8 @@ def list_timeline(
     #
     # The merge correctness argument is unchanged from the original
     # endpoint: within a single table rows are timestamp-sorted, so the
-    # global top N (older than `before`) cannot include rows past either
-    # table's own top N.
+    # global top N (older than `before`) cannot include rows past any
+    # source's own top N.
     is_admin = current_user.role is UserRole.ADMIN
     # Preview-as-member drops admin privileges for this feed's visibility.
     effective_admin = is_admin and not preview
@@ -115,8 +120,63 @@ def list_timeline(
         for j in jobs
     ]
 
+    visibility = event_visibility_filter(current_user.id, is_admin=effective_admin)
+    event_items: list[TimelineItem] = []
+    for event_type, timestamp_column, actor_column in (
+        ("event_created", Event.created_at, Event.author_user_id),
+        ("event_updated", Event.edited_at, Event.last_edited_by_user_id),
+    ):
+        query = db.query(Event, actor_column).filter(
+            visibility, timestamp_column.is_not(None)
+        )
+        if before is not None:
+            query = query.filter(timestamp_column < before)
+        rows = (
+            query.order_by(timestamp_column.desc(), Event.id.desc()).limit(peek).all()
+        )
+        authors = member_display_map(db, [actor_id for _, actor_id in rows])
+        event_items.extend(
+            EventChangedItem(
+                type=event_type,
+                timestamp=event.created_at
+                if event_type == "event_created"
+                else event.edited_at,
+                event_id=event.id,
+                title=event.title,
+                real_name=authors.get(actor_id, {}).get("name"),
+            )
+            for event, actor_id in rows
+        )
+
+    comment_time = func.coalesce(EventComment.edited_at, EventComment.created_at)
+    comments_q = (
+        db.query(EventComment, Event.title)
+        .join(Event, Event.id == EventComment.event_id)
+        .filter(visibility)
+    )
+    if before is not None:
+        comments_q = comments_q.filter(comment_time < before)
+    comments = (
+        comments_q.order_by(comment_time.desc(), EventComment.id.desc())
+        .limit(peek)
+        .all()
+    )
+    authors = member_display_map(db, [c.author_user_id for c, _ in comments])
+    event_items.extend(
+        EventCommentItem(
+            type="event_comment_updated" if c.edited_at else "event_comment_created",
+            timestamp=c.edited_at or c.created_at,
+            event_id=c.event_id,
+            title=title,
+            real_name=authors.get(c.author_user_id, {}).get("name"),
+            comment_id=c.id,
+            body=c.body[:160],
+        )
+        for c, title in comments
+    )
+
     merged = sorted(
-        member_items + job_items,
+        member_items + job_items + event_items,
         key=lambda x: x.timestamp,
         reverse=True,
     )[:peek]
