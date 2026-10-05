@@ -61,6 +61,14 @@ class Event(Base):
         default=lambda: datetime.now(UTC),
     )
 
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    def mark_edited(self, user_id: int) -> None:
+        self.edited_at = datetime.now(UTC)
+        self.last_edited_by_user_id = user_id
+
     # Ordered children. delete-orphan keeps the association rows in lockstep
     # with the parent so deleting an event clears its tags/photos in one go;
     # the on-disk photo files are cleaned up explicitly by the delete handler.

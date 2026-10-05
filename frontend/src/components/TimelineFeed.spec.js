@@ -458,3 +458,39 @@ describe('TimelineFeed.vue — lazy load (cursor pagination)', () => {
     expect(wrapper.find('[data-test="timeline-error"]').exists()).toBe(false)
   })
 })
+
+describe('TimelineFeed — event activity', () => {
+  it.each([
+    ['event_created', '新增了活動紀錄'],
+    ['event_updated', '更新了活動紀錄'],
+    ['event_comment_created', '在活動中留言'],
+    ['event_comment_updated', '編輯了活動留言'],
+  ])('renders and opens %s', async (type, label) => {
+    const result = await mountFeed([
+      {
+        type,
+        timestamp: ONE_HOUR_AGO,
+        event_id: 42,
+        title: '社群春酒',
+        real_name: '小明',
+        ...(type.includes('comment')
+          ? { comment_id: 7, body: '<img src=x onerror=alert(1)>' }
+          : {}),
+      },
+    ])
+    const wrapper = result.wrapper ?? result
+    const row = wrapper.find(`[data-test="timeline-row-${type}"]`)
+    expect(row.text()).toContain(label)
+    expect(row.text()).toContain('社群春酒')
+    expect(row.text()).toContain('小明')
+    expect(row.find('img').exists()).toBe(false)
+    await row.trigger('click')
+    expect(pushMock).toHaveBeenLastCalledWith({
+      path: '/events',
+      query: { detail: '42' },
+    })
+    await row.trigger('keydown', { key: 'Enter' })
+    expect(pushMock).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+})

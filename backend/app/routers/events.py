@@ -15,6 +15,7 @@ from app.core.deps import (
     require_posting_member,
 )
 from app.core.event_media import event_uploads_dir
+from app.core.post_visibility import event_visibility_filter
 from app.core.search_query import build_ilike_filter
 from app.core.search_query import parse as parse_search_query
 from app.database import get_db
@@ -314,11 +315,7 @@ def list_events(
     query = db.query(Event)
 
     # Visibility: non-admins see accepted events plus their own.
-    if not is_admin:
-        query = query.filter(
-            (Event.status == PostStatus.ACCEPTED)
-            | (Event.author_user_id == current_user.id)
-        )
+    query = query.filter(event_visibility_filter(current_user.id, is_admin=is_admin))
     if status_filter is not None:
         query = query.filter(Event.status == PostStatus(status_filter))
 
@@ -459,7 +456,7 @@ def update_event(
         setattr(obj, field, value)
     if tags is not None:
         _set_tags(db, obj, tags)
-    obj.last_edited_by_user_id = current_user.id
+    obj.mark_edited(current_user.id)
     # Owner editing a rejected event resubmits it; editing an already
     # accepted (public) event sends it back for re-review so content can't
     # be changed out from under the approval. Admin edits stay as-is.

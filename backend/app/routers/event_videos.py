@@ -251,6 +251,7 @@ async def upload_video(
         db.rollback()
         raise
 
+    event.mark_edited(current_user.id)
     db.commit()
     db.refresh(video)
     # Queued rather than awaited: transcoding runs at roughly half to one
@@ -315,6 +316,7 @@ def add_youtube_video(
         sort_order=next_sort_order(db, event_id),
     )
     db.add(video)
+    event.mark_edited(current_user.id)
     db.commit()
     db.refresh(video)
     return _serialize(video, is_admin=current_user.role is UserRole.ADMIN)
@@ -375,6 +377,7 @@ def reorder_media(
                 row.sort_order = position
                 position += 1
 
+    event.mark_edited(current_user.id)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -452,6 +455,7 @@ def update_video_caption(
     video = _get_video_or_404(db, event_id, video_id)
     caption = payload.caption.strip() if payload.caption else ""
     video.caption = caption or None
+    event.mark_edited(current_user.id)
     db.commit()
     db.refresh(video)
     return _serialize(video, is_admin=current_user.role is UserRole.ADMIN)
@@ -486,5 +490,6 @@ def delete_video(
     for path in video_files(video, uploads_root):
         path.unlink(missing_ok=True)
     db.delete(video)
+    event.mark_edited(current_user.id)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

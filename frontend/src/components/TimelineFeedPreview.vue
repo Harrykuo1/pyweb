@@ -2,10 +2,18 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElIcon, ElImage } from 'element-plus'
-import { ArrowRight, Briefcase, Promotion } from '@element-plus/icons-vue'
+import {
+  ArrowRight,
+  Briefcase,
+  Calendar,
+  ChatDotRound,
+  Promotion,
+} from '@element-plus/icons-vue'
 
 import { timelineApi } from '../api/timeline'
 import { jobsApi } from '../api/jobs'
+import { eventsApi } from '../api/events'
+import { EVENT_ACTIVITY_LABELS, timelineItemKey } from '../utils/timeline'
 import { membersApi } from '../api/members'
 import { relativeTime } from '../utils/relativeTime'
 import { useAuthStore } from '../stores/auth'
@@ -56,6 +64,8 @@ function handleRowClick(item) {
     router.push(membersApi.focusRoute(item.member_id))
   } else if (item.type === 'job_created') {
     router.push(jobsApi.detailRoute(item.job_id))
+  } else if (item.event_id) {
+    router.push(eventsApi.detailRoute(item.event_id))
   }
 }
 
@@ -131,7 +141,7 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
     <ul v-else class="hero-feed-list" data-test="hero-feed-list">
       <li
         v-for="item in items"
-        :key="`${item.type}:${item.type === 'member_joined' ? item.member_id : item.job_id}`"
+        :key="timelineItemKey(item)"
         :class="['hero-feed-row', `hero-feed-row--${item.type}`]"
         role="button"
         tabindex="0"
@@ -162,6 +172,16 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
           </span>
         </span>
         <span
+          v-else-if="item.event_id"
+          class="hero-feed-avatar hero-feed-avatar--event"
+          aria-hidden="true"
+        >
+          <el-icon :size="11">
+            <ChatDotRound v-if="item.comment_id" />
+            <Calendar v-else />
+          </el-icon>
+        </span>
+        <span
           v-else
           :class="[
             'hero-feed-avatar',
@@ -178,11 +198,17 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
               {{
                 item.type === 'member_joined'
                   ? item.real_name
-                  : item.real_name || '匿名成員'
+                  : item.real_name || (item.event_id ? '未知成員' : '匿名成員')
               }}
             </strong>
             <template v-if="item.type === 'member_joined'">
               <span class="hero-feed-verb">加入了社群</span>
+            </template>
+            <template v-else-if="item.event_id">
+              <span class="hero-feed-verb">{{
+                EVENT_ACTIVITY_LABELS[item.type]
+              }}</span>
+              <span class="hero-feed-company">{{ item.title }}</span>
             </template>
             <template v-else>
               <!-- A styled circle, not a · glyph: font-rendered middle
@@ -211,6 +237,11 @@ const skeletonRows = computed(() => Array.from({ length: props.limit }))
 </template>
 
 <style scoped>
+.hero-feed-avatar--event {
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+  color: #fff;
+}
+
 .hero-feed {
   display: flex;
   flex-direction: column;

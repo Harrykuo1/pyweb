@@ -367,3 +367,35 @@ def test_upload_appends_after_existing_media(client_factory, db_session):
     body = _upload(client).json()
     added = db_session.query(EventPhoto).filter_by(id=body["id"]).one()
     assert added.sort_order > 5
+
+
+def test_photo_changes_refresh_event_timeline(client_factory):
+    client, login_as = client_factory
+    login_as("admin")
+    response = _upload(client)
+    assert response.status_code == 201, response.text
+    photo_id = response.json()["id"]
+
+    def latest_edit():
+        items = client.get("/api/timeline").json()["items"]
+        item = next(i for i in items if i["type"] == "event_updated")
+        assert item["event_id"] == 1
+        assert item["real_name"] == "admin"
+        return item["timestamp"]
+
+    uploaded_at = latest_edit()
+    assert (
+        client.put(
+            f"/api/events/1/photos/{photo_id}", json={"caption": "新說明"}
+        ).status_code
+        == 200
+    )
+    captioned_at = latest_edit()
+    assert captioned_at > uploaded_at
+    assert (
+        client.request(
+            "DELETE", f"/api/events/1/photos/{photo_id}", json={"password": "admin-pw"}
+        ).status_code
+        == 204
+    )
+    assert latest_edit() > captioned_at
