@@ -58,6 +58,9 @@ const unit = computed(() =>
 )
 const summary = computed(() => data.value?.summary || {})
 const daily = computed(() => data.value?.daily || [])
+const singleDay = computed(
+  () => data.value?.filters.start_date === data.value?.filters.end_date,
+)
 const dirty = computed(
   () =>
     data.value &&
@@ -600,15 +603,32 @@ onBeforeUnmount(() => {
           <div>
             <span class="section-kicker">IN MOTION</span>
             <h2>參與趨勢</h2>
+            <p v-if="singleDay">
+              {{ data.filters.start_date }} · 每小時參與量（{{
+                data.filters.timezone
+              }}）
+            </p>
           </div>
-          <div class="peak-label" v-if="peakDay?.[metric] > 0">
-            最高的一天
-            <strong>{{ peakDay.date.slice(5).replace('-', '/') }}</strong
-            ><span>{{ number(peakDay[metric]) }} {{ unit }}</span>
+          <div
+            class="peak-label"
+            v-if="(singleDay ? peakHour : peakDay)?.[metric] > 0"
+          >
+            {{ singleDay ? '最高的時段' : '最高的一天' }}
+            <strong>{{
+              singleDay
+                ? hourLabel(peakHour.hour)
+                : peakDay.date.slice(5).replace('-', '/')
+            }}</strong
+            ><span
+              >{{ number((singleDay ? peakHour : peakDay)[metric]) }}
+              {{ unit }}</span
+            >
           </div>
         </div>
         <ActivityTrend
           :daily="daily"
+          :hourly="data.hourly"
+          :single-day="singleDay"
           :metric="metric"
           :unit="unit"
           @select="selectDay"
