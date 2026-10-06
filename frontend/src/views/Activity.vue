@@ -14,6 +14,8 @@ import {
   Filter,
 } from '@element-plus/icons-vue'
 import { activityApi } from '../api/activity'
+import MemberTrends from '../components/activity/MemberTrends.vue'
+import ChannelNames from '../components/activity/ChannelNames.vue'
 import ActivityTrend from '../components/activity/ActivityTrend.vue'
 import ContributionCalendar from '../components/activity/ContributionCalendar.vue'
 import {
@@ -402,7 +404,7 @@ onBeforeUnmount(() => {
             /></el-select>
           </div>
           <div class="field">
-            <span>頻道 <small>以 Discord 頻道 ID 辨識</small></span
+            <span>頻道 <small>可搜尋名稱或 ID</small></span
             ><el-select
               v-model="filters.channel_ids"
               multiple
@@ -414,7 +416,11 @@ onBeforeUnmount(() => {
               ><el-option
                 v-for="id in options.channels"
                 :key="id"
-                :label="`# ${id}`"
+                :label="
+                  options.channel_names?.[id]
+                    ? `# ${options.channel_names[id]} · ${id}`
+                    : `# ${id}`
+                "
                 :value="id"
             /></el-select>
           </div>
@@ -609,6 +615,12 @@ onBeforeUnmount(() => {
         />
       </section>
 
+      <MemberTrends
+        :filters="data.filters"
+        :users="options.users"
+        :members="data.members"
+        :metric="metric"
+      />
       <div class="analysis-grid">
         <section class="panel hourly-panel">
           <div class="panel-heading">
@@ -842,7 +854,12 @@ onBeforeUnmount(() => {
             >
               <span class="channel-line"
                 ><span
-                  ><em>{{ i + 1 }}</em> # {{ channel.channel_id }}</span
+                  ><em>{{ i + 1 }}</em> #
+                  {{
+                    options.channel_names?.[channel.channel_id] ||
+                    channel.channel_name ||
+                    channel.channel_id
+                  }}</span
                 ><strong>{{ number(channel[metric]) }}</strong></span
               ><span class="channel-track"
                 ><i
@@ -851,7 +868,12 @@ onBeforeUnmount(() => {
               ></span>
             </button>
             <p v-if="!channels.length" class="muted">尚無{{ unit }}紀錄</p>
-            <p class="channel-note">頻道以 Discord ID 顯示，點選可篩選。</p>
+            <p class="channel-note">點選頻道可篩選。尚未同步名稱時顯示 ID。</p>
+            <ChannelNames
+              :channels="options.channels"
+              :names="options.channel_names || {}"
+              @saved="loadOptions"
+            />
           </section>
           <section class="conversation-card">
             <span class="section-kicker">MORE THAN A NUMBER</span>

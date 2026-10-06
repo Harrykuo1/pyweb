@@ -29,6 +29,26 @@ describe('activity API', () => {
     expect(config.params.has('channel_ids')).toBe(false)
     expect(config.signal).toBe(signal)
   })
+  it('serializes member trends and writes names through the admin endpoint', async () => {
+    const get = vi
+      .spyOn(client, 'get')
+      .mockResolvedValue({ data: { series: [] } })
+    const patch = vi
+      .spyOn(client, 'patch')
+      .mockResolvedValue({ data: { name: '聊天' } })
+    await activityApi.memberTrends({ user_ids: ['101', '102'], window_days: 7 })
+    expect(get.mock.lastCall[0]).toBe('/activity/member-trends')
+    expect(get.mock.lastCall[1].params.getAll('user_ids')).toEqual([
+      '101',
+      '102',
+    ])
+    expect(await activityApi.updateChannel('201', '聊天')).toEqual({
+      name: '聊天',
+    })
+    expect(patch).toHaveBeenCalledWith('/activity/channels/201', {
+      name: '聊天',
+    })
+  })
   it('loads filter options and propagates errors', async () => {
     const spy = vi
       .spyOn(client, 'get')

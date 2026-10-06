@@ -66,6 +66,8 @@ beforeEach(() => {
   activityApi.analytics.mockImplementation(async (filters) => payload(filters))
 })
 const stubs = {
+  MemberTrends: true,
+  ChannelNames: true,
   ElSelect: { props: ['modelValue'], template: '<div><slot/></div>' },
   ElOption: { template: '<span/>' },
 }
@@ -87,6 +89,20 @@ describe('community activity dashboard', () => {
     expect(wrapper.findAll('.rhythm-row button')).toHaveLength(168)
     expect(wrapper.find('[data-test="contribution-grid"]').exists()).toBe(true)
     expect(wrapper.find('.error-panel').exists()).toBe(false)
+  })
+  it('uses synced names while retaining channel IDs for filters and fallback', async () => {
+    activityApi.options.mockResolvedValue({
+      configured: true,
+      users: [],
+      channels: ['201'],
+      channel_names: { 201: '聊天大廳' },
+    })
+    const wrapper = await render()
+    expect(wrapper.find('.channel-row').text()).toContain('聊天大廳')
+    expect(wrapper.find('.channel-row').attributes('title')).toContain('201')
+    await wrapper.find('.channel-row').trigger('click')
+    await flushPromises()
+    expect(activityApi.analytics.mock.lastCall[0].channel_ids).toEqual(['201'])
   })
   it('switches metric and reorders members without making another request', async () => {
     const wrapper = await render()
