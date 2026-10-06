@@ -288,3 +288,115 @@ def test_authenticated_website_admin_still_needs_bot_token(client, db_session):
         client.post("/api/auth/login", json={"password": "admin-pw"}).status_code == 200
     )
     assert client.post(URL, json=payload()).status_code == 401
+
+
+def test_mixed_new_and_duplicate_records_report_exact_counts(client, db_session):
+    assert client.post(URL, json=payload(), headers=HEADERS).status_code == 200
+    body = payload()
+    body["messages"].append({**body["messages"][0], "message_id": "201"})
+    body["voice_samples"].append({**body["voice_samples"][0], "user_id": "301"})
+    response = client.post(URL, json=body, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "messages": {"inserted": 1, "duplicates": 1},
+        "voice_samples": {"inserted": 1, "duplicates": 1},
+    }
+    assert (
+        db_session.query(MessageEvent).count()
+        == db_session.query(VoiceSample).count()
+        == 2
+    )
+
+
+def test_different_guilds_can_store_same_source_ids(client, db_session):
+    other_token = "other-guild-token"
+    db_session.add(
+        ActivityIngestToken(
+            name="other",
+            guild_id="999",
+            token_hash=hashlib.sha256(other_token.encode()).hexdigest(),
+        )
+    )
+    db_session.commit()
+    assert client.post(URL, json=payload(), headers=HEADERS).status_code == 200
+    body = {**payload(), "guild_id": "999"}
+    response = client.post(
+        URL, json=body, headers={"Authorization": f"Bearer {other_token}"}
+    )
+    assert response.status_code == 200, response.text
+    assert (
+        response.json()["messages"]["inserted"]
+        == response.json()["voice_samples"]["inserted"]
+        == 1
+    )
+    assert (
+        db_session.query(MessageEvent).count()
+        == db_session.query(VoiceSample).count()
+        == 2
+    )
+
+
+@pytest.mark.parametrize("include_reply", [False, True])
+def test_attachment_only_message_and_optional_reply(client, db_session, include_reply):
+    body = payload()
+    message = body["messages"][0]
+    message["text_length"] = 0
+    if include_reply:
+        message["reply_to_user_id"] = None
+    else:
+        del message["reply_to_user_id"]
+    response = client.post(URL, json=body, headers=HEADERS)
+    assert response.status_code == 200, response.text
+    stored = db_session.query(MessageEvent).one()
+    assert stored.reply_to_user_id is None
+    assert stored.text_length == 0
+    assert stored.attachment_count == 2
+
+
+def test_invalid_last_row_leaves_existing_data_unchanged(client, db_session):
+    assert client.post(URL, json=payload(), headers=HEADERS).status_code == 200
+    body = payload()
+    base = body["messages"][0]
+    body["messages"] = [{**base, "message_id": str(1000 + i)} for i in range(999)]
+    body["voice_samples"][0]["user_id"] = "invalid"
+    assert client.post(URL, json=body, headers=HEADERS).status_code == 422
+    assert (
+        db_session.query(MessageEvent).count()
+        == db_session.query(VoiceSample).count()
+        == 1
+    )
+
+
+def test_exact_body_limit_accepts_json_but_one_more_byte_is_rejected(
+    client, db_session
+):
+    import json
+
+    data = json.dumps(payload()).encode().ljust(1024 * 1024, b" ")
+    headers = {**HEADERS, "Content-Type": "application/json"}
+    accepted = client.post(URL, content=data, headers=headers)
+    assert accepted.status_code == 200, accepted.text
+    assert client.post(URL, content=data + b" ", headers=headers).status_code == 413
+    assert (
+        db_session.query(MessageEvent).count()
+        == db_session.query(VoiceSample).count()
+        == 1
+    )
+
+
+def test_malformed_json_and_unknown_fields_do_not_insert(client, db_session):
+    assert (
+        client.post(
+            URL,
+            content=b'{"guild_id":',
+            headers={**HEADERS, "Content-Type": "application/json"},
+        ).status_code
+        == 422
+    )
+    body = {**payload(), "received_at": "2026-01-01T00:00:00Z"}
+    assert client.post(URL, json=body, headers=HEADERS).status_code == 422
+    assert (
+        db_session.query(MessageEvent).count()
+        == db_session.query(VoiceSample).count()
+        == 0
+    )

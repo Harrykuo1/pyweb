@@ -1,13 +1,14 @@
+import logging
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
-from alembic import command
-from app.core.config import settings
 from app.models import MessageEvent, VoiceSample
 
 STAMP = datetime(2026, 10, 5, 10, 0, 12, 123456, tzinfo=UTC)
@@ -59,13 +60,24 @@ def test_database_rejects_duplicate_source_events(db_session, model):
     assert db_session.query(model).count() == 1
 
 
-def test_migration_roundtrip_keeps_existing_data(tmp_path, monkeypatch):
+def test_migration_roundtrip_keeps_existing_data(tmp_path):
     url = f"sqlite:///{tmp_path / 'migration.db'}"
-    monkeypatch.setattr(settings, "database_url", url)
     root = Path(__file__).resolve().parents[1]
-    config = Config(str(root / "alembic.ini"))
-    config.set_main_option("script_location", str(root / "alembic"))
-    command.upgrade(config, "0029")
+    logger = logging.getLogger(__name__)
+    was_disabled = logger.disabled
+
+    def migrate(operation, revision):
+        # Alembic's fileConfig disables unrelated loggers; keep its global
+        # logging setup out of the pytest worker and subsequent tests.
+        subprocess.run(
+            [sys.executable, "-m", "alembic", operation, revision],
+            cwd=root,
+            env={**os.environ, "DATABASE_URL": url},
+            check=True,
+            capture_output=True,
+        )
+
+    migrate("upgrade", "0029")
     engine = create_engine(url)
     with engine.begin() as conn:
         conn.execute(
@@ -75,11 +87,11 @@ def test_migration_roundtrip_keeps_existing_data(tmp_path, monkeypatch):
         )
     try:
         for operation, revision in [
-            (command.upgrade, "0030"),
-            (command.downgrade, "0029"),
-            (command.upgrade, "0030"),
+            ("upgrade", "0030"),
+            ("downgrade", "0029"),
+            ("upgrade", "0030"),
         ]:
-            operation(config, revision)
+            migrate(operation, revision)
             inspector = inspect(engine)
             assert ("message_events" in inspector.get_table_names()) == (
                 revision == "0030"
@@ -98,5 +110,6 @@ def test_migration_roundtrip_keeps_existing_data(tmp_path, monkeypatch):
             ("guild_id", "user_id", "sent_at"),
             ("guild_id", "channel_id", "sent_at"),
         }
+        assert logger.disabled == was_disabled
     finally:
         engine.dispose()
