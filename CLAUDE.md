@@ -183,7 +183,7 @@ Phases 0–9 (skeleton → CRUD → photos → markdown → permissions → READ
 - Login is rate-limited per IP (5/min), keyed on the nginx-set `X-Real-IP` so a forged `X-Forwarded-For` cannot mint fresh buckets.
 - Permission checks read the role from the **database** each request, not from the session cookie — a demoted admin loses access on their next request.
 - **Admin recovery**: no self-serve forgot-password flow. See §3.1.
-- PostgreSQL publishes only `127.0.0.1:5432` for SSH tunnels. Adminer replaces sqlite-web at `127.0.0.1:8119`, authenticating with `SQLITE_WEB_PASSWORD` before using the persistent PostgreSQL credential. Credentials are generated once in `data/.postgres-password`; do not log or commit them.
+- PostgreSQL publishes only `127.0.0.1:5432` for SSH tunnels. Adminer replaces sqlite-web using `8119:8080` because the HTTPS/Basic Auth nginx proxy runs on another host, authenticating with `SQLITE_WEB_PASSWORD` before using the persistent PostgreSQL credential. Credentials are generated once in `data/.postgres-password`; do not log or commit them.
 
 ---
 

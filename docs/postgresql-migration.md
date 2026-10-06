@@ -29,7 +29,7 @@
 | `data/pyweb.db` | 保留的原 SQLite，切換後不再更新 |
 | `data/uploads/`、`data/logs/` | 原本的上傳檔和 log |
 
-這些都是 bind mount，重建／移除容器不會刪除。密碼與 PostgreSQL 資料由 UID/GID 1000 使用，初始化容器會處理新目錄權限。PostgreSQL 只發布 `127.0.0.1:5432`；資料庫管理也可用 `docker compose exec postgres psql -U pyweb -d pyweb`。Adminer 取代 sqlite-web，沿用 `127.0.0.1:8119`，查看的是目前 PostgreSQL 資料。
+這些都是 bind mount，重建／移除容器不會刪除。密碼與 PostgreSQL 資料由 UID/GID 1000 使用，初始化容器會處理新目錄權限。PostgreSQL 只發布 `127.0.0.1:5432`；資料庫管理也可用 `docker compose exec postgres psql -U pyweb -d pyweb`。Adminer 取代 sqlite-web，沿用 `8119:8080`，供另一台 nginx 反向代理，查看的是目前 PostgreSQL 資料。
 
 後續部署以 PostgreSQL 的完成標記為準，不會再匯入 SQLite。若 origin 檔存在但 PostgreSQL volume 或標記遺失、識別碼不符，啟動會失敗，避免悄悄回到過時資料。密碼檔遺失也不會自動產生另一組密碼取代原憑證。
 
@@ -103,7 +103,7 @@ docker rm -f pyweb-pg-test
 Adminer 使用固定的 PostgreSQL / `postgres` / `pyweb` 使用者 / `pyweb` 資料庫，畫面只需輸入 `SQLITE_WEB_PASSWORD`。驗證成功後，容器才使用 `data/.postgres-password` 建立資料庫連線；這是具備修改與刪除權限的管理入口。網頁密碼不接受作為 HeidiSQL 的資料庫密碼。
 
 - 在伺服器本機開啟 `http://127.0.0.1:8119`。
-- 同主機 nginx 原本若代理到 `127.0.0.1:8119`，可保留原設定及 Basic Auth，對外繼續使用 HTTPS。若 nginx 位於容器或另一台主機，需改用可達的內部網路代理，不能直接使用它自己的 `127.0.0.1`。
+- 正式環境的 nginx 位於另一台主機，繼續代理到應用伺服器的 IP 與 `8119`，保留原本的 HTTPS／Basic Auth 設定。Adminer 必須使用 `8119:8080`，不能只綁 `127.0.0.1`，否則遠端 nginx 無法連線而回傳 502。
 - `/adminer.php` 也經過同一套驗證，無法繞過網頁密碼。Adminer 保留原有 CSRF 與登入嘗試限制，不提供永久登入。
 
 HeidiSQL 可使用 SSH tunnel。也可先在自己的電腦執行：

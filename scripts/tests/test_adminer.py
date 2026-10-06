@@ -254,7 +254,7 @@ class AdminerTests(unittest.TestCase):
             self.assertEqual(status, 503)
             self.assertNotIn("adminer_probe", body)
 
-    def test_compose_publishes_only_loopback_management_ports(self):
+    def test_compose_exposes_adminer_for_remote_proxy_but_keeps_postgres_local(self):
         # A clean CI checkout has no .env. Keep the service env_file fixture
         # separate from the developer's configuration and database files.
         with tempfile.TemporaryDirectory(prefix="pyweb-compose-test-") as directory:
@@ -288,7 +288,12 @@ class AdminerTests(unittest.TestCase):
         for name, port in [("postgres", 5432), ("adminer", 8119)]:
             self.assertEqual(len(services[name]["ports"]), 1)
             mapping = services[name]["ports"][0]
-            self.assertEqual(mapping["host_ip"], "127.0.0.1")
+            if name == "postgres":
+                self.assertEqual(mapping["host_ip"], "127.0.0.1")
+                self.assertEqual(mapping["target"], 5432)
+            else:
+                self.assertIn(mapping.get("host_ip"), (None, "0.0.0.0", "::"))
+                self.assertEqual(mapping["target"], 8080)
             self.assertEqual(str(mapping["published"]), str(port))
         # Compose escapes dollars when serializing an interpolated configuration.
         self.assertEqual(

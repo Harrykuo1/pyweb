@@ -51,7 +51,8 @@ services:
     volumes:
       - ./data:/run/secrets:ro
     ports:
-      - "127.0.0.1:8119:8080"
+      # The HTTPS/Basic Auth reverse proxy runs on another host.
+      - "8119:8080"
     healthcheck:
       test:
         - CMD
