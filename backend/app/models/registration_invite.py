@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class RegistrationInvite(Base):
@@ -23,13 +24,13 @@ class RegistrationInvite(Base):
         ForeignKey("users.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        UTCDateTime(timezone=True), nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        UTCDateTime(timezone=True), nullable=False
     )
     used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     used_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True

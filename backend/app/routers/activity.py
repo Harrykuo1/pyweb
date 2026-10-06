@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -25,10 +26,13 @@ def _insert_records(
     ]
     # Target only the source identity: other constraint violations must roll
     # back the batch rather than being silently discarded by INSERT OR IGNORE.
+    insert = pg_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
     statement = insert(model.__table__).on_conflict_do_nothing(
         index_elements=list(model.__table__.primary_key.columns)
     )
-    inserted = db.execute(statement, rows).rowcount
+    inserted = len(
+        db.execute(statement.returning(*model.__table__.primary_key), rows).all()
+    )
     return IngestCounts(inserted=inserted, duplicates=len(rows) - inserted)
 
 

@@ -3,7 +3,6 @@
 import json
 import os
 import socket
-import sqlite3
 import subprocess
 import sys
 import time
@@ -13,17 +12,18 @@ from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy import create_engine
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 URL = "/api/activity/batches"
 
 
 @pytest.fixture
-def live_api(tmp_path):
-    database = tmp_path / "activity.db"
+def live_api(tmp_path, postgres_url):
+    database = create_engine(postgres_url)
     env = {
         **os.environ,
-        "DATABASE_URL": f"sqlite:///{database}",
+        "DATABASE_URL": postgres_url,
         "SESSION_SECRET": "isolated-http-test",
     }
     subprocess.run(
@@ -110,6 +110,7 @@ def live_api(tmp_path):
                 process.terminate()
                 process.wait(timeout=10)
         log.close()
+        database.dispose()
 
 
 def batch(start=0, count=500):
@@ -150,24 +151,28 @@ def test_real_http_writes_ten_thousand_rows_and_survives_restart(live_api):
             "messages": {"inserted": 500, "duplicates": 0},
             "voice_samples": {"inserted": 500, "duplicates": 0},
         }
-    with sqlite3.connect(database) as connection:
-        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    with database.begin() as connection:
         for table in ("message_events", "voice_samples"):
             assert (
-                connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+                connection.exec_driver_sql(f"SELECT count(*) FROM {table}").fetchone()[
+                    0
+                ]
                 == 5000
             )
-        assert connection.execute(
+        assert connection.exec_driver_sql(
             "SELECT user_id, channel_id, reply_to_user_id, text_length, attachment_count, sent_at "
             "FROM message_events WHERE message_id = '100002'"
-        ).fetchone() == ("300", "400", "500", 2, 2, "2026-01-01 10:00:02.000000")
-        assert (
-            connection.execute("SELECT min(sampled_at) FROM voice_samples").fetchone()[
-                0
-            ]
-            == "2026-01-01 10:00:00.123456"
+        ).fetchone() == (
+            "300",
+            "400",
+            "500",
+            2,
+            2,
+            datetime(2026, 1, 1, 10, 0, 2, tzinfo=UTC),
         )
-        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.exec_driver_sql(
+            "SELECT min(sampled_at) FROM voice_samples"
+        ).fetchone()[0] == datetime(2026, 1, 1, 10, 0, 0, 123456, tzinfo=UTC)
     restart()
     retried = client.post(URL, json=batch())
     assert retried.status_code == 200, retried.text
@@ -185,13 +190,17 @@ def test_eight_concurrent_retries_insert_each_event_once(live_api):
     for kind in ("messages", "voice_samples"):
         assert sum(r.json()[kind]["inserted"] for r in responses) == 500
         assert sum(r.json()[kind]["duplicates"] for r in responses) == 3500
-    with sqlite3.connect(database) as connection:
+    with database.begin() as connection:
         assert (
-            connection.execute("SELECT count(*) FROM message_events").fetchone()[0]
+            connection.exec_driver_sql(
+                "SELECT count(*) FROM message_events"
+            ).fetchone()[0]
             == 500
         )
         assert (
-            connection.execute("SELECT count(*) FROM voice_samples").fetchone()[0]
+            connection.exec_driver_sql("SELECT count(*) FROM voice_samples").fetchone()[
+                0
+            ]
             == 500
         )
 
@@ -199,20 +208,27 @@ def test_eight_concurrent_retries_insert_each_event_once(live_api):
 def test_real_database_failure_rolls_back_and_retry_recovers(live_api):
     client, database, _ = live_api
     body = batch(count=3)
-    with sqlite3.connect(database) as connection:
-        connection.execute(
-            "CREATE TRIGGER fail_voice BEFORE INSERT ON voice_samples "
-            "BEGIN SELECT RAISE(ABORT, 'simulated storage failure'); END"
+    with database.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE voice_samples ADD CONSTRAINT fail_voice CHECK (false)"
         )
     assert client.post(URL, json=body).status_code == 500
-    with sqlite3.connect(database) as connection:
+    with database.begin() as connection:
         assert (
-            connection.execute("SELECT count(*) FROM message_events").fetchone()[0] == 0
+            connection.exec_driver_sql(
+                "SELECT count(*) FROM message_events"
+            ).fetchone()[0]
+            == 0
         )
         assert (
-            connection.execute("SELECT count(*) FROM voice_samples").fetchone()[0] == 0
+            connection.exec_driver_sql("SELECT count(*) FROM voice_samples").fetchone()[
+                0
+            ]
+            == 0
         )
-        connection.execute("DROP TRIGGER fail_voice")
+        connection.exec_driver_sql(
+            "ALTER TABLE voice_samples DROP CONSTRAINT fail_voice"
+        )
     # Uvicorn closes the connection after the unhandled storage error. A
     # fresh pool avoids racing that close by reusing the failed connection.
     with httpx.Client(
@@ -225,10 +241,16 @@ def test_real_database_failure_rolls_back_and_retry_recovers(live_api):
     assert retried.status_code == 200, retried.text
     assert retried.json()["messages"]["inserted"] == 3
     assert retried.json()["voice_samples"]["inserted"] == 3
-    with sqlite3.connect(database) as connection:
+    with database.begin() as connection:
         assert (
-            connection.execute("SELECT count(*) FROM message_events").fetchone()[0] == 3
+            connection.exec_driver_sql(
+                "SELECT count(*) FROM message_events"
+            ).fetchone()[0]
+            == 3
         )
         assert (
-            connection.execute("SELECT count(*) FROM voice_samples").fetchone()[0] == 3
+            connection.exec_driver_sql("SELECT count(*) FROM voice_samples").fetchone()[
+                0
+            ]
+            == 3
         )

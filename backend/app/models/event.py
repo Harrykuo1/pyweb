@@ -2,7 +2,6 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     Date,
-    DateTime,
     Enum,
     ForeignKey,
     Integer,
@@ -13,6 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.db_types import UTCDateTime
 from app.models.post_status import PostStatus
 
 
@@ -40,6 +40,7 @@ class Event(Base):
             PostStatus,
             name="event_status",
             values_callable=lambda e: [m.value for m in e],
+            native_enum=False,
             create_constraint=True,
             validate_strings=True,
         ),
@@ -53,16 +54,16 @@ class Event(Base):
         ForeignKey("users.id"), nullable=True
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
 
     edited_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
+        UTCDateTime(timezone=True), nullable=True, index=True
     )
 
     def mark_edited(self, user_id: int) -> None:
@@ -139,7 +140,7 @@ class EventPhoto(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     caption: Mapped[str | None] = mapped_column(String(200), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
@@ -165,13 +166,13 @@ class EventComment(Base):
     # short remarks, not posts, so there's no sanitization surface.
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
     # Stamped when the author edits; drives the "已編輯" marker in the UI.
     edited_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
 
     event: Mapped["Event"] = relationship(back_populates="comments")
@@ -198,7 +199,7 @@ class EventLike(Base):
         index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )

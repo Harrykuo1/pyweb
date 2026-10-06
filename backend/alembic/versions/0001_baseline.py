@@ -32,7 +32,13 @@ def upgrade() -> None:
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("admin", "viewer", name="user_role", create_constraint=True),
+            sa.Enum(
+                "admin",
+                "viewer",
+                name="user_role",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

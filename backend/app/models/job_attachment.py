@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class JobAttachment(Base):
@@ -26,7 +27,7 @@ class JobAttachment(Base):
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )

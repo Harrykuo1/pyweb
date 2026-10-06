@@ -15,6 +15,19 @@ jobs:
   backend:
     name: backend (pytest)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: pyweb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pyweb_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:test-only@localhost:5432/pyweb_test
     defaults:
       run:
         working-directory: backend
@@ -35,6 +48,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
@@ -45,9 +59,7 @@ jobs:
           ruff check .
           ruff format --check .
 
-      # backend/tests/conftest.py sets SESSION_SECRET / SEED_* / DATABASE_URL
-      # via os.environ.setdefault, so the CI environment doesn't need to
-      # provide them.
+      # Each test gets its own disposable PostgreSQL schema, including xdist workers.
       #
       # -n auto distributes the suite across the runner's CPUs via pytest-xdist
       # (~3x speedup on the 2-vCPU ubuntu-latest runner). --durations=10 lists

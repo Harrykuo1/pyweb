@@ -60,8 +60,8 @@ def test_database_rejects_duplicate_source_events(db_session, model):
     assert db_session.query(model).count() == 1
 
 
-def test_migration_roundtrip_keeps_existing_data(tmp_path):
-    url = f"sqlite:///{tmp_path / 'migration.db'}"
+def test_migration_roundtrip_keeps_existing_data(postgres_url):
+    url = postgres_url
     root = Path(__file__).resolve().parents[1]
     logger = logging.getLogger(__name__)
     was_disabled = logger.disabled
@@ -101,7 +101,6 @@ def test_migration_roundtrip_keeps_existing_data(tmp_path):
                     conn.execute(text("SELECT title FROM events")).scalar_one()
                     == "keep"
                 )
-                assert conn.execute(text("PRAGMA foreign_key_check")).all() == []
         assert {
             tuple(i["column_names"])
             for i in inspect(engine).get_indexes("message_events")

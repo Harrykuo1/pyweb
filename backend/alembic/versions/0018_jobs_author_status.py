@@ -45,6 +45,7 @@ def upgrade() -> None:
                     "accepted",
                     "rejected",
                     name="job_status",
+                    native_enum=False,
                     create_constraint=True,
                 ),
                 nullable=False,
@@ -81,7 +82,7 @@ def upgrade() -> None:
         batch.create_index("ix_jobs_status", ["status"])
     # Preserve the existing anonymity convention: rows with no real_name
     # were the anonymous ones.
-    op.execute("UPDATE jobs SET is_anonymous = 1 WHERE real_name IS NULL")
+    op.execute("UPDATE jobs SET is_anonymous = true WHERE real_name IS NULL")
 
 
 def downgrade() -> None:

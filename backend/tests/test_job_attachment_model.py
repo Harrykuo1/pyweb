@@ -93,59 +93,29 @@ def test_attachment_filename_required(db_session):
     db_session.rollback()
 
 
-def test_deleting_job_cascades_to_attachments():
-    # SQLite only honors ON DELETE CASCADE with foreign_keys ON, which the
-    # app enables in app/database.py but the shared in-memory test engine
-    # does not. Use a local FK-enabled engine so this exercises the real
-    # production cascade behavior.
-    from sqlalchemy import create_engine, event
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-
-    from app import models  # noqa: F401  (register tables on Base.metadata)
-    from app.database import Base
-
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+def test_deleting_job_cascades_to_attachments(db_session):
+    s = db_session
+    job = Job(
+        job_year=2026,
+        job_month=5,
+        company="Acme",
+        kind=JobKind.INTERNSHIP,
+        experience_md="x",
     )
-
-    @event.listens_for(engine, "connect")
-    def _fk_on(dbapi_conn, _rec):
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys=ON")
-        cur.close()
-
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    s = Session()
-    try:
-        job = Job(
-            job_year=2026,
-            job_month=5,
-            company="Acme",
-            kind=JobKind.INTERNSHIP,
-            experience_md="x",
+    s.add(job)
+    s.commit()
+    s.add(
+        JobAttachment(
+            job_id=job.id,
+            filename="cv.pdf",
+            mime_type="application/pdf",
+            size_bytes=1,
+            uploaded_at=datetime.now(UTC),
         )
-        s.add(job)
-        s.commit()
-        s.add(
-            JobAttachment(
-                job_id=job.id,
-                filename="cv.pdf",
-                mime_type="application/pdf",
-                size_bytes=1,
-                uploaded_at=datetime.now(UTC),
-            )
-        )
-        s.commit()
-        assert s.query(JobAttachment).count() == 1
+    )
+    s.commit()
+    assert s.query(JobAttachment).count() == 1
 
-        s.delete(job)
-        s.commit()
-        assert s.query(JobAttachment).count() == 0  # cascaded with the job
-    finally:
-        s.close()
-        Base.metadata.drop_all(engine)
-        engine.dispose()
+    s.delete(job)
+    s.commit()
+    assert s.query(JobAttachment).count() == 0  # cascaded with the job

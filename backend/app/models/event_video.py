@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     CheckConstraint,
-    DateTime,
     Enum,
     ForeignKey,
     Integer,
@@ -13,6 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class VideoKind(str, enum.Enum):
@@ -62,6 +62,7 @@ class EventVideo(Base):
             VideoKind,
             name="event_video_kind",
             values_callable=lambda e: [m.value for m in e],
+            native_enum=False,
             create_constraint=True,
             validate_strings=True,
         ),
@@ -72,6 +73,7 @@ class EventVideo(Base):
             VideoStatus,
             name="event_video_status",
             values_callable=lambda e: [m.value for m in e],
+            native_enum=False,
             create_constraint=True,
             validate_strings=True,
         ),
@@ -84,7 +86,7 @@ class EventVideo(Base):
         Integer, nullable=False, default=0, server_default="0", index=True
     )
     uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
@@ -113,12 +115,12 @@ class EventVideo(Base):
     # spinning on a video that will never arrive; startup sweeps anything
     # older than the timeout into FAILED and deletes its files.
     processing_started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     # Failed rows stay visible so the uploader learns to retry rather than
     # watching their upload silently vanish, then age out on a later sweep.
     failed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     # ffmpeg's reason. Shown to admins only — it names paths and codecs.
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)

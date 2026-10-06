@@ -5,7 +5,6 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
-    DateTime,
     Enum,
     ForeignKey,
     Integer,
@@ -16,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 from app.models.post_status import PostStatus
 
 
@@ -37,6 +37,7 @@ class Job(Base):
             JobKind,
             name="job_kind",
             values_callable=lambda e: [m.value for m in e],
+            native_enum=False,
             create_constraint=True,
             validate_strings=True,
         ),
@@ -65,6 +66,7 @@ class Job(Base):
             PostStatus,
             name="job_status",
             values_callable=lambda e: [m.value for m in e],
+            native_enum=False,
             create_constraint=True,
             validate_strings=True,
         ),
@@ -78,7 +80,7 @@ class Job(Base):
         ForeignKey("users.id"), nullable=True
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     # Legacy free-form markdown timeline. New jobs write structured
     # entries into timeline_events instead; this column stays for
@@ -94,7 +96,7 @@ class Job(Base):
         JSON, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
@@ -118,10 +120,10 @@ class JobComment(Base):
     # Plain text, rendered escaped on the client (no Markdown).
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        UTCDateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
     edited_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
 
 
@@ -139,5 +141,5 @@ class JobLike(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        UTCDateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

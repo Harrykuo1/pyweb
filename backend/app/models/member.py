@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class Member(Base):
@@ -29,15 +30,15 @@ class Member(Base):
     # as a cache-busting version stamp so browsers refetch only when the
     # photo actually changes.
     photo_updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     resume_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     resume_pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     resume_pdf_updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     joined_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )

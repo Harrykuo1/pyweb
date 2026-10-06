@@ -1,16 +1,18 @@
 import os
+import uuid
 from contextlib import contextmanager
 
 # Set required env vars before importing app modules so Settings() loads.
 os.environ.setdefault("SESSION_SECRET", "test-session-secret")
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SEED_ADMIN_USERNAME", "test-admin")
 os.environ.setdefault("SEED_ADMIN_PASSWORD", "test-admin-pw")
 os.environ.setdefault("SEED_VIEWER_USERNAME", "test-viewer")
 os.environ.setdefault("SEED_VIEWER_PASSWORD", "test-viewer-pw")
 
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -40,7 +42,39 @@ def count_queries(engine):
 
 
 @pytest.fixture
-def db_engine():
+def postgres_url():
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.fail("Set TEST_DATABASE_URL to a disposable PostgreSQL test database")
+    schema = "test_" + uuid.uuid4().hex
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    isolated = (
+        make_url(url)
+        .update_query_dict({"options": f"-csearch_path={schema} -ctimezone=UTC"})
+        .render_as_string(hide_password=False)
+    )
+    try:
+        yield isolated
+    finally:
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
+
+
+@pytest.fixture
+def db_engine(request):
+    from app import models  # noqa: F401
+
+    if os.environ.get("TEST_DATABASE_URL"):
+        engine = create_engine(request.getfixturevalue("postgres_url"))
+        Base.metadata.create_all(bind=engine)
+        try:
+            yield engine
+        finally:
+            engine.dispose()
+        return
     # In-memory SQLite shared across the same connection (StaticPool) so
     # all sessions in one test see the same data.
     engine = create_engine(
@@ -49,7 +83,6 @@ def db_engine():
         poolclass=StaticPool,
     )
     # Import all model modules so their tables register on Base.metadata.
-    from app import models  # noqa: F401
 
     # Match production (app/database.py) which enables FK enforcement on
     # every connection, so tests catch FK violations instead of silently
