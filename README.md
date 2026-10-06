@@ -102,13 +102,14 @@ docker compose down
 | `frontend` | `frontend/Dockerfile`（multi-stage：node build → nginx serve） | `8081:8080` | 服務 `dist/` + 反代 `/api` → backend |
 | `backend` | `backend/Dockerfile`（python:3.13-slim） | 不對外 | `:8000`，由 frontend nginx 反代 |
 | `onlyoffice` | `onlyoffice/documentserver:8.2` | 不對外 | `:80`，僅在 compose network 內由 backend 呼叫 |
-| `postgres` | `postgres:17` | 不對外 | PostgreSQL，持久化於 `data/postgresql/` |
+| `postgres` | `postgres:17` | `127.0.0.1:5432` | PostgreSQL，持久化於 `data/postgresql/` |
 | `db-init` | `backend/Dockerfile` | 不對外 | 一次性準備目錄與持久化連線密碼 |
+| `adminer` | Adminer 6.1.1 | `127.0.0.1:8119` | 沿用 `SQLITE_WEB_PASSWORD` 的資料庫管理介面 |
 | `./data` | bind mount | — | 掛在 backend `/data`，存 PostgreSQL、舊 SQLite 備份與 `uploads/`、`logs/` |
 
 既有 Jenkins CD 會自動執行 `scripts/deploy.sh`，不需要新增 secret、修改 `.env` 或手動執行 migration。首次切換會停寫、保留 SQLite 完整快照、逐表驗證後匯入 PostgreSQL；後續部署沿用 PostgreSQL 資料。API、登入 cookie、Bot token 與上傳檔路徑維持不變。
 
-完整流程、資料位置、失敗重試與還原方式見 [PostgreSQL 部署與資料保留](docs/postgresql-migration.md)。舊 sqlite-web 已退役；管理資料庫使用 `docker compose exec postgres psql -U pyweb -d pyweb`。
+完整流程、資料位置、失敗重試與還原方式見 [PostgreSQL 部署與資料保留](docs/postgresql-migration.md)。舊 sqlite-web 已由 Adminer 取代，沿用 8119 與 `.env` 中的 `SQLITE_WEB_PASSWORD`。Adminer 和 PostgreSQL 的管理連接埠只綁定主機 `127.0.0.1`；[Adminer 與 HeidiSQL 連線方式](docs/postgresql-migration.md#adminer-與-heidisql)。
 
 ### 環境變數
 

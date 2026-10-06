@@ -29,7 +29,7 @@
 | `data/pyweb.db` | 保留的原 SQLite，切換後不再更新 |
 | `data/uploads/`、`data/logs/` | 原本的上傳檔和 log |
 
-這些都是 bind mount，重建／移除容器不會刪除。密碼與 PostgreSQL 資料由 UID/GID 1000 使用，初始化容器會處理新目錄權限。PostgreSQL 不發布 host port；資料庫管理可用 `docker compose exec postgres psql -U pyweb -d pyweb`。舊的 8119 sqlite-web 服務退役，避免誤改過時資料。
+這些都是 bind mount，重建／移除容器不會刪除。密碼與 PostgreSQL 資料由 UID/GID 1000 使用，初始化容器會處理新目錄權限。PostgreSQL 只發布 `127.0.0.1:5432`；資料庫管理也可用 `docker compose exec postgres psql -U pyweb -d pyweb`。Adminer 取代 sqlite-web，沿用 `127.0.0.1:8119`，查看的是目前 PostgreSQL 資料。
 
 後續部署以 PostgreSQL 的完成標記為準，不會再匯入 SQLite。若 origin 檔存在但 PostgreSQL volume 或標記遺失、識別碼不符，啟動會失敗，避免悄悄回到過時資料。密碼檔遺失也不會自動產生另一組密碼取代原憑證。
 
@@ -91,3 +91,36 @@ docker rm -f pyweb-pg-test
 - 獨立測試資料的 `pg_dump`／`pg_restore` 實測通過，19 張表的內容及自增序列保留。
 
 以上為本機演練；遠端 Jenkins／GitHub Actions 在合併推送後執行。
+
+## Adminer 與 HeidiSQL
+
+既有 `.env` 的 `SQLITE_WEB_PASSWORD` 繼續作為 Adminer 登入密碼，不需新增變數，也不會修改 PostgreSQL 密碼。新部署請依 `.env.docker.example` 設定此值；空值或未設定會阻止 Compose 部署，避免無密碼開放管理介面。
+
+Adminer 使用固定的 PostgreSQL / `postgres` / `pyweb` 使用者 / `pyweb` 資料庫，畫面只需輸入 `SQLITE_WEB_PASSWORD`。驗證成功後，容器才使用 `data/.postgres-password` 建立資料庫連線；這是具備修改與刪除權限的管理入口。網頁密碼不接受作為 HeidiSQL 的資料庫密碼。
+
+- 在伺服器本機開啟 `http://127.0.0.1:8119`。
+- 同主機 nginx 原本若代理到 `127.0.0.1:8119`，可保留原設定及 Basic Auth，對外繼續使用 HTTPS。若 nginx 位於容器或另一台主機，需改用可達的內部網路代理，不能直接使用它自己的 `127.0.0.1`。
+- `/adminer.php` 也經過同一套驗證，無法繞過網頁密碼。Adminer 保留原有 CSRF 與登入嘗試限制，不提供永久登入。
+
+HeidiSQL 可使用 SSH tunnel。也可先在自己的電腦執行：
+
+```bash
+ssh -N -L 15432:127.0.0.1:5432 YOUR_SSH_USER@YOUR_SERVER
+```
+
+保持 SSH 連線開啟，再於 HeidiSQL 設定：
+
+| 欄位 | 值 |
+|---|---|
+| 網路類型 | PostgreSQL (TCP/IP) |
+| 主機 | `127.0.0.1` |
+| Port | `15432` |
+| 使用者 | `pyweb` |
+| 資料庫 | `pyweb` |
+| 密碼 | 伺服器 repo 內 `data/.postgres-password` 的內容 |
+
+密碼可在伺服器 repo 執行 `cat data/.postgres-password` 查看，請勿貼到公開訊息或提交 Git。若使用 HeidiSQL 內建 SSH tunnel，SSH 主機填伺服器位址，資料庫目的地主機填 `127.0.0.1`、port `5432`。
+
+CD 會自動建置及啟動 Adminer。PostgreSQL 仍使用原有 `data/postgresql/` 與密碼，這次不涉及 schema migration 或重新匯入 SQLite。
+
+管理介面整合測試：`python3 scripts/tests/test_adminer.py`。需要 Docker，會自動建立並清除獨立網路、Adminer、tmpfs PostgreSQL 與測試憑證，不使用 repo 的資料庫。

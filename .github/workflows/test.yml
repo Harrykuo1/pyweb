@@ -99,12 +99,20 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+  adminer:
+    name: Adminer login and PostgreSQL integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test management access with disposable containers
+        run: python3 scripts/tests/test_adminer.py
+
   # Required secrets: JENKINS_URL, JENKINS_USER, JENKINS_API_TOKEN.
   # The actual deploy runs in Jenkins (Jenkinsfile at repo root); this job
   # just kicks off pyweb-deploy via Jenkins's remote build API.
   deploy:
     name: trigger Jenkins deploy
-    needs: [backend, frontend]
+    needs: [backend, frontend, adminer]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
