@@ -1,7 +1,7 @@
 """Tests for the standalone stress-test seed script.
 
 The script writes its own engine bound to whatever --db-url it is given,
-so we point it at a per-test temp SQLite file. We pass deterministic
+so we point it at a disposable PostgreSQL schema. We pass deterministic
 seed_value so probabilistic assertions (about how many rows happen to
 have timeline events) are reproducible without flaking the suite.
 
@@ -31,8 +31,8 @@ def uploads_dir(tmp_path) -> Path:
     return tmp_path / "uploads"
 
 
-def test_seed_inserts_requested_counts(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_inserts_requested_counts(postgres_url, uploads_dir):
+    db_url = postgres_url
     summary = stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,
@@ -49,10 +49,18 @@ def test_seed_inserts_requested_counts(tmp_path, uploads_dir):
     with _connect(db_url) as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM members")).scalar() == 3
         assert conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar() == 3
+        # The script supplies member IDs for upload paths. Subsequent ordinary
+        # inserts must continue after them rather than collide with ID 1.
+        assert (
+            conn.execute(
+                text("SELECT nextval(pg_get_serial_sequence('members', 'id'))")
+            ).scalar_one()
+            == 4
+        )
 
 
-def test_seed_reset_clears_tables_before_inserting(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_reset_clears_tables_before_inserting(postgres_url, uploads_dir):
+    db_url = postgres_url
     stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,
@@ -79,8 +87,8 @@ def test_seed_reset_clears_tables_before_inserting(tmp_path, uploads_dir):
         assert conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar() == 1
 
 
-def test_seed_injects_needles_at_expected_cadence(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_injects_needles_at_expected_cadence(postgres_url, uploads_dir):
+    db_url = postgres_url
     # needle_every=2 with N=3 → idx 0 and 2 get needles → 2 each.
     stress_seed.seed(
         db_url=db_url,
@@ -107,8 +115,8 @@ def test_seed_injects_needles_at_expected_cadence(tmp_path, uploads_dir):
         assert job_needles == 2
 
 
-def test_seed_writes_real_jpeg_photos(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_writes_real_jpeg_photos(postgres_url, uploads_dir):
+    db_url = postgres_url
     stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,
@@ -135,8 +143,8 @@ def test_seed_writes_real_jpeg_photos(tmp_path, uploads_dir):
         assert 5_000 < len(blob) < 200_000
 
 
-def test_seed_writes_real_pdf_resumes(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_writes_real_pdf_resumes(postgres_url, uploads_dir):
+    db_url = postgres_url
     stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,
@@ -165,8 +173,8 @@ def test_seed_writes_real_pdf_resumes(tmp_path, uploads_dir):
         assert 5_000 < len(blob) < 200_000
 
 
-def test_seed_populates_required_member_fields(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_populates_required_member_fields(postgres_url, uploads_dir):
+    db_url = postgres_url
     stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,
@@ -195,8 +203,8 @@ def test_seed_populates_required_member_fields(tmp_path, uploads_dir):
         assert nulls == 0
 
 
-def test_seed_writes_structured_timeline_events(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_writes_structured_timeline_events(postgres_url, uploads_dir):
+    db_url = postgres_url
     stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,
@@ -238,8 +246,8 @@ def test_seed_writes_structured_timeline_events(tmp_path, uploads_dir):
         engine.dispose()
 
 
-def test_seed_disables_needles_when_rate_is_zero(tmp_path, uploads_dir):
-    db_url = f"sqlite:///{tmp_path / 'stress.db'}"
+def test_seed_disables_needles_when_rate_is_zero(postgres_url, uploads_dir):
+    db_url = postgres_url
     stress_seed.seed(
         db_url=db_url,
         uploads_dir=uploads_dir,

@@ -1,6 +1,6 @@
 """Stress-test seed for pyweb.
 
-Populates a target SQLite database with a configurable number of fake
+Populates a target PostgreSQL database with a configurable number of fake
 members and jobs so list / search / detail endpoints can be soak-tested
 under realistic volume. Members get a markdown resume, a real JPEG
 photo (Pillow), and a real 1-page PDF (reportlab); jobs get a markdown
@@ -8,16 +8,11 @@ experience body and a structured timeline_events JSON list.
 
 Usage from the backend/ directory:
 
-    .venv/bin/python -m scripts.stress_seed                     # 1000 + 1000
-    .venv/bin/python -m scripts.stress_seed --members 10000     # any N
-    .venv/bin/python -m scripts.stress_seed --reset             # wipe + reseed
+    .venv/bin/python -m scripts.stress_seed --db-url "$TEST_DATABASE_URL" \
+        --uploads-dir /tmp/pyweb-stress --members 10000
 
-This file is intentionally NOT part of the docker image (the Dockerfile
-only copies app/, not scripts/) so seeding is purely a host-side dev
-tool that points at the same SQLite file the container bind-mounts. It
-is safe to run while the container is up — SQLite WAL handles the
-concurrency — but live HTTP traffic will pause briefly while the script
-holds writes.
+This host-side development tool requires explicit disposable database and
+upload paths. It must not write to the retired SQLite file or live uploads.
 
 Dependencies are dev-only — install once with:
 
@@ -55,13 +50,6 @@ _HERE = Path(__file__).resolve().parent
 _BACKEND_ROOT = _HERE.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
-
-# Default target: ../data/pyweb.db relative to backend/, which is the
-# host side of the docker bind-mount.
-DEFAULT_DB_URL = f"sqlite:///{_BACKEND_ROOT.parent}/data/pyweb.db"
-# Photos / PDFs are written here under members/<id>/, matching the
-# production layout the FastAPI router serves from.
-DEFAULT_UPLOADS_DIR = _BACKEND_ROOT.parent / "data" / "uploads"
 
 # ----- Fake data pools -----
 
@@ -709,6 +697,13 @@ def seed(
                 for offset, i in enumerate(range(chunk_start, end))
             ]
             session.bulk_insert_mappings(Member, rows)
+            if engine.dialect.name == "postgresql":
+                session.execute(
+                    text(
+                        "SELECT setval(pg_get_serial_sequence('members', 'id'), "
+                        "(SELECT MAX(id) FROM members))"
+                    )
+                )
             session.commit()
             summary["members_inserted"] = end
             print(f"  members: {end:>6}/{members}")
@@ -738,7 +733,7 @@ def seed(
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Seed pyweb's SQLite DB with fake stress-test data."
+        description="Seed a disposable PostgreSQL DB with fake stress-test data."
     )
     parser.add_argument("--members", type=int, default=1000)
     parser.add_argument("--jobs", type=int, default=1000)
@@ -761,13 +756,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--db-url",
-        default=DEFAULT_DB_URL,
-        help=f"SQLAlchemy URL (default {DEFAULT_DB_URL}).",
+        required=True,
+        help="SQLAlchemy URL for a disposable database.",
     )
     parser.add_argument(
         "--uploads-dir",
-        default=str(DEFAULT_UPLOADS_DIR),
-        help=f"Root for member assets (default {DEFAULT_UPLOADS_DIR}).",
+        required=True,
+        help="Disposable directory for generated member assets.",
     )
     return parser.parse_args(argv)
 

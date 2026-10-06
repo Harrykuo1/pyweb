@@ -11,7 +11,10 @@ _is_sqlite = settings.database_url.startswith("sqlite")
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
 engine = create_engine(
-    settings.database_url, connect_args=_connect_args, pool_pre_ping=True
+    settings.database_url,
+    connect_args=_connect_args,
+    pool_pre_ping=True,
+    hide_parameters=True,
 )
 
 

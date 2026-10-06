@@ -19,7 +19,7 @@
 |---|---|
 | 前端 | Vue 3（Composition API + `<script setup>`）、Vue Router、Pinia、Element Plus、md-editor-v3、cropperjs、DOMPurify |
 | 後端 | FastAPI、SQLAlchemy 2.x、Pydantic v2、SlowAPI（rate limit）、httpx + PyJWT（OnlyOffice 整合） |
-| 資料庫 | SQLite + Alembic（schema migration） |
+| 資料庫 | PostgreSQL 17 + Alembic（自動搬移舊 SQLite） |
 | 認證 | Server-side session（Starlette `SessionMiddleware`，簽章式 cookie，附 `password_version` 失效機制） |
 | 檔案儲存 | 一律落在 `data/uploads/`（bind mount 出來，host 可直接看），不進 DB BLOB |
 | 文件轉換 | OnlyOffice Document Server 8.2（office → PDF，僅在 compose network 內部曝露） |
@@ -62,7 +62,7 @@ pyweb/
 │       ├── api/              # axios 包裝
 │       └── utils/            # attachmentTree / searchQuery / relativeTime / safeId / apiError / useCounter
 ├── nginx/                    # 容器內前端 nginx 設定
-├── data/                     # bind mount：SQLite + uploads + logs（已 gitignore）
+├── data/                     # bind mount：PostgreSQL + uploads + logs（已 gitignore）
 ├── scripts/                  # rclone 備份腳本
 ├── docker-compose.yml
 └── CLAUDE.md                 # 開發規範（給 AI 助手讀）
@@ -81,7 +81,7 @@ $EDITOR .env
 mkdir -p data
 
 # 3. 一鍵啟動（首次會 build image 並下載 OnlyOffice ~1.4GB，約 3–5 分鐘）
-docker compose up --build
+bash scripts/deploy.sh
 
 # 背景跑：
 docker compose up -d --build
@@ -89,11 +89,8 @@ docker compose up -d --build
 # 看 log：
 docker compose logs -f
 
-# 結束（保留 SQLite 與上傳檔）：
+# 結束（保留資料庫與上傳檔）：
 docker compose down
-
-# 結束並清掉資料：
-docker compose down -v
 ```
 
 開瀏覽器到 [http://localhost:8081/](http://localhost:8081/)。
@@ -105,14 +102,13 @@ docker compose down -v
 | `frontend` | `frontend/Dockerfile`（multi-stage：node build → nginx serve） | `8081:8080` | 服務 `dist/` + 反代 `/api` → backend |
 | `backend` | `backend/Dockerfile`（python:3.13-slim） | 不對外 | `:8000`，由 frontend nginx 反代 |
 | `onlyoffice` | `onlyoffice/documentserver:8.2` | 不對外 | `:80`，僅在 compose network 內由 backend 呼叫 |
-| `sqlite-web` | `coleifer/sqlite-web:latest` | `8119:8080` | phpMyAdmin 式的 DB 瀏覽介面，掛同一份 `./data` |
-| `./data` | bind mount | — | 掛在 backend `/data`，存 `pyweb.db` 與 `uploads/`、`logs/` |
+| `postgres` | `postgres:17` | 不對外 | PostgreSQL，持久化於 `data/postgresql/` |
+| `db-init` | `backend/Dockerfile` | 不對外 | 一次性準備目錄與持久化連線密碼 |
+| `./data` | bind mount | — | 掛在 backend `/data`，存 PostgreSQL、舊 SQLite 備份與 `uploads/`、`logs/` |
 
-> **⚠️ `sqlite-web` 只適合信任網路。** 它對 `pyweb.db` 有完整讀寫權、走明文 HTTP、只靠一組共用密碼（`SQLITE_WEB_PASSWORD`），且**完全繞過 app 的權限系統** —— 進得去就能直接改 `users` 表。目前綁 `0.0.0.0`，同網段任何裝置都連得到。要收緊就把 port 改成 `127.0.0.1:8119:8080` 再走 SSH tunnel，唯讀的話加 `-r`。注意 Docker 發布 port 是直接寫 iptables 的 nat 表，**會繞過 ufw**，所以防火牆規則擋不住它。
+既有 Jenkins CD 會自動執行 `scripts/deploy.sh`，不需要新增 secret、修改 `.env` 或手動執行 migration。首次切換會停寫、保留 SQLite 完整快照、逐表驗證後匯入 PostgreSQL；後續部署沿用 PostgreSQL 資料。API、登入 cookie、Bot token 與上傳檔路徑維持不變。
 
-backend 容器啟動時會跑 `app/init_db.py`：先 `alembic upgrade head` 把 schema 帶到最新版，再依 `.env` 內的 `SEED_*` 變數 upsert 帳號，最後寫入 `app_configs` 預設值。所有步驟皆冪等，**不會覆蓋既有密碼或既有 config**。
-
-SQLite 檔以 bind mount 落在 [data/pyweb.db](data/)，附件落在 `data/uploads/{members,jobs}/`，host 上可直接 `sqlite3 data/pyweb.db` 或拿 DBeaver 開，附件也能直接用檔案總管瀏覽。整個 `data/` 目錄已被 gitignore，但 `.gitkeep` 保留資料夾結構。要重置：`docker compose down -v && rm -rf data/pyweb.db data/uploads/*`。
+完整流程、資料位置、失敗重試與還原方式見 [PostgreSQL 部署與資料保留](docs/postgresql-migration.md)。舊 sqlite-web 已退役；管理資料庫使用 `docker compose exec postgres psql -U pyweb -d pyweb`。
 
 ### 環境變數
 
@@ -128,13 +124,12 @@ SQLite 檔以 bind mount 落在 [data/pyweb.db](data/)，附件落在 `data/uplo
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | 否 | Discord OAuth 應用憑證。留空則停用 Discord 登入（只剩密碼登入） |
 | `DISCORD_REDIRECT_URI` | 否 | OAuth callback，須為公開網址且與 Discord 應用設定**完全一致**，如 `https://<域名>/api/auth/discord/callback` |
 | `DISCORD_GUILD_ID` | 否 | 初始允許登入的 Discord 伺服器 ID；之後可在設定頁改（DB 值優先） |
-| `SQLITE_WEB_PASSWORD` | 是 | `sqlite-web` 的登入密碼（沒有 username）。未設時容器會起不來。等同整個資料庫的讀寫權，用長亂數，並參考上方服務拓樸的警告 |
 
 `UPLOADS_DIR`、`ONLYOFFICE_INTERNAL_URL`、`BACKEND_INTERNAL_URL` 由 `docker-compose.yml` 直接寫死，平常不用手動設。
 
 ## 資料庫遷移（Alembic）
 
-Schema 變更走 Alembic，沒有自動 `create_all`。每次啟動 `init_db.py` 會自動 `alembic upgrade head` 把資料庫帶到最新版；只有「第一次從舊版升級」需要手動動一下。
+Schema 變更走 Alembic，沒有自動 `create_all`。每次啟動 `init_db.py` 會自動 `alembic upgrade head` 把資料庫帶到最新版；從既有 SQLite 升級也會自動搬移與驗證。
 
 ### 一般工作流程
 
@@ -148,39 +143,11 @@ Schema 變更走 Alembic，沒有自動 `create_all`。每次啟動 `init_db.py`
 
 > **⚠️ Autogenerate 不是萬靈丹。** Alembic 會猜測 column add / drop / rename，但抓不到 server_default 變化、複雜的 enum 值新增、或某些 SQLite ALTER 限制。產生 migration 後**一定要打開檔案手動檢查**再 commit。
 
-### 從舊版（沒有 Alembic）升級既有部署
+### SQLite 搬移與測試環境
 
-如果你的 `pyweb.db` 是 Alembic 加進來之前就在跑的（裡面已經有 `users` / `members` / `site_settings` / `internships` 但沒有 `alembic_version` 表），第一次升級必須先告訴 Alembic「資料庫已經是 baseline 狀態」，**否則 upgrade 會試圖再 CREATE TABLE 而炸掉**。
+來源 SQLite 必須有 Alembic revision；既有 `0028`～`0030` 資料庫會自動在副本升級、匯入，原檔保留。無 revision 的古老資料庫會停止搬移，避免猜測 schema 造成遺失。
 
-正式流程：
-
-```bash
-# 1. 拉新版 code、停服務
-git pull
-docker compose down
-
-# 2. 一次性 stamp baseline
-docker compose run --rm backend alembic stamp 0001
-
-# 3. 重新啟動 — backend 容器會自動 alembic upgrade head 把 0001 之後的 migration 跑完
-docker compose up -d --build
-```
-
-驗證一下：
-
-```bash
-docker compose exec backend python -c "
-import sqlite3
-con = sqlite3.connect('/data/pyweb.db')
-print('alembic_version:', con.cursor().execute('SELECT version_num FROM alembic_version').fetchone())
-"
-```
-
-之後就跟一般流程一樣：每次部署只要 `docker compose up -d --build`。
-
-### 測試環境
-
-`pytest` 跑的 in-memory DB **不**走 Alembic，直接用 `Base.metadata.create_all`（[backend/tests/conftest.py](backend/tests/conftest.py)）——測試只關心當下的 ORM 是不是正確、不需要驗 migration 序列。Migration 本身的正確性由 commit message 內手動 stamp / upgrade 的端到端驗證 + 產生環節的人工 review 把關。
+CI 使用 PostgreSQL 17，每項 DB 測試都有獨立 schema 並執行完整 migrations。另有真實 HTTP、並行寫入與完整 SQLite 搬移測試。執行方法見 [測試說明](docs/postgresql-migration.md#測試)。
 
 ## 帳號與登入
 
@@ -218,7 +185,7 @@ SEED_VIEWER_PASSWORD=...
 >
 > - **推薦**：登入 admin → 右上角 → `/settings` → 帳號管理 → 改 username / 密碼。
 > - **救援（忘記 admin 密碼）**：`docker compose exec backend python -m app.reset_password admin <new_pw>` —— 會 rotate 密碼並 bump `password_version`，任何既有 session cookie 一併失效。
-> - **完全重置**：`docker compose down -v && rm -rf data/pyweb.db data/uploads/*`（會清掉所有資料）。
+> - 若要完全重建環境，先停止服務並備份整個 `data/`；不要只刪 SQLite，正式資料已在 PostgreSQL。
 
 登入只認密碼（不問 username），所以兩個帳號的密碼必須不同；UI 在改密碼時會擋住撞號。
 
@@ -230,27 +197,15 @@ Bot 可透過 `POST /api/activity/batches` 每五分鐘批次寫入文字訊息�
 
 ## 自動備份到雲端（rclone）
 
-排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 走「**hot snapshot → 打包整個 data/ → 上傳 → 清舊**」流程，**不停服務**。流程：
+排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 使用 PostgreSQL `pg_dump` 建立一致的資料庫備份，驗證 dump 目錄後，連同 uploads、logs、密碼、origin 與 SQLite 備份打包、上傳，再清除過期 archive。既有 cron 與 rclone 參數不需改動。
 
-1. `sqlite3 .backup` + `?immutable=1` 對 `pyweb.db` 做 atomic 快照到 tmp
-2. `cp -a data/.` → tmp/data/（整個 data 目錄，**未來新加子資料夾自動包進去**）
-3. 拿 step 1 的 atomic snapshot 覆蓋 tmp/data/pyweb.db（取代有 torn page 風險的 live 版本）
-4. 刪掉 tmp/data/pyweb.db-wal、pyweb.db-shm（SQLite 內部協調用、備份意義為零）
-5. `tar czf` → `pyweb-STAMP.tar.gz` → rclone 上傳 → 清舊
-
-**腳本本身可以放公開 repo — secret 都在 `~/.config/rclone/rclone.conf`，已寫進 `.gitignore`**。
-
-> **⚠️ Trade-off**：因為**不停服務**，理論上有兩個小破口：
-> - DB 的 `?immutable=1` 會跳過 `-wal` 內尚未 checkpoint 的資料（SQLite 預設每 1000 page / ~4 MB 自動 checkpoint，社群網站平常 WAL 是空的）
-> - `cp -a data/` 跟 backend 寫附件有 ~幾十毫秒 race window，極小機率抓到正在寫一半的附件
->
-> 凌晨備份 + 網站幾天才更新一次，實務上等同 0 風險。要 100% 數學保證，看 git history 找回「停服務」版本即可。
+運作中的 `data/postgresql/` 不會直接複製。附件仍為 live copy；若要求資料庫與附件完全同時間點，備份期間需停止 backend 寫入。
 
 ### 一次性設定（host 端）
 
 ```bash
 # 1. 安裝
-sudo apt install rclone sqlite3
+sudo apt install rclone
 
 # 2. 設定 Drive OAuth（互動式，會跳瀏覽器一次拿到 refresh token）
 rclone config
@@ -273,9 +228,8 @@ PYWEB_DATA_DIR=./data RCLONE_REMOTE=pyweb_backup:pyweb-backups bash scripts/pywe
 預期輸出：
 
 ```
-[20260505-070000] Snapshotting pyweb.db...
-[20260505-070000] Verifying DB integrity...
-[20260505-070000] Mirroring ./data/...
+[20260505-070000] Dumping PostgreSQL...
+[20260505-070000] Copying uploads and recovery metadata...
 [20260505-070000] Bundling...
 [20260505-070000] Uploading 18M → pyweb_backup:pyweb-backups/
 [20260505-070000] Pruning archives older than 30d
@@ -318,29 +272,13 @@ sudo systemctl enable --now pyweb-backup.timer
 
 | 變數 | 預設 | 說明 |
 |---|---|---|
-| `PYWEB_DATA_DIR` | `./data` | 含 `pyweb.db` / `uploads/` / `logs/` 的目錄 |
+| `PYWEB_DATA_DIR` | `./data` | 含 PostgreSQL / uploads / logs / 遷移備份的目錄 |
 | `RCLONE_REMOTE` | `gdrive:pyweb-backups` | rclone remote + 資料夾 |
 | `RETENTION_DAYS` | `30` | 保留幾天的備份；超過會被 `rclone delete` 清掉 |
 
 ### Restore
 
-備份檔 unpack 出來就是一個完整的 `data/` 資料夾，整個取代現有的 `data/` 即可：
-
-```bash
-# 1. 從 Drive 拉備份
-rclone copy gdrive:pyweb-backups/pyweb-20260101-030000.tar.gz .
-
-# 2. 停服務、整個換掉 data/
-docker compose stop backend
-rm -rf data
-tar xzf pyweb-20260101-030000.tar.gz   # 解壓後直接出現一個 data/ 目錄
-
-# 3. 確認 owner（應該是 uid 1000，host 上對應 jenkins 或你的 host user）
-ls -la data/
-
-# 4. 重啟
-docker compose start backend
-```
+備份含 `data/postgres.dump` 與附件／憑證，不含運作中的 PGDATA。還原時先停止服務、保留原 data、解壓 archive、啟動 postgres，成功執行 `pg_restore` 後才啟動 backend。完整指令見 [備份與還原](docs/postgresql-migration.md#備份與還原)。
 
 ### Secret 守則
 

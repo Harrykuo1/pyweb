@@ -15,9 +15,7 @@ pipeline {
                     git fetch --prune origin
                     git pull --ff-only origin main
                     echo "deploying commit: $(git rev-parse --short HEAD)"
-                    docker compose build
-                    docker compose up -d
-                    docker compose ps
+                    bash scripts/deploy.sh
                 '''
             }
         }
