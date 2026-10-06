@@ -222,6 +222,12 @@ SEED_VIEWER_PASSWORD=...
 
 登入只認密碼（不問 username），所以兩個帳號的密碼必須不同；UI 在改密碼時會擋住撞號。
 
+## Discord 活躍度資料收集
+
+Bot 可透過 `POST /api/activity/batches` 每五分鐘批次寫入文字訊息事件與語音取樣。包含 migration、群組限定的 Bot 憑證、重送去重與整批交易；目前提供資料收集，統計圖表後續加入。
+
+部署方式、憑證建立／撤銷、完整欄位、curl 與 Python 範例請見 [Discord 活躍度資料寫入 API](docs/activity-ingestion.md)。
+
 ## 自動備份到雲端（rclone）
 
 排程腳本 [scripts/pyweb-backup.sh](scripts/pyweb-backup.sh) 走「**hot snapshot → 打包整個 data/ → 上傳 → 清舊**」流程，**不停服務**。流程：

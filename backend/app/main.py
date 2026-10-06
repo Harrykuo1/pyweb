@@ -4,8 +4,10 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.core.activity_body_limit import ActivityBodyLimitMiddleware
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.routers import activity as activity_router
 from app.routers import auth as auth_router
 from app.routers import event_comments as event_comments_router
 from app.routers import event_likes as event_likes_router
@@ -67,6 +69,7 @@ class SecurityHeadersMiddleware:
 
 app = FastAPI(title="pyweb backend")
 
+app.add_middleware(ActivityBodyLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # Wire the per-IP limiter into FastAPI. slowapi reads `app.state.limiter`
@@ -92,6 +95,7 @@ app.add_middleware(
 )
 
 
+app.include_router(activity_router.router)
 app.include_router(auth_router.router)
 app.include_router(members_router.router)
 app.include_router(jobs_router.router)
