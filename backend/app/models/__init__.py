@@ -1,4 +1,9 @@
-from app.models.activity import ActivityIngestToken, MessageEvent, VoiceSample
+from app.models.activity import (
+    ActivityChannel,
+    ActivityIngestToken,
+    MessageEvent,
+    VoiceSample,
+)
 from app.models.app_config import AppConfig
 from app.models.database_origin import DatabaseOrigin
 from app.models.event import Event, EventComment, EventLike, EventPhoto, EventTag
@@ -13,6 +18,7 @@ from app.models.site_setting import SiteSetting
 from app.models.user import User, UserRole
 
 __all__ = [
+    "ActivityChannel",
     "ActivityIngestToken",
     "MessageEvent",
     "VoiceSample",

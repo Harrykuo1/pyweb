@@ -71,3 +71,17 @@ class ActivityIngestToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(
         UTCDateTime(timezone=True), nullable=True
     )
+
+
+class ActivityChannel(Base):
+    __tablename__ = "activity_channels"
+
+    guild_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    channel_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(timezone=True), nullable=False
+    )

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import require_completed_member
 from app.core.runtime_config import resolve_guild_id
 from app.database import get_db
-from app.models import Member, User, UserRole
+from app.models import ActivityChannel, Member, User, UserRole
 from app.schemas.activity_analytics import (
     ActivityMetrics,
     ActivityOptions,
@@ -55,6 +55,16 @@ def _people(db: Session, ids, user: User) -> dict[str, ActivityPerson]:
     return result
 
 
+def _channel_names(db: Session, guild: str) -> dict[str, str]:
+    return dict(
+        db.execute(
+            select(ActivityChannel.channel_id, ActivityChannel.name).where(
+                ActivityChannel.guild_id == guild
+            )
+        ).all()
+    )
+
+
 @router.get("/options", response_model=ActivityOptions)
 def activity_options(
     db: Session = Depends(get_db),
@@ -86,10 +96,16 @@ def activity_options(
     ids = [r["user_id"] for r in rows if r["user_id"] is not None]
     people = _people(db, ids, current_user)
     bounds = next(r for r in rows if r["user_id"] is None and r["channel_id"] is None)
+    channel_ids = {r["channel_id"] for r in rows if r["channel_id"] is not None}
     return ActivityOptions(
         configured=True,
         users=sorted(people.values(), key=lambda p: (p.name, p.user_id)),
-        channels=sorted(r["channel_id"] for r in rows if r["channel_id"] is not None),
+        channels=sorted(channel_ids),
+        channel_names={
+            id_: name
+            for id_, name in _channel_names(db, guild).items()
+            if id_ in channel_ids
+        },
         first_record_at=bounds["first_at"],
         last_record_at=bounds["last_at"],
         last_received_at=bounds["received_at"],
@@ -172,6 +188,7 @@ def activity_analytics(
     rhythm = {}
     members = []
     channels = []
+    channel_names = _channel_names(db, guild) if guild else {}
     people = _people(
         db, [r["user_id"] for r in rows if r["user_id"] is not None], current_user
     )
@@ -190,7 +207,13 @@ def activity_analytics(
                 MemberActivity(**people[row["user_id"]].model_dump(), **metrics)
             )
         elif row["channel_id"] is not None:
-            channels.append(ChannelActivity(channel_id=row["channel_id"], **metrics))
+            channels.append(
+                ChannelActivity(
+                    channel_id=row["channel_id"],
+                    channel_name=channel_names.get(row["channel_id"]),
+                    **metrics,
+                )
+            )
         else:
             summary = ActivityMetrics(**metrics)
     days = [

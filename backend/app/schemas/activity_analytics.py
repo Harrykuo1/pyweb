@@ -85,6 +85,7 @@ class MemberActivity(ActivityMetrics, ActivityPerson):
 
 class ChannelActivity(ActivityMetrics):
     channel_id: str
+    channel_name: str | None = None
 
 
 class AnalyticsResponse(BaseModel):
@@ -102,6 +103,7 @@ class ActivityOptions(BaseModel):
     configured: bool
     users: list[ActivityPerson]
     channels: list[str]
+    channel_names: dict[str, str] = Field(default_factory=dict)
     first_record_at: datetime | None = None
     last_record_at: datetime | None = None
     last_received_at: datetime | None = None

@@ -11,8 +11,14 @@ from app.models import User, UserRole
 
 
 def test_openapi_contract_matches_sqlite_release():
-    # Preserve the pre-migration contract while allowing the two new read routes.
-    analytics_paths = {"/api/activity/options", "/api/activity/analytics"}
+    # Preserve the pre-migration contract while allowing the new activity routes.
+    analytics_paths = {
+        "/api/activity/options",
+        "/api/activity/analytics",
+        "/api/activity/channels",
+        "/api/activity/channels/{channel_id}",
+        "/api/activity/member-trends",
+    }
     assert analytics_paths <= app.openapi()["paths"].keys()
     legacy_contract = copy.deepcopy(app.openapi())
     for path in analytics_paths:
@@ -28,6 +34,14 @@ def test_openapi_contract_matches_sqlite_release():
         "HourlyActivity",
         "MemberActivity",
         "RhythmActivity",
+        "ChannelNameResponse",
+        "ChannelNameUpdate",
+        "ChannelNamesBatch",
+        "ChannelNamesResult",
+        "ChannelNameRecord",
+        "MemberTrendPoint",
+        "MemberTrendSeries",
+        "MemberTrendsResponse",
     }:
         del legacy_contract["components"]["schemas"][schema]
     digest = hashlib.sha256(
