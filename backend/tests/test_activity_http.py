@@ -213,7 +213,22 @@ def test_real_database_failure_rolls_back_and_retry_recovers(live_api):
             connection.execute("SELECT count(*) FROM voice_samples").fetchone()[0] == 0
         )
         connection.execute("DROP TRIGGER fail_voice")
-    retried = client.post(URL, json=body)
+    # Uvicorn closes the connection after the unhandled storage error. A
+    # fresh pool avoids racing that close by reusing the failed connection.
+    with httpx.Client(
+        base_url=client.base_url,
+        headers=client.headers,
+        trust_env=False,
+        timeout=20,
+    ) as retry_client:
+        retried = retry_client.post(URL, json=body)
     assert retried.status_code == 200, retried.text
     assert retried.json()["messages"]["inserted"] == 3
     assert retried.json()["voice_samples"]["inserted"] == 3
+    with sqlite3.connect(database) as connection:
+        assert (
+            connection.execute("SELECT count(*) FROM message_events").fetchone()[0] == 3
+        )
+        assert (
+            connection.execute("SELECT count(*) FROM voice_samples").fetchone()[0] == 3
+        )
