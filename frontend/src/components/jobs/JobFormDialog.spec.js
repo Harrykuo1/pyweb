@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { jobsApi } from '../../api/jobs'
 import { membersApi } from '../../api/members'
+import { jobAttachmentsApi } from '../../api/jobAttachments'
+import { settingsApi } from '../../api/settings'
+import client from '../../api/client'
 import { useAuthStore } from '../../stores/auth'
 import JobFormDialog from './JobFormDialog.vue'
+
+enableAutoUnmount(afterEach)
 
 // MdEditor is heavy and brings in CSS / DOM measurement; stub it to a
 // minimal v-model'd textarea so the form-level behavior is what we
@@ -45,11 +50,18 @@ beforeEach(() => {
   vi.spyOn(jobsApi, 'listCompanies').mockResolvedValue([])
   vi.spyOn(jobsApi, 'listCategories').mockResolvedValue([])
   vi.spyOn(membersApi, 'list').mockResolvedValue([])
+  vi.spyOn(jobAttachmentsApi, 'list').mockResolvedValue([])
+  vi.spyOn(settingsApi, 'getConfig').mockResolvedValue({ fields: [] })
+  vi.spyOn(client, 'get').mockRejectedValue(
+    new Error('Unexpected unmocked API GET'),
+  )
 })
 
 afterEach(() => {
+  const unexpectedRequests = client.get.mock.calls.slice()
   vi.restoreAllMocks()
   document.body.innerHTML = ''
+  expect(unexpectedRequests).toEqual([])
 })
 
 async function mountDialog(props = {}, role = 'admin') {
