@@ -255,27 +255,35 @@ class AdminerTests(unittest.TestCase):
             self.assertNotIn("adminer_probe", body)
 
     def test_compose_publishes_only_loopback_management_ports(self):
-        result = subprocess.run(
-            [
-                "docker",
-                "compose",
-                "--env-file",
-                "/dev/null",
-                "config",
-                "--no-env-resolution",
-                "--format",
-                "json",
-            ],
-            cwd=ROOT,
-            env={
-                **os.environ,
-                "SQLITE_WEB_PASSWORD": WEB_PASSWORD,
-                "ONLYOFFICE_JWT_SECRET": "test",
-            },
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        # A clean CI checkout has no .env. Keep the service env_file fixture
+        # separate from the developer's configuration and database files.
+        with tempfile.TemporaryDirectory(prefix="pyweb-compose-test-") as directory:
+            project = Path(directory)
+            (project / "docker-compose.yml").write_bytes(
+                (ROOT / "docker-compose.yml").read_bytes()
+            )
+            env_file = project / ".env"
+            env_file.write_text("SESSION_SECRET=test-only\n")
+            result = subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "--env-file",
+                    str(env_file),
+                    "config",
+                    "--format",
+                    "json",
+                ],
+                cwd=project,
+                env={
+                    **os.environ,
+                    "SQLITE_WEB_PASSWORD": WEB_PASSWORD,
+                    "ONLYOFFICE_JWT_SECRET": "test",
+                },
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
         services = json.loads(result.stdout)["services"]
         for name, port in [("postgres", 5432), ("adminer", 8119)]:
             self.assertEqual(len(services[name]["ports"]), 1)
