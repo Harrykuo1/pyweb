@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class PendingDiscordLink(Base):
@@ -21,6 +22,6 @@ class PendingDiscordLink(Base):
     discord_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     discord_global_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        UTCDateTime(timezone=True), nullable=False
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)

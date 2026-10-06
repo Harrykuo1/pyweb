@@ -1,10 +1,11 @@
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String, text
+from sqlalchemy import Boolean, Enum, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class UserRole(str, enum.Enum):
@@ -54,6 +55,7 @@ class User(Base):
             UserRole,
             name="user_role",
             values_callable=lambda e: [m.value for m in e],
+            native_enum=False,
             create_constraint=True,
             validate_strings=True,
         ),
@@ -63,10 +65,10 @@ class User(Base):
     # it — the row and its author FKs survive so content and identity persist.
     # Enforced at login and on every authenticated request.
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("1")
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )

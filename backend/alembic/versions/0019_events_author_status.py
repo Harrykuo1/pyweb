@@ -34,6 +34,7 @@ def upgrade() -> None:
                     "accepted",
                     "rejected",
                     name="event_status",
+                    native_enum=False,
                     create_constraint=True,
                 ),
                 nullable=False,

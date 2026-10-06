@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -23,12 +24,23 @@ def _insert_records(
         {**record.model_dump(), "guild_id": guild_id, "received_at": received_at}
         for record in records
     ]
+    # PostgreSQL locks conflicting identities until commit. A stable lock
+    # order prevents deadlocks when concurrent retries reorder the same batch.
+    # Python's stable sort keeps first-write-wins for duplicates within a batch.
+    rows.sort(
+        key=lambda row: tuple(
+            row[column.name] for column in model.__table__.primary_key
+        )
+    )
     # Target only the source identity: other constraint violations must roll
     # back the batch rather than being silently discarded by INSERT OR IGNORE.
+    insert = pg_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
     statement = insert(model.__table__).on_conflict_do_nothing(
         index_elements=list(model.__table__.primary_key.columns)
     )
-    inserted = db.execute(statement, rows).rowcount
+    inserted = len(
+        db.execute(statement.returning(*model.__table__.primary_key), rows).all()
+    )
     return IngestCounts(inserted=inserted, duplicates=len(rows) - inserted)
 
 

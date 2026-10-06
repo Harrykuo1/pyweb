@@ -7,12 +7,50 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  db-init:
+    build:
+      context: ./backend
+    user: "0:0"
+    command: ["python", "-m", "app.postgres_credentials"]
+    volumes:
+      - ./data:/data
+    network_mode: none
+    logging: *default-logging
+    restart: "no"
+
+  postgres:
+    image: postgres:17
+    user: "1000:1000"
+    environment:
+      POSTGRES_USER: pyweb
+      POSTGRES_DB: pyweb
+      POSTGRES_PASSWORD_FILE: /run/secrets/.postgres-password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: UTC
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/data
+      - ./data:/run/secrets:ro
+    # No published database port: only services on the Compose network connect.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pyweb -d pyweb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    logging: *default-logging
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
     env_file:
       - .env
     environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD_FILE: /data/.postgres-password
+      LEGACY_SQLITE_PATH: /data/pyweb.db
       # Where the backend reaches OnlyOffice's conversion API. Hostname
       # is the compose-network DNS name of the onlyoffice service.
       ONLYOFFICE_INTERNAL_URL: http://onlyoffice
@@ -26,11 +64,7 @@ services:
       # OnlyOffice's async queue lagged past its TTL — see
       # app/routers/internal.py.)
       BACKEND_INTERNAL_URL: http://backend:8000
-    # SQLite path is fixed by the Dockerfile (DATABASE_URL=/data/pyweb.db).
-    # Bind-mount ./data on the host so the file is editable / inspectable
-    # with normal host tools (sqlite3, DBeaver, scp, ...). The container's
-    # pyweb user runs as uid 1000 — match your host user uid so writes
-    # round-trip without chown.
+    # The legacy SQLite file, import snapshots and uploads stay in place.
     volumes:
       - ./data:/data
     expose:
@@ -47,10 +81,13 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 120s
     restart: unless-stopped
     depends_on:
-      - onlyoffice
+      onlyoffice:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 
   # OnlyOffice Document Server — used headlessly by the backend for
   # docx/pptx/doc/ppt -> PDF preview conversion. Image is hefty (~1.4GB)
@@ -98,25 +135,4 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    restart: unless-stopped
-
-  # sqlite-web — a phpMyAdmin-style browser UI for the SQLite DB. Mounts the
-  # same ./data as the backend and points at pyweb.db (read-write). Password
-  # gated via SQLITE_WEB_PASSWORD from .env, exposed on host port 8119.
-  # WARNING: plain HTTP with full DB access — only run on a trusted network.
-  # WAL mode lets it read alongside the app; writes still contend for the
-  # single SQLite write lock, so avoid heavy edits while the app is busy.
-  sqlite-web:
-    image: coleifer/sqlite-web:latest
-    depends_on:
-      - backend
-    ports:
-      - "8119:8080"
-    volumes:
-      - ./data:/data
-    environment:
-      SQLITE_WEB_PASSWORD: ${SQLITE_WEB_PASSWORD}
-    command:
-      ["sqlite_web", "-H", "0.0.0.0", "-p", "8080", "-x", "-P", "/data/pyweb.db"]
-    logging: *default-logging
     restart: unless-stopped

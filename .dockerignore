@@ -9,3 +9,6 @@
 docker-compose*.yml
 .env
 .env.*
+data/
+*.tar.gz
+*.dump

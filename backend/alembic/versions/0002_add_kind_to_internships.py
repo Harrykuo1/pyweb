@@ -28,6 +28,7 @@ _JOB_KIND = sa.Enum(
     "internship",
     "fulltime",
     name="job_kind",
+    native_enum=False,
     create_constraint=True,
     validate_strings=True,
 )

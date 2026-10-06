@@ -18,6 +18,10 @@ ENV/
 *.sqlite
 *.sqlite3
 
+# Database backup archives kept at the repository root
+/*.tar.gz
+/*.dump
+
 # Bind-mounted runtime data (docker-compose). Keep the directory but
 # never commit the actual DB; .gitkeep retains the folder in git.
 /data/*

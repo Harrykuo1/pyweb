@@ -25,7 +25,11 @@ def upgrade() -> None:
         sa.Column(
             "kind",
             sa.Enum(
-                "upload", "youtube", name="event_video_kind", create_constraint=True
+                "upload",
+                "youtube",
+                name="event_video_kind",
+                native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -36,6 +40,7 @@ def upgrade() -> None:
                 "ready",
                 "failed",
                 name="event_video_status",
+                native_enum=False,
                 create_constraint=True,
             ),
             nullable=False,

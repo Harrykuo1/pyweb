@@ -4,6 +4,8 @@
 
 ## 部署與資料庫 migration
 
+資料庫使用 PostgreSQL 17；既有 SQLite 隨原本 CD 自動搬移，詳見 [PostgreSQL 部署與資料保留](postgresql-migration.md)。Bot 不需改 URL、payload 或 token。
+
 ```bash
 docker compose up -d --build
 docker compose exec backend alembic current
@@ -85,7 +87,7 @@ docker compose exec backend python -m app.activity_tokens revoke 1
 | `attachment_count` | 必填非負整數，Discord 附件的數量，不把連結預覽 embeds 算入附件 |
 | `received_at` | 由伺服器產生，Bot 不可傳入 |
 
-所有時間必須是帶時區的 ISO 8601 字串。`Z` 與 `+08:00` 都可用，伺服器統一轉成 UTC 後儲存，保留微秒。SQLite 欄位讀出的字串可能沒有時區後綴，其值仍代表 UTC。拒絕沒有時區、數字型時間戳及超過伺服器現在時間五分鐘的未來時間；歷史補傳不設時間下限。
+所有時間必須是帶時區的 ISO 8601 字串。`Z` 與 `+08:00` 都可用，伺服器統一轉成 UTC 後儲存，保留微秒。PostgreSQL 使用 timestamptz 儲存；既有網站 API 的時間字串格式維持 UTC。拒絕沒有時區、數字型時間戳及超過伺服器現在時間五分鐘的未來時間；歷史補傳不設時間下限。
 
 ## 上傳範例
 

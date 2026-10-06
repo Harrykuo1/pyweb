@@ -11,11 +11,11 @@ A community member management website: member profiles, job-hunting/internship w
 **Tech Stack:**
 - **Frontend**: Vue 3 (Composition API with `<script setup>`) + Vue Router + Pinia + Element Plus + md-editor-v3
 - **Backend**: FastAPI + SQLAlchemy + Pydantic
-- **Database**: SQLite (WAL, `PRAGMA foreign_keys=ON`, `busy_timeout=5000` — see `database.py`)
+- **Database**: PostgreSQL 17 in Docker. Existing SQLite data is imported automatically on first startup; see `docs/postgresql-migration.md`.
 - **Auth**: server-side session via Starlette `SessionMiddleware` (signed cookie, `itsdangerous`). **Not JWT** — the only JWT in the codebase signs OnlyOffice conversion requests.
 - **Login**: Discord OAuth is the primary and only visible path. Password login survives as a hidden break-glass fallback — see §3.1.
 - **Markdown Rendering**: server stores raw Markdown; frontend sanitizes with DOMPurify (`frontend/src/utils/sanitizeHtml.js`).
-- **Deployment**: `docker compose up -d --build` brings up backend + nginx-fronted frontend on host port 8081 (container 8080 internally), plus an OnlyOffice document server and a sqlite-web DB browser on 8119. SQLite persists at `./data/pyweb.db` via bind mount.
+- **Deployment**: `bash scripts/deploy.sh` builds, stops old writers, and brings up backend + nginx-fronted frontend on host port 8081, OnlyOffice, and PostgreSQL. PostgreSQL persists at `./data/postgresql/`; the original SQLite file and import snapshots are retained.
 
 ---
 
@@ -61,7 +61,7 @@ A community member management website: member profiles, job-hunting/internship w
 - **Every feature ships with a passing unit test** — backend or frontend, no exceptions.
 - **Tests must pass before the next commit.** If a test fails, fix the code (not the test) before moving on.
 - **Bundle test with feature** — include the test in the same commit as the feature it covers.
-- **DB-touching tests use mock / in-memory data** — never a persistent database. Backend tests use the in-memory SQLite fixture from `backend/tests/conftest.py`. Never touch `pyweb.db`.
+- **DB-touching tests use disposable data only.** Set `TEST_DATABASE_URL` to a dedicated PostgreSQL test database. `backend/tests/conftest.py` creates a unique schema per test, runs Alembic, and drops it afterward. SQLite source-format tests use temporary files. Never point tests at deployed databases or `data/pyweb.db`.
 - **Backend stack**: `pytest` + FastAPI `TestClient`. Tests live in `backend/tests/`. Full suite takes ~11 min — use per-file `pytest` during work and run the full suite once before handoff.
 - **Frontend stack**: `vitest` + `@vue/test-utils` + `happy-dom` / `jsdom`. Tests live next to source as `*.spec.js`.
 - **Trivial plumbing exempt**: pure declarative config additions don't need a dedicated test if the next feature's test exercises them end-to-end. Use sparingly.
@@ -70,8 +70,8 @@ A community member management website: member profiles, job-hunting/internship w
 
 ### 2.7 Docker Rebuild Before Handoff (MANDATORY)
 
-- After all of a feature's tests pass and the work is ready for the user to verify in a browser, **automatically run `docker compose up -d --build`** from the repo root before declaring the task done. Don't ask first — the user has pre-authorized this.
-- Frontend serves on host port **8081**; SQLite persists at `./data/pyweb.db`.
+- After all of a feature's tests pass and the work is ready for the user to verify in a browser, **automatically run `bash scripts/deploy.sh`** from the repo root before declaring the task done. Don't ask first — the user has pre-authorized this.
+- Frontend serves on host port **8081**; PostgreSQL persists at `./data/postgresql/`.
 - Once per task is enough — don't rebuild between every small commit in a multi-commit feature.
 - If the build or container startup fails, surface the error and stop — don't claim the task is complete with a broken image.
 - Skip only when the change has no runtime impact (docs-only, CI-only, or test-file-only changes).
@@ -144,7 +144,7 @@ project/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
-│   │   ├── database.py          # engine, session, SQLite pragmas
+│   │   ├── database.py          # engine, sessions, pool health checks
 │   │   ├── init_db.py           # seeds the admin/viewer password accounts
 │   │   ├── reset_password.py    # admin-recovery CLI
 │   │   ├── models/              # user, member, job, event, site_setting, …
@@ -154,12 +154,12 @@ project/
 │   │   │                        # settings, stats, timeline, internal
 │   │   └── core/                # deps, security, post_visibility,
 │   │                            # discord_*, member_display, audit_log, …
-│   ├── tests/                   # pytest, in-memory SQLite fixtures
+│   ├── tests/                   # pytest, disposable PostgreSQL schemas
 │   └── requirements.txt
 ├── frontend/
 │   └── src/                     # views, components, router, stores, api, utils
 ├── scripts/                     # rclone backup (runs on the server, not dev)
-├── data/                        # pyweb.db + uploads (bind-mounted)
+├── data/                        # postgresql + SQLite backups + uploads (bind-mounted)
 └── docker-compose.yml
 ```
 
@@ -183,7 +183,7 @@ Phases 0–9 (skeleton → CRUD → photos → markdown → permissions → READ
 - Login is rate-limited per IP (5/min), keyed on the nginx-set `X-Real-IP` so a forged `X-Forwarded-For` cannot mint fresh buckets.
 - Permission checks read the role from the **database** each request, not from the session cookie — a demoted admin loses access on their next request.
 - **Admin recovery**: no self-serve forgot-password flow. See §3.1.
-- `sqlite-web` on port 8119 has full read/write access to the live DB behind a single password, over plain HTTP, bound to all interfaces. Accepted for a trusted dev network; do not copy this to production.
+- PostgreSQL has no published host port. Credentials are generated once in `data/.postgres-password`; do not log or commit them. The old sqlite-web service is retired.
 
 ---
 

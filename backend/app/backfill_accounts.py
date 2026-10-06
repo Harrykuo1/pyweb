@@ -45,11 +45,11 @@ def backfill_member_accounts(connection: Connection) -> int:
                 " discord_username, discord_global_name, "
                 " pending_discord_username, role, created_at) "
                 "VALUES "
-                "(NULL, NULL, 1, NULL, NULL, NULL, :handle, 'member', :now)"
+                "(NULL, NULL, 1, NULL, NULL, NULL, :handle, 'member', :now) RETURNING id"
             ),
             {"handle": handle, "now": now},
         )
-        user_id = result.lastrowid
+        user_id = result.scalar_one()
         connection.execute(
             text("UPDATE members SET user_id = :uid WHERE id = :mid"),
             {"uid": user_id, "mid": member_id},

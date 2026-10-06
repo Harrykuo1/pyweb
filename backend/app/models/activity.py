@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String
+from sqlalchemy import CheckConstraint, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.db_types import UTCDateTime
 
 
 class MessageEvent(Base):
@@ -23,12 +24,14 @@ class MessageEvent(Base):
     # Discord members need not have registered on this site.
     user_id: Mapped[str] = mapped_column(String(20), nullable=False)
     channel_id: Mapped[str] = mapped_column(String(20), nullable=False)
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(timezone=True), nullable=False
+    )
     reply_to_user_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
     text_length: Mapped[int] = mapped_column(Integer, nullable=False)
     attachment_count: Mapped[int] = mapped_column(Integer, nullable=False)
     received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        UTCDateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
 
@@ -47,11 +50,11 @@ class VoiceSample(Base):
     guild_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     sampled_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), primary_key=True
+        UTCDateTime(timezone=True), primary_key=True
     )
     channel_id: Mapped[str] = mapped_column(String(20), nullable=False)
     received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        UTCDateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
 
@@ -63,8 +66,8 @@ class ActivityIngestToken(Base):
     guild_id: Mapped[str] = mapped_column(String(20), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        UTCDateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
