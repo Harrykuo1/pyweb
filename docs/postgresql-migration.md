@@ -68,7 +68,11 @@ docker compose up -d --wait
 
 ## 測試
 
-CI 啟動真正的 PostgreSQL 17。每項 DB 測試使用獨立、測完刪除的 schema，執行完整 Alembic migrations；pytest-xdist 的 workers 不共用資料。測試不連線到正式 `pyweb` DB，也不使用 repo 的 `data/pyweb.db`。
+CI 啟動真正的 PostgreSQL 17。一般功能測試在每個 pytest-xdist worker 的獨立 schema 執行一次完整 Alembic migrations，每項測試後以 `TRUNCATE ... RESTART IDENTITY` 清空資料並重設流水號；workers 不共用資料。遷移、SQLite 搬移、真實 HTTP 與並行寫入測試仍使用各自的新 schema。測試不連線到正式 `pyweb` DB，也不使用 repo 的 `data/pyweb.db`。
+
+一般功能測試使用 bcrypt cost 4，仍實際驗證密碼與雜湊；`production_passwords` 標記的安全測試保留正式成本，另有斷言確認至少為 12。此設定只存在於 pytest fixtures，不改正式程式的密碼設定。
+
+2026-10-06 的 CI 加速驗證：同一台本機、Python 3.13、PostgreSQL 17 tmpfs、pytest 2 workers、測試容器限制 2 CPU，原版 1034 項測試耗時 232.07 秒；調整後連同新增的隔離與密碼成本測試，1037 項全部通過，耗時 19.58 秒。這是本機對照結果，GitHub runner 的實際時間以推送後的 CI 為準。前端 975 項測試、lint、production build，以及無 `.env` 乾淨目錄的 Adminer 7 項整合測試均通過。
 
 本機可使用記憶體 tmpfs 的測試容器：
 

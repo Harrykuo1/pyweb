@@ -148,7 +148,7 @@ Schema 變更走 Alembic，沒有自動 `create_all`。每次啟動 `init_db.py`
 
 來源 SQLite 必須有 Alembic revision；既有 `0028`～`0030` 資料庫會自動在副本升級、匯入，原檔保留。無 revision 的古老資料庫會停止搬移，避免猜測 schema 造成遺失。
 
-CI 使用 PostgreSQL 17，每項 DB 測試都有獨立 schema 並執行完整 migrations。另有真實 HTTP、並行寫入與完整 SQLite 搬移測試。執行方法見 [測試說明](docs/postgresql-migration.md#測試)。
+CI 使用 PostgreSQL 17。一般測試在每個 worker 的獨立 schema 執行一次完整 migrations，每項測試後清空資料並重設流水號；遷移、真實 HTTP、並行寫入與 SQLite 搬移測試保留各自的獨立 schema。執行方法見 [測試說明](docs/postgresql-migration.md#測試)。
 
 ## 帳號與登入
 

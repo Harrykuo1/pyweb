@@ -48,7 +48,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
@@ -59,7 +62,8 @@ jobs:
           ruff check .
           ruff format --check .
 
-      # Each test gets its own disposable PostgreSQL schema, including xdist workers.
+      # Each worker migrates an isolated schema once; functional tests clear data
+      # and sequences afterward. Migration and HTTP tests retain fresh schemas.
       #
       # -n auto distributes the suite across the runner's CPUs via pytest-xdist
       # (~3x speedup on the 2-vCPU ubuntu-latest runner). --durations=10 lists

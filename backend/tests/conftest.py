@@ -11,7 +11,7 @@ os.environ.setdefault("SEED_VIEWER_USERNAME", "test-viewer")
 os.environ.setdefault("SEED_VIEWER_PASSWORD", "test-viewer-pw")
 
 import pytest
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -41,8 +41,8 @@ def count_queries(engine):
         event.remove(engine, "before_cursor_execute", listener)
 
 
-@pytest.fixture
-def postgres_url():
+@contextmanager
+def _postgres_schema():
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
         pytest.fail("Set TEST_DATABASE_URL to a disposable PostgreSQL test database")
@@ -64,20 +64,50 @@ def postgres_url():
 
 
 @pytest.fixture
+def postgres_url():
+    # Migration and real HTTP tests need fresh schemas and independent commits.
+    with _postgres_schema() as url:
+        yield url
+
+
+@pytest.fixture(scope="session")
+def _worker_db_engine():
+    from app.migrate_sqlite import upgrade
+
+    with _postgres_schema() as url:
+        engine = create_engine(url)
+        try:
+            with engine.begin() as connection:
+                upgrade(connection)
+            yield engine
+        finally:
+            engine.dispose()
+
+
+def _clear_database(engine):
+    # Fully qualify every table so cleanup cannot touch another worker's schema.
+    with engine.begin() as connection:
+        schema = connection.execute(text("SELECT current_schema()")).scalar_one()
+        quote = engine.dialect.identifier_preparer.quote
+        tables = inspect(connection).get_table_names(schema=schema)
+        names = ", ".join(
+            f"{quote(schema)}.{quote(table)}"
+            for table in tables
+            if table != "alembic_version"
+        )
+        connection.execute(text(f"TRUNCATE TABLE {names} RESTART IDENTITY"))
+
+
+@pytest.fixture
 def db_engine(request):
     from app import models  # noqa: F401
 
     if os.environ.get("TEST_DATABASE_URL"):
-        from app.migrate_sqlite import upgrade
-
-        engine = create_engine(request.getfixturevalue("postgres_url"))
-        with engine.connect() as connection:
-            upgrade(connection)
-            connection.commit()
+        engine = request.getfixturevalue("_worker_db_engine")
         try:
             yield engine
         finally:
-            engine.dispose()
+            _clear_database(engine)
         return
     # In-memory SQLite shared across the same connection (StaticPool) so
     # all sessions in one test see the same data.
@@ -113,6 +143,16 @@ def db_session(db_engine):
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _fast_test_passwords(request, monkeypatch):
+    from app.core import security
+
+    if request.node.get_closest_marker("production_passwords") is None:
+        monkeypatch.setattr(
+            security, "_pwd_context", security._pwd_context.copy(bcrypt__rounds=4)
+        )
 
 
 @pytest.fixture(autouse=True)

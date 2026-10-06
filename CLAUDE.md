@@ -61,7 +61,7 @@ A community member management website: member profiles, job-hunting/internship w
 - **Every feature ships with a passing unit test** — backend or frontend, no exceptions.
 - **Tests must pass before the next commit.** If a test fails, fix the code (not the test) before moving on.
 - **Bundle test with feature** — include the test in the same commit as the feature it covers.
-- **DB-touching tests use disposable data only.** Set `TEST_DATABASE_URL` to a dedicated PostgreSQL test database. `backend/tests/conftest.py` creates a unique schema per test, runs Alembic, and drops it afterward. SQLite source-format tests use temporary files. Never point tests at deployed databases or `data/pyweb.db`.
+- **DB-touching tests use disposable data only.** Set `TEST_DATABASE_URL` to a dedicated PostgreSQL test database. `backend/tests/conftest.py` migrates one isolated schema per worker for functional tests, truncating data and restarting sequences after each test. Migration, import, and real HTTP tests use fresh per-test schemas. Functional tests use low-cost real bcrypt; tests marked `production_passwords` retain the production cost. SQLite source-format tests use temporary files. Never point tests at deployed databases or `data/pyweb.db`.
 - **Backend stack**: `pytest` + FastAPI `TestClient`. Tests live in `backend/tests/`. Full suite takes ~11 min — use per-file `pytest` during work and run the full suite once before handoff.
 - **Frontend stack**: `vitest` + `@vue/test-utils` + `happy-dom` / `jsdom`. Tests live next to source as `*.spec.js`.
 - **Trivial plumbing exempt**: pure declarative config additions don't need a dedicated test if the next feature's test exercises them end-to-end. Use sparingly.

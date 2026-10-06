@@ -1,4 +1,12 @@
+import pytest
+
 from app.core.security import hash_password, verify_password
+
+pytestmark = pytest.mark.production_passwords
+
+
+def test_production_password_cost_is_preserved():
+    assert int(hash_password("production-cost").split("$")[2]) >= 12
 
 
 def test_hash_is_not_plaintext():
