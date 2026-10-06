@@ -27,6 +27,8 @@ def test_openapi_contract_matches_sqlite_release():
         del legacy_contract["paths"][path]
     for schema in {
         "MemberDiscordLinkRequest",
+        "MemberDiscordLinkResponse",
+        "MemberDiscordReplaceRequest",
         "ActivityMetrics",
         "ActivityOptions",
         "ActivityPerson",

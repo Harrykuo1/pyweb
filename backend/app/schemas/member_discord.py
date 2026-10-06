@@ -21,3 +21,24 @@ class MemberDiscordLinkRequest(BaseModel):
     @classmethod
     def clean_username(cls, value):
         return normalize_discord_handle(value)
+
+
+class MemberDiscordLinkResponse(BaseModel):
+    discord_id: str | None
+    discord_username: str | None
+
+
+class MemberDiscordReplaceRequest(MemberDiscordLinkRequest):
+    expected_discord_id: str = Field(
+        strict=True,
+        pattern=r"^[1-9][0-9]{0,19}$",
+        description="編輯時讀取的原 Discord ID，避免覆蓋其他管理員的修改。",
+    )
+    confirmed: bool = Field(strict=True, description="須明確確認更換，必須為 true。")
+
+    @field_validator("confirmed")
+    @classmethod
+    def must_confirm(cls, value):
+        if not value:
+            raise ValueError("請先確認更換 Discord 帳號")
+        return value

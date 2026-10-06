@@ -35,7 +35,11 @@ from app.schemas import (
     MemberUpdate,
     PasswordConfirmRequest,
 )
-from app.schemas.member_discord import MemberDiscordLinkRequest
+from app.schemas.member_discord import (
+    MemberDiscordLinkRequest,
+    MemberDiscordLinkResponse,
+    MemberDiscordReplaceRequest,
+)
 
 router = APIRouter(prefix="/api/members", tags=["members"])
 
@@ -269,14 +273,7 @@ def update_member(
     return member
 
 
-@router.post("/{member_id}/discord-link", response_model=MemberResponse)
-def manually_link_discord(
-    member_id: int,
-    payload: MemberDiscordLinkRequest,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """管理員將尚未加入的成員連結到固定 Discord ID，沿用既有帳號與資料。"""
+def _discord_link_account(db: Session, member_id: int):
     member = db.get(Member, member_id)
     if member is None:
         raise HTTPException(status_code=404, detail="找不到成員")
@@ -288,13 +285,13 @@ def manually_link_discord(
         .one_or_none()
     )
     if account is None:
-        raise HTTPException(status_code=409, detail="此成員沒有可連結的待加入帳號")
-    if account.discord_id is not None:
-        raise HTTPException(
-            status_code=409, detail="此成員已連結 Discord 帳號，請重新整理名冊"
-        )
+        raise HTTPException(status_code=409, detail="此成員沒有可連結的帳號")
     if not account.is_active:
         raise HTTPException(status_code=409, detail="此帳號已停權，請先恢復帳號再連結")
+    return member, account
+
+
+def _save_discord_link(db, member, account, payload, admin, *, replacing=False):
     if db.query(User.id).filter_by(discord_id=payload.discord_id).first():
         raise HTTPException(status_code=409, detail="此 Discord ID 已連結其他帳號")
     pending = (
@@ -306,10 +303,13 @@ def manually_link_discord(
     account.discord_username = (
         (pending.discord_username if pending else None)
         or payload.discord_username
-        or account.pending_discord_username
+        or (account.pending_discord_username if not replacing else None)
     )
     account.discord_global_name = pending.discord_global_name if pending else None
     account.pending_discord_username = None
+    if replacing:
+        # The previous Discord owner must lose every existing website session.
+        account.password_version += 1
     try:
         clear_pending_link(db, payload.discord_id)
         db.commit()
@@ -320,13 +320,64 @@ def manually_link_discord(
         ) from None
     db.refresh(account)
     logging.getLogger(__name__).info(
-        "member_discord_linked admin_id=%s member_id=%s account_id=%s discord_id=%s",
+        "member_discord_linked admin_id=%s member_id=%s account_id=%s discord_id=%s replacing=%s",
         admin.id,
         member.id,
         account.id,
         payload.discord_id,
+        replacing,
     )
     return _member_response(member, account)
+
+
+@router.get("/{member_id}/discord-link", response_model=MemberDiscordLinkResponse)
+def get_member_discord_link(
+    member_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    member = _get_member_or_404(db, member_id)
+    account = db.get(User, member.user_id) if member.user_id is not None else None
+    return MemberDiscordLinkResponse(
+        discord_id=account.discord_id if account else None,
+        discord_username=account.discord_username if account else None,
+    )
+
+
+@router.post("/{member_id}/discord-link", response_model=MemberResponse)
+def manually_link_discord(
+    member_id: int,
+    payload: MemberDiscordLinkRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """管理員將尚未加入的成員連結到固定 Discord ID，沿用既有帳號與資料。"""
+    member, account = _discord_link_account(db, member_id)
+    if account.discord_id is not None:
+        raise HTTPException(
+            status_code=409, detail="此成員已連結 Discord 帳號，請重新整理名冊"
+        )
+    return _save_discord_link(db, member, account, payload, admin)
+
+
+@router.patch("/{member_id}/discord-link", response_model=MemberResponse)
+def replace_member_discord_link(
+    member_id: int,
+    payload: MemberDiscordReplaceRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """確認後更換已加入成員的 Discord 身分，撤銷舊 session 並保留既有資料。"""
+    member, account = _discord_link_account(db, member_id)
+    if account.discord_id != payload.expected_discord_id:
+        raise HTTPException(
+            status_code=409, detail="Discord 連結已變更，請重新開啟編輯視窗"
+        )
+    if account.discord_id == payload.discord_id:
+        raise HTTPException(
+            status_code=409, detail="新 Discord ID 與目前相同，無須更換"
+        )
+    return _save_discord_link(db, member, account, payload, admin, replacing=True)
 
 
 @router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)

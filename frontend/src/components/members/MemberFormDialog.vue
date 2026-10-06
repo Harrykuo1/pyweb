@@ -32,6 +32,11 @@ const linkedDiscordId = ref('')
 const discordId = ref('')
 const linkingDiscord = ref(false)
 const discordLinkError = ref('')
+const changeConfirmed = ref(false)
+const expectedDiscordId = ref('')
+const replacementUsername = ref('')
+const confirmingChange = ref(false)
+let editGeneration = 0
 
 const isEdit = computed(() => props.member !== null)
 const title = computed(() => (isEdit.value ? '編輯成員' : '新增成員'))
@@ -106,6 +111,11 @@ const pdfUploadButtonText = computed(() => {
 })
 
 function resetForm(member) {
+  ++editGeneration
+  changeConfirmed.value = false
+  expectedDiscordId.value = ''
+  replacementUsername.value = ''
+  confirmingChange.value = false
   Object.assign(form, {
     graduation_year: member?.graduation_year ?? new Date().getFullYear(),
     real_name: member?.real_name ?? '',
@@ -134,12 +144,74 @@ watch(
   { immediate: true },
 )
 
+const canReplaceDiscord = computed(
+  () =>
+    isEdit.value &&
+    auth.isAdmin &&
+    props.member?.account_status === 'claimed' &&
+    props.member?.is_active !== false &&
+    !linkedDiscordId.value,
+)
 const canLinkDiscord = computed(
   () =>
-    canEditPendingHandle.value &&
+    (canEditPendingHandle.value ||
+      (canReplaceDiscord.value && changeConfirmed.value)) &&
     auth.isAdmin &&
     props.member?.is_active !== false,
 )
+async function beginDiscordChange() {
+  if (!canReplaceDiscord.value || submitting.value || confirmingChange.value)
+    return
+  const generation = editGeneration
+  confirmingChange.value = true
+  discordLinkError.value = ''
+  try {
+    try {
+      await ElMessageBox.confirm(
+        `確定要更換「${props.member.real_name}」的 Discord 帳號嗎？新帳號將取得此成員的登入權限，原帳號既有登入將失效。成員資料與角色會保留。確認後才可填寫新 ID。`,
+        '確認更換 Discord 帳號',
+        {
+          type: 'warning',
+          confirmButtonText: '確定更改',
+          cancelButtonText: '取消',
+          closeOnClickModal: false,
+        },
+      )
+    } catch {
+      return
+    }
+    if (
+      generation !== editGeneration ||
+      !props.modelValue ||
+      !canReplaceDiscord.value
+    )
+      return
+    const current = await membersApi.getDiscordLink(props.member.id)
+    if (
+      generation !== editGeneration ||
+      !props.modelValue ||
+      !canReplaceDiscord.value
+    )
+      return
+    if (!current.discord_id) throw new Error('missing link')
+    expectedDiscordId.value = current.discord_id
+    discordId.value = current.discord_id
+    replacementUsername.value = ''
+    changeConfirmed.value = true
+  } catch {
+    if (generation === editGeneration)
+      discordLinkError.value = '無法讀取目前連結，請重新開啟編輯視窗後再試。'
+  } finally {
+    if (generation === editGeneration) confirmingChange.value = false
+  }
+}
+function cancelDiscordChange() {
+  changeConfirmed.value = false
+  expectedDiscordId.value = ''
+  discordId.value = ''
+  replacementUsername.value = ''
+  discordLinkError.value = ''
+}
 async function linkDiscord() {
   if (!canLinkDiscord.value || submitting.value || linkingDiscord.value) return
   const id = discordId.value.trim()
@@ -151,12 +223,27 @@ async function linkDiscord() {
   linkingDiscord.value = true
   discordLinkError.value = ''
   try {
-    await membersApi.linkDiscord(props.member.id, {
-      discord_id: id,
-      discord_username: form.discord_username.trim() || null,
-    })
+    const replacing = canReplaceDiscord.value
+    if (replacing) {
+      await membersApi.replaceDiscordLink(props.member.id, {
+        discord_id: id,
+        discord_username: replacementUsername.value.trim() || null,
+        expected_discord_id: expectedDiscordId.value,
+        confirmed: true,
+      })
+    } else {
+      await membersApi.linkDiscord(props.member.id, {
+        discord_id: id,
+        discord_username: form.discord_username.trim() || null,
+      })
+    }
     linkedDiscordId.value = id
-    ElMessage.success('已連結 Discord 帳號，成員狀態已更新為已加入')
+    changeConfirmed.value = false
+    ElMessage.success(
+      replacing
+        ? '已更換 Discord 帳號，該成員需重新登入'
+        : '已連結 Discord 帳號，成員狀態已更新為已加入',
+    )
     emit('saved')
   } catch (err) {
     const detail = err?.response?.data?.detail
@@ -403,15 +490,40 @@ defineExpose({ handlePdfChange, clearPdfChange })
         />
       </el-form-item>
       <div
-        v-if="canLinkDiscord || linkedDiscordId"
+        v-if="canLinkDiscord || canReplaceDiscord || linkedDiscordId"
         class="discord-link-panel"
         data-test="discord-link-panel"
       >
-        <h4>手動連結 Discord 帳號</h4>
+        <h4>
+          {{
+            canReplaceDiscord ? '更換 Discord 帳號' : '手動連結 Discord 帳號'
+          }}
+        </h4>
         <p v-if="linkedDiscordId" role="status">
           已連結 {{ linkedDiscordId }}，成員狀態為「已加入」。
         </p>
+        <template v-else-if="canReplaceDiscord && !changeConfirmed">
+          <p>
+            此成員已加入。為避免誤觸，請先確認更改，再填寫新的 Discord 使用者
+            ID。
+          </p>
+          <el-button
+            type="warning"
+            plain
+            :loading="confirmingChange"
+            :disabled="submitting"
+            data-test="confirm-discord-change"
+            @click="beginDiscordChange"
+            >更換 Discord 帳號</el-button
+          >
+          <p v-if="discordLinkError" role="alert" class="discord-link-error">
+            {{ discordLinkError }}
+          </p>
+        </template>
         <template v-else>
+          <p v-if="canReplaceDiscord">
+            目前 ID：{{ expectedDiscordId }}。更換後此成員的既有登入會失效。
+          </p>
           <p>
             在 Discord 開啟開發者模式，右鍵點選成員並複製「使用者 ID」。請確認
             ID 屬於本人，連結後該 Discord 帳號即可登入此成員帳號。
@@ -424,6 +536,15 @@ defineExpose({ handlePdfChange, clearPdfChange })
             :disabled="linkingDiscord || submitting"
             data-test="form-discord-id"
           />
+          <el-input
+            v-if="canReplaceDiscord"
+            v-model="replacementUsername"
+            aria-label="新帳號使用者名稱（選填）"
+            placeholder="新帳號使用者名稱（選填）"
+            maxlength="64"
+            :disabled="linkingDiscord || submitting"
+            class="replacement-username"
+          />
           <p v-if="discordLinkError" role="alert" class="discord-link-error">
             {{ discordLinkError }}
           </p>
@@ -434,7 +555,15 @@ defineExpose({ handlePdfChange, clearPdfChange })
             :disabled="submitting || !discordId.trim()"
             data-test="link-discord-button"
             @click="linkDiscord"
-            >連結 Discord 帳號</el-button
+            >{{
+              canReplaceDiscord ? '儲存新的 Discord 連結' : '連結 Discord 帳號'
+            }}</el-button
+          >
+          <el-button
+            v-if="canReplaceDiscord"
+            :disabled="linkingDiscord"
+            @click="cancelDiscordChange"
+            >取消變更</el-button
           >
           <small
             >連結立即生效，其他表單欄位仍需按「儲存」。實際登入仍會驗證群組資格。</small
@@ -520,6 +649,9 @@ defineExpose({ handlePdfChange, clearPdfChange })
   border: 1px solid #ded9f4;
   border-radius: 12px;
   background: #f9f7ff;
+}
+.replacement-username {
+  margin-top: 10px;
 }
 .discord-link-panel h4 {
   margin: 0 0 8px;

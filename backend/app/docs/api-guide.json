@@ -123,6 +123,18 @@
           "code": "const memberId = 42\nconst response = await fetch(`/api/members/${memberId}/discord-link`, {\n  method: 'POST', credentials: 'same-origin',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    discord_id: '123456789012345678',\n    discord_username: 'example.handle',\n  }),\n})\nconsole.log(response.status, await response.json())"
         }
       ]
+    },
+    {
+      "id": "replace-discord-link",
+      "title": "09 · 更換已加入成員的 Discord 帳號",
+      "body": "編輯已加入成員時，點「更換 Discord 帳號」，在提示中選「確定更改」後才會開放新 ID 欄位。取消不會修改資料。更換會讓該成員所有既有登入失效，包含本人正在使用的 session；成員資料及角色保留。原始訊息／語音依原 Discord ID 保留，不會搬移到新 ID。新帳號名稱選填，不會沿用舊帳號的名稱；OAuth 登入會同步正式名稱。若另一位管理員已修改此連結，需重新開啟編輯視窗確認。以下程式限已登入管理員使用。",
+      "snippets": [
+        {
+          "label": "讀取原連結並明確確認後更換",
+          "language": "javascript",
+          "code": "const memberId = 42\nconst currentResponse = await fetch(`/api/members/${memberId}/discord-link`, { credentials: 'same-origin' })\nif (!currentResponse.ok) throw new Error('無法讀取目前連結')\nconst current = await currentResponse.json()\nif (confirm('確定更換 Discord 帳號並使舊登入失效？')) {\n  const response = await fetch(`/api/members/${memberId}/discord-link`, {\n    method: 'PATCH', credentials: 'same-origin',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      discord_id: '223456789012345678',\n      expected_discord_id: current.discord_id,\n      confirmed: true,\n    }),\n  })\n  console.log(response.status, await response.json())\n}"
+        }
+      ]
     }
   ],
   "endpoint_notes": {
@@ -157,6 +169,14 @@
     "POST /api/members/{member_id}/discord-link": {
       "auth": "管理員 session",
       "description": "手動把尚未加入的成員與 Discord 使用者 ID 綁定，沿用原本 User／Member 與既有資料，狀態變為已加入。discord_id 為必填數字字串，discord_username 選填；若 ID 有待連結紀錄，優先使用該筆已驗證名稱並清除待連結。已綁定、停權、無帳號或 ID 已被其他帳號使用回傳 409；不存在的成員回傳 404。此操作不產生登入 session，也不代替實際 OAuth 的身分與群組檢查。"
+    },
+    "GET /api/members/{member_id}/discord-link": {
+      "auth": "管理員 session",
+      "description": "取得成員目前的 discord_id 與 discord_username。更換連結前讀取此 ID 作為 expected_discord_id，避免覆蓋他人的修改；未連結時 discord_id 為 null。"
+    },
+    "PATCH /api/members/{member_id}/discord-link": {
+      "auth": "管理員 session",
+      "description": "確認後更換已加入成員的 Discord 連結。必須提供 confirmed: true 與編輯時讀取的 expected_discord_id。ID 已被占用、原 ID 已變更、未綁定、停權或新舊 ID 相同回傳 409。保留原帳號、成員資料與角色，原有 session 全部失效；本人下次登入仍驗證 OAuth 與群組資格。"
     }
   }
 }

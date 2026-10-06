@@ -34,3 +34,25 @@
 寫入使用既有唯一索引與帳號列鎖；同一個帳號不能同時綁定兩個 ID，同一 ID 也不能同時綁定兩個帳號。OAuth 的待加入配對與原有待連結處理同樣鎖定帳號，避免跨入口的覆蓋。
 
 本功能不新增資料表或欄位，不需要新的 DB migration。原本 CD 重新部署即可。線上 API 文件位於 `/settings#api`，內容來源與維護規則見 [API 文件頁](api-documentation.md)。
+
+## 更換已加入成員的連結
+
+編輯已加入成員時，先點「更換 Discord 帳號」。確認提示會說明新帳號將取得此成員的存取權、舊登入將失效；按「確定更改」後才開放 ID 欄位。取消提示不會開放填寫或發出更新請求，關閉並重開編輯視窗需要重新確認。
+
+- `GET /api/members/{member_id}/discord-link`：管理員取得目前 `discord_id`、`discord_username`；未連結時 ID 為 `null`。
+- `PATCH /api/members/{member_id}/discord-link`：管理員明確確認後更換。保留原 `User.id`、`Member.id`、角色與資料，清除舊名稱並採用新 ID 的待連結名稱或新輸入名稱。
+
+```json
+{
+  "discord_id": "223456789012345678",
+  "discord_username": "new.example",
+  "expected_discord_id": "123456789012345678",
+  "confirmed": true
+}
+```
+
+`expected_discord_id` 必須是剛讀取的原 ID，伺服器在帳號列鎖內比對。已被其他管理員修改、原帳號尚未連結、新 ID 已被占用、新舊 ID 相同或帳號停權均回傳 `409`。`confirmed` 為必填且只接受 JSON 布林 `true`；缺少、`false`、字串或數字均回傳 `422`。成功回傳同一成員的 `MemberResponse`。
+
+更換會增加既有 `password_version`，使該帳號所有既有 session 失效。若管理員修改的是自己，也需要重新登入。OAuth 登入在相同帳號列鎖內再次驗證 Discord ID，並在釋放鎖前取得 session 版本，避免與管理員更換同時發生時簽發錯誤身分的有效 session。
+
+原始訊息與語音資料仍保留各自的 Discord ID，統計姓名改依新的帳號關聯顯示；此功能不搬移原始活動紀錄。初次連結仍使用原 `POST` 端點，其不允許覆蓋既有連結的規則維持不變。讀取與更換同樣不接受 Bot token，且不需新增 DB migration。

@@ -249,24 +249,33 @@ def discord_callback(
             if linked is None:
                 return _oauth_error("not_linked")
             user = linked
-        elif (
-            user.discord_username != identity.username
-            or user.discord_global_name != identity.global_name
-        ):
-            # Discord handles are mutable; keep the stored copy in sync so
-            # admin lists don't show a stale handle after a rename.
-            user.discord_username = identity.username
-            user.discord_global_name = identity.global_name
-            db.commit()
         redirect_target = _HOME_PATH
 
+    # Recheck under the same account lock used by administrative relinking.
+    user = (
+        db.query(User)
+        .filter_by(id=user.id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if user is None or user.discord_id != identity.id:
+        return _oauth_error("not_linked")
     if not user.is_active:
         return _oauth_error("account_suspended")
-
-    request.session["user_id"] = user.id
-    request.session["role"] = user.role.value
-    request.session["password_version"] = user.password_version
-    audit_log.record_success(audit_log.client_ip(request), role=user.role.value)
+    user.discord_username = identity.username
+    user.discord_global_name = identity.global_name
+    # Capture the version before releasing the lock; a later relink invalidates it.
+    session_identity = {
+        "user_id": user.id,
+        "role": user.role.value,
+        "password_version": user.password_version,
+    }
+    db.commit()
+    request.session.update(session_identity)
+    audit_log.record_success(
+        audit_log.client_ip(request), role=session_identity["role"]
+    )
     return RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
 
 

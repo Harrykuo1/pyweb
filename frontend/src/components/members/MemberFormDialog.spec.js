@@ -726,7 +726,7 @@ describe('manual Discord account linking', () => {
     expect(wrapper.emitted('saved')).toBeUndefined()
     wrapper.unmount()
   })
-  it.each(['claimed', 'suspended', 'legacy'])(
+  it.each(['suspended', 'legacy'])(
     'does not allow relinking a %s member',
     async (status) => {
       useAuthStore().user = { role: 'admin' }
@@ -776,6 +776,98 @@ describe('manual Discord account linking', () => {
     expect(save).not.toHaveBeenCalled()
     resolve({ account_status: 'claimed' })
     await flushPromises()
+    wrapper.unmount()
+  })
+})
+
+describe('confirmed changes for joined members', () => {
+  const member = {
+    id: 7,
+    real_name: 'Alice',
+    institution: 'Test',
+    graduation_year: 2026,
+    account_status: 'claimed',
+    account_discord_username: 'old.handle',
+    is_active: true,
+  }
+  it('keeps inputs hidden until confirmation, and cancellation sends no request', async () => {
+    useAuthStore().user = { role: 'admin' }
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
+    const get = vi.spyOn(membersApi, 'getDiscordLink')
+    const patch = vi.spyOn(membersApi, 'replaceDiscordLink')
+    const wrapper = await mountDialog({ member })
+    expect(wrapper.find('[data-test="form-discord-id"]').exists()).toBe(false)
+    await wrapper.find('[data-test="confirm-discord-change"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="form-discord-id"]').exists()).toBe(false)
+    expect(get).not.toHaveBeenCalled()
+    expect(patch).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('loads the original ID after confirmation and submits a guarded replacement', async () => {
+    useAuthStore().user = { role: 'admin' }
+    const { ElMessageBox } = await import('element-plus')
+    const confirm = vi
+      .spyOn(ElMessageBox, 'confirm')
+      .mockResolvedValue('confirm')
+    vi.spyOn(membersApi, 'getDiscordLink').mockResolvedValue({
+      discord_id: '123',
+      discord_username: 'old.handle',
+    })
+    const patch = vi
+      .spyOn(membersApi, 'replaceDiscordLink')
+      .mockResolvedValue({ account_status: 'claimed' })
+    const post = vi.spyOn(membersApi, 'linkDiscord')
+    const wrapper = await mountDialog({ member })
+    await wrapper.find('[data-test="confirm-discord-change"]').trigger('click')
+    await flushPromises()
+    expect(confirm.mock.calls[0][0]).toContain('既有登入將失效')
+    expect(wrapper.find('[data-test="form-discord-id"]').element.value).toBe(
+      '123',
+    )
+    await wrapper.find('[data-test="form-discord-id"]').setValue('456')
+    await wrapper.find('[data-test="link-discord-button"]').trigger('click')
+    await flushPromises()
+    expect(patch).toHaveBeenCalledWith(7, {
+      discord_id: '456',
+      discord_username: null,
+      expected_discord_id: '123',
+      confirmed: true,
+    })
+    expect(post).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    wrapper.unmount()
+  })
+  it('requires confirmation again after closing and reopening', async () => {
+    useAuthStore().user = { role: 'admin' }
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    vi.spyOn(membersApi, 'getDiscordLink').mockResolvedValue({
+      discord_id: '123',
+    })
+    const wrapper = await mountDialog({ member })
+    await wrapper.find('[data-test="confirm-discord-change"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="form-discord-id"]').exists()).toBe(true)
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    expect(wrapper.find('[data-test="form-discord-id"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('keeps inputs locked if loading the current identity fails', async () => {
+    useAuthStore().user = { role: 'admin' }
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    vi.spyOn(membersApi, 'getDiscordLink').mockRejectedValue(
+      new Error('offline'),
+    )
+    const wrapper = await mountDialog({ member })
+    await wrapper.find('[data-test="confirm-discord-change"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="form-discord-id"]').exists()).toBe(false)
+    expect(wrapper.find('.discord-link-error').text()).toContain('無法讀取')
     wrapper.unmount()
   })
 })
