@@ -146,6 +146,114 @@ describe('community activity dashboard', () => {
       hour_end: 19,
     })
   })
+  it('drills from daily to hourly trends, keeps filters and stops further drill-down', async () => {
+    routing.route.query = {
+      start_date: '2026-10-01',
+      end_date: '2026-10-05',
+      timezone: 'Asia/Tokyo',
+      user_ids: ['101'],
+      channel_ids: ['201'],
+      hour_start: '18',
+      hour_end: '24',
+    }
+    activityApi.analytics.mockImplementation(async (f) => ({
+      ...payload(f),
+      hourly: Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        messages: hour === 18 ? 7 : 0,
+        voice_minutes: hour === 21 ? 12 : 0,
+      })),
+    }))
+    const wrapper = await render()
+    await wrapper.find('.trend-chart rect[role="button"]').trigger('click')
+    await flushPromises()
+    expect(activityApi.analytics.mock.lastCall[0]).toMatchObject({
+      start_date: '2026-10-01',
+      end_date: '2026-10-01',
+      timezone: 'Asia/Tokyo',
+      user_ids: ['101'],
+      channel_ids: ['201'],
+      hour_start: 18,
+      hour_end: 24,
+    })
+    const trend = wrapper.find('.trend-panel')
+    expect(trend.text()).toContain('每小時參與量（Asia/Tokyo）')
+    expect(trend.find('.peak-label').text()).toContain('最高的時段')
+    expect(trend.find('.peak-label').text()).toContain('18:00')
+    expect(trend.findAll('rect')).toHaveLength(24)
+    expect(trend.findAll('rect[role="button"]')).toHaveLength(0)
+    expect(trend.find('polyline').attributes('points').split(' ')).toHaveLength(
+      24,
+    )
+    const points = trend.findAll('rect')
+    expect(points[0].attributes('aria-label')).toBe('00:00–01:00：0 則訊息')
+    expect(points[18].attributes('aria-label')).toBe('18:00–19:00：7 則訊息')
+    await points[18].trigger('mouseenter')
+    expect(trend.find('.trend-caption').text()).toContain('7 則訊息')
+    expect(trend.text()).not.toContain('點選')
+    const requests = activityApi.analytics.mock.calls.length
+    const navigation = routing.replace.mock.calls.length
+    await points[18].trigger('click')
+    await points[18].trigger('keydown', { key: 'Enter' })
+    await points[18].trigger('keydown', { key: ' ' })
+    await flushPromises()
+    expect(activityApi.analytics).toHaveBeenCalledTimes(requests)
+    expect(routing.replace).toHaveBeenCalledTimes(navigation)
+    expect(
+      wrapper.findComponent({ name: 'ActivityTrend' }).emitted('select'),
+    ).toHaveLength(1)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await wrapper.findAll('.metric-switch button')[1].trigger('click')
+    expect(trend.findAll('rect')[21].attributes('aria-label')).toBe(
+      '21:00–22:00：12 分鐘語音',
+    )
+    expect(trend.find('.peak-label').text()).toContain('21:00')
+    expect(trend.find('svg').attributes('aria-label')).toBe(
+      '每小時分鐘語音趨勢',
+    )
+    routing.route.query = { start_date: '2026-10-01', end_date: '2026-10-05' }
+    await flushPromises()
+    expect(trend.find('rect[role="button"]').exists()).toBe(true)
+    expect(trend.find('svg').attributes('aria-label')).toBe('每日分鐘語音趨勢')
+  })
+  it('uses hourly trends for direct single-day URLs and waits for applied date changes', async () => {
+    routing.route.query = { start_date: '2026-10-01', end_date: '2026-10-01' }
+    const wrapper = await render()
+    expect(wrapper.findAll('.trend-chart rect')).toHaveLength(24)
+    await wrapper.find('[aria-label="結束日期"]').setValue('2026-10-05')
+    expect(wrapper.findAll('.trend-chart rect')).toHaveLength(24)
+    expect(wrapper.find('.trend-chart rect[role="button"]').exists()).toBe(
+      false,
+    )
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.trend-chart rect[role="button"]').exists()).toBe(true)
+  })
+  it('shows an empty single day as a zero hourly line without interactive points', async () => {
+    routing.route.query = { start_date: '2026-10-01', end_date: '2026-10-01' }
+    activityApi.analytics.mockImplementation(async (f) => ({
+      ...payload(f),
+      hourly: Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        messages: 0,
+        voice_minutes: 0,
+      })),
+    }))
+    const wrapper = await render()
+    const trend = wrapper.find('.trend-panel')
+    expect(trend.findAll('rect')).toHaveLength(24)
+    expect(trend.findAll('rect[role="button"]')).toHaveLength(0)
+    expect(trend.find('.peak-label').exists()).toBe(false)
+    expect(
+      trend
+        .find('polyline')
+        .attributes('points')
+        .split(' ')
+        .every((point) => point.endsWith(',204')),
+    ).toBe(true)
+    expect(trend.text()).toContain('00:00')
+    expect(trend.text()).toContain('23:00')
+  })
   it('restores URL filters and rejects invalid dates before issuing a request', async () => {
     routing.route.query = {
       start_date: '2026-10-01',

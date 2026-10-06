@@ -1,56 +1,70 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { number } from './activityUtils'
+import { hourLabel, number } from './activityUtils'
 const props = defineProps({
   daily: { type: Array, required: true },
+  hourly: { type: Array, default: () => [] },
+  singleDay: { type: Boolean, default: false },
   metric: { type: String, required: true },
   unit: { type: String, required: true },
 })
 const emit = defineEmits(['select'])
 const hovered = ref(null)
+const series = computed(() => (props.singleDay ? props.hourly : props.daily))
+const pointLabel = (point) =>
+  props.singleDay
+    ? `${hourLabel(point.hour)}–${hourLabel(point.hour + 1)}`
+    : point.date
+function select(point) {
+  if (!props.singleDay) emit('select', point.date)
+}
 const maximum = computed(() =>
-  Math.max(1, ...props.daily.map((d) => d[props.metric])),
+  Math.max(1, ...series.value.map((d) => d[props.metric])),
 )
-const x = (i) => 54 + (i * 880) / Math.max(props.daily.length - 1, 1)
+const x = (i) => 54 + (i * 880) / Math.max(series.value.length - 1, 1)
 const y = (value) => 204 - (value / maximum.value) * 166
 const points = computed(() =>
-  props.daily.map((d, i) => `${x(i)},${y(d[props.metric])}`).join(' '),
+  series.value.map((d, i) => `${x(i)},${y(d[props.metric])}`).join(' '),
 )
 const area = computed(() =>
-  props.daily.length
-    ? `M54,204 L${props.daily.map((d, i) => `${x(i)},${y(d[props.metric])}`).join(' L')} L${x(props.daily.length - 1)},204 Z`
+  series.value.length
+    ? `M54,204 L${series.value.map((d, i) => `${x(i)},${y(d[props.metric])}`).join(' L')} L${x(series.value.length - 1)},204 Z`
     : '',
 )
 const labels = computed(() =>
   [
     ...new Set([
       0,
-      Math.floor((props.daily.length - 1) / 4),
-      Math.floor((props.daily.length - 1) / 2),
-      Math.floor(((props.daily.length - 1) * 3) / 4),
-      props.daily.length - 1,
+      Math.floor((series.value.length - 1) / 4),
+      Math.floor((series.value.length - 1) / 2),
+      Math.floor(((series.value.length - 1) * 3) / 4),
+      series.value.length - 1,
     ]),
-  ].filter((i) => i >= 0),
+  ].filter((i) => i >= 0 && i < series.value.length),
 )
-const active = computed(() => props.daily[hovered.value] || null)
+const active = computed(() => series.value[hovered.value] || null)
 </script>
 <template>
   <div class="trend-chart" :class="{ 'is-voice': metric === 'voice_minutes' }">
     <div class="trend-caption" aria-live="polite">
       <template v-if="active"
-        ><strong>{{ active.date }}</strong
+        ><strong>{{ pointLabel(active) }}</strong
         ><span>{{ number(active[metric]) }} {{ unit }}</span
-        ><span class="chart-hint">點選查看當日</span></template
+        ><span v-if="!singleDay" class="chart-hint"
+          >點選查看當日</span
+        ></template
       >
       <template v-else
-        ><span>移到曲線上查看每日數據</span
-        ><span class="chart-hint">點選日期可深入查詢</span></template
+        ><span>移到曲線上查看{{ singleDay ? '每小時' : '每日' }}數據</span
+        ><span v-if="!singleDay" class="chart-hint"
+          >點選日期可深入查詢</span
+        ></template
       >
     </div>
     <svg
       viewBox="0 0 960 240"
       role="img"
-      :aria-label="`每日${unit}趨勢`"
+      :aria-label="`${singleDay ? '每小時' : '每日'}${unit}趨勢`"
       @mouseleave="hovered = null"
     >
       <defs>
@@ -82,9 +96,9 @@ const active = computed(() => props.daily[hovered.value] || null)
         stroke-linejoin="round"
       />
       <circle
-        v-if="daily.length === 1"
+        v-if="series.length === 1"
         :cx="x(0)"
-        :cy="y(daily[0][metric])"
+        :cy="y(series[0][metric])"
         r="4"
         fill="currentColor"
       />
@@ -107,25 +121,32 @@ const active = computed(() => props.daily[hovered.value] || null)
         />
       </g>
       <text v-for="i in labels" :key="i" :x="x(i)" y="230" text-anchor="middle">
-        {{ daily[i].date.slice(5).replace('-', '/') }}
+        {{
+          singleDay
+            ? hourLabel(series[i].hour)
+            : series[i].date.slice(5).replace('-', '/')
+        }}
       </text>
       <rect
-        v-for="(day, i) in daily"
-        :key="day.date"
-        :x="x(i) - 440 / Math.max(daily.length, 1)"
+        v-for="(point, i) in series"
+        :key="singleDay ? point.hour : point.date"
+        :x="x(i) - 440 / Math.max(series.length, 1)"
         y="24"
-        :width="880 / Math.max(daily.length, 1)"
+        :width="880 / Math.max(series.length, 1)"
         height="184"
         fill="transparent"
         tabindex="0"
-        role="button"
-        :aria-label="`${day.date}：${number(day[metric])} ${unit}，查看當日`"
+        :role="singleDay ? 'img' : 'button'"
+        :aria-label="`${pointLabel(point)}：${number(point[metric])} ${unit}${singleDay ? '' : '，查看當日'}`"
         @mouseenter="hovered = i"
         @focus="hovered = i"
-        @click="emit('select', day.date)"
-        @keydown.enter="emit('select', day.date)"
+        @click="select(point)"
+        @keydown.enter="select(point)"
+        @keydown.space.prevent="select(point)"
       >
-        <title>{{ day.date }} · {{ number(day[metric]) }} {{ unit }}</title>
+        <title>
+          {{ pointLabel(point) }} · {{ number(point[metric]) }} {{ unit }}
+        </title>
       </rect>
     </svg>
   </div>
