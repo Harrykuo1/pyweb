@@ -22,7 +22,10 @@ config = context.config
 
 # Inject the DATABASE_URL from the application settings so alembic.ini
 # can stay free of secrets.
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option(
+    "sqlalchemy.url",
+    config.attributes.get("database_url", settings.database_url).replace("%", "%%"),
+)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
@@ -51,6 +54,15 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    if connection := config.attributes.get("connection"):
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            render_as_batch=connection.dialect.name == "sqlite",
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+        return
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

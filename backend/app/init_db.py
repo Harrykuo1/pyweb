@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.event_media import video_files
 from app.core.runtime_config import CONFIG_FIELDS
 from app.core.security import hash_password
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models import AppConfig, EventVideo, User, UserRole, VideoStatus
 
 ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
@@ -162,7 +162,13 @@ def sweep_interrupted_videos(db: Session, uploads_root: Path) -> None:
 
 
 def main() -> None:
-    run_migrations()
+    if settings.legacy_sqlite_path and engine.dialect.name == "postgresql":
+        from app.migrate_sqlite import prepare_postgresql
+
+        source = Path(settings.legacy_sqlite_path)
+        prepare_postgresql(engine, source)
+    else:
+        run_migrations()
     migrate_uploads_layout()
     with SessionLocal() as db:
         seed_accounts(db)

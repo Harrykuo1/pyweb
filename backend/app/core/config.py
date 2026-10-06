@@ -1,4 +1,8 @@
+from pathlib import Path
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
@@ -8,6 +12,24 @@ class Settings(BaseSettings):
     # Defaults False for local HTTP dev; set true in HTTPS production.
     session_secure: bool = False
     database_url: str = "sqlite:///./pyweb.db"
+    postgres_host: str = ""
+    postgres_password_file: str = "/data/.postgres-password"
+    legacy_sqlite_path: str = ""
+
+    @model_validator(mode="after")
+    def configure_postgres(self):
+        # Compose owns the connection; a legacy DATABASE_URL in .env must not
+        # accidentally put a newly deployed backend back on SQLite.
+        if self.postgres_host:
+            self.database_url = URL.create(
+                "postgresql+psycopg",
+                username="pyweb",
+                password=Path(self.postgres_password_file).read_text().strip(),
+                host=self.postgres_host,
+                database="pyweb",
+                query={"options": "-ctimezone=UTC"},
+            ).render_as_string(hide_password=False)
+        return self
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

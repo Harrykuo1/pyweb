@@ -1,5 +1,6 @@
 from app.models.activity import ActivityIngestToken, MessageEvent, VoiceSample
 from app.models.app_config import AppConfig
+from app.models.database_origin import DatabaseOrigin
 from app.models.event import Event, EventComment, EventLike, EventPhoto, EventTag
 from app.models.event_video import EventVideo, VideoKind, VideoStatus
 from app.models.job import Job, JobComment, JobKind, JobLike
@@ -16,6 +17,7 @@ __all__ = [
     "MessageEvent",
     "VoiceSample",
     "AppConfig",
+    "DatabaseOrigin",
     "Event",
     "EventComment",
     "EventLike",

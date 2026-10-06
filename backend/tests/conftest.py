@@ -68,8 +68,12 @@ def db_engine(request):
     from app import models  # noqa: F401
 
     if os.environ.get("TEST_DATABASE_URL"):
+        from app.migrate_sqlite import upgrade
+
         engine = create_engine(request.getfixturevalue("postgres_url"))
-        Base.metadata.create_all(bind=engine)
+        with engine.connect() as connection:
+            upgrade(connection)
+            connection.commit()
         try:
             yield engine
         finally:
