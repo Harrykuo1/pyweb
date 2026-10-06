@@ -288,3 +288,7 @@ sudo systemctl enable --now pyweb-backup.timer
 - **絕對不要 commit `~/.config/rclone/rclone.conf`** — 內含 OAuth refresh token，外洩等同 Drive 永久存取權；萬一外洩到 console.cloud.google.com 撤銷該 client、重跑 `rclone config`
 - 若用了 `crypt` remote，密碼也在同一個檔案裡（rclone 用 `obscure` 編碼，**不是加密**）
 - public repo 可用 `gitleaks` / `trufflehog` 掃 history 確認沒有歷史 commit 不小心混進 token
+
+### 社群活躍度
+
+`/activity` 提供 Discord 訊息與語音的每日貢獻熱圖、趨勢、時段分布、成員及頻道排行。支援日期、時區、時段、星期與成員／頻道多選，查詢條件可透過網址分享。操作與統計定義見 [活躍度圖表](docs/activity-dashboard.md)。

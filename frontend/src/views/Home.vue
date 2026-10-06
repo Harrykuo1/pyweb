@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Briefcase,
   Calendar,
+  DataAnalysis,
   OfficeBuilding,
   UserFilled,
 } from '@element-plus/icons-vue'
@@ -217,6 +218,24 @@ function focusMember(id) {
         <span class="feature-cta feature-cta--warm">
           查看時間軸 <span aria-hidden="true">→</span>
         </span>
+      </article>
+      <article
+        class="feature-card"
+        data-test="card-activity"
+        role="link"
+        tabindex="0"
+        @click="router.push('/activity')"
+        @keydown.enter="router.push('/activity')"
+      >
+        <span class="feature-accent feature-accent-indigo"></span>
+        <div class="feature-icon-wrap feature-icon-indigo">
+          <el-icon :size="22"><DataAnalysis /></el-icon>
+        </div>
+        <h3 class="feature-title">社群活躍度</h3>
+        <p class="feature-desc">從訊息、語音到每日貢獻，探索社群的參與足跡。</p>
+        <span class="feature-cta"
+          >探索數據 <span aria-hidden="true">→</span></span
+        >
       </article>
     </section>
 
@@ -731,7 +750,7 @@ function focusMember(id) {
    ============================================================ */
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--sp-md);
 }
 

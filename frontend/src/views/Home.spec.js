@@ -298,3 +298,12 @@ describe('Home.vue — timeline preview integration', () => {
     )
   })
 })
+
+it('opens the activity dashboard from its home card', async () => {
+  const wrapper = mount(Home, {
+    global: { stubs: { TimelineFeed: true, TimelineFeedPreview: true } },
+  })
+  await wrapper.find('[data-test="card-activity"]').trigger('click')
+  expect(pushMock).toHaveBeenCalledWith('/activity')
+  wrapper.unmount()
+})

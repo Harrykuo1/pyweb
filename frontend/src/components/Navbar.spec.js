@@ -61,6 +61,7 @@ describe('Navbar.vue', () => {
     const targets = links.map((l) => l.attributes('href'))
     expect(targets).toContain('/jobs')
     expect(targets).toContain('/events')
+    expect(targets).toContain('/activity')
   })
 
   it('shows the 審核 link for admins but hides it for viewers', () => {
