@@ -111,6 +111,18 @@
       "title": "07 · 常見回應與 token 輪替",
       "body": "401：未登入、session 已失效，或 Bot token 無效／已撤銷。403：角色、個人資料、群組或資源存取權限不符。413：請求本體過大。422：欄位、格式、時區或日期不符限制，查看 detail 定位欄位。429：請求過於頻繁。5xx：伺服器異常，稍後以相同資料重試。輪替 token 時先建立新 token、更新 Bot、驗證上傳成功，再撤銷舊 token；重新部署不會自動換 token。",
       "snippets": []
+    },
+    {
+      "id": "manual-discord-link",
+      "title": "08 · 管理員手動連結 Discord 帳號",
+      "body": "設定 → 成員與帳號 → 尚未加入 → 編輯，可貼上 Discord 使用者 ID 立即連結。需先在 Discord 開啟開發者模式並複製使用者 ID，不可填暱稱；管理員須確認 ID 屬於本人。連結成功後，該 Discord 帳號登入時會沿用此成員帳號，已收錄的活動也能對應到姓名。既有資料及角色不變，不需重建帳號。它不會冒充本人登入或跳過群組資格檢查；此端點不能用於重新綁定、帳號合併或解除停權。以下範例限已登入的管理員於瀏覽器開發者工具執行。",
+      "snippets": [
+        {
+          "label": "手動連結成員（請替換成實際 member_id 與 Discord ID）",
+          "language": "javascript",
+          "code": "const memberId = 42\nconst response = await fetch(`/api/members/${memberId}/discord-link`, {\n  method: 'POST', credentials: 'same-origin',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    discord_id: '123456789012345678',\n    discord_username: 'example.handle',\n  }),\n})\nconsole.log(response.status, await response.json())"
+        }
+      ]
     }
   ],
   "endpoint_notes": {
@@ -141,6 +153,10 @@
     "GET /api/admin/api-docs": {
       "auth": "管理員 session",
       "description": "此文件頁的資料來源，回傳快速開始指南及目前版本 /api 端點的 OpenAPI 規格。"
+    },
+    "POST /api/members/{member_id}/discord-link": {
+      "auth": "管理員 session",
+      "description": "手動把尚未加入的成員與 Discord 使用者 ID 綁定，沿用原本 User／Member 與既有資料，狀態變為已加入。discord_id 為必填數字字串，discord_username 選填；若 ID 有待連結紀錄，優先使用該筆已驗證名稱並清除待連結。已綁定、停權、無帳號或 ID 已被其他帳號使用回傳 409；不存在的成員回傳 404。此操作不產生登入 session，也不代替實際 OAuth 的身分與群組檢查。"
     }
   }
 }

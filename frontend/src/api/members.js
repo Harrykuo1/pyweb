@@ -22,6 +22,10 @@ export const membersApi = {
     const { data } = await client.put(`/members/${id}`, payload)
     return data
   },
+  async linkDiscord(id, payload) {
+    const { data } = await client.post(`/members/${id}/discord-link`, payload)
+    return data
+  },
   async remove(id, password) {
     await client.delete(`/members/${id}`, { data: { password } })
   },

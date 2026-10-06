@@ -1,3 +1,4 @@
+import logging
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -23,9 +25,9 @@ from app.core.deps import (
     require_completed_member,
     require_member,
 )
-from app.core.discord_link import normalize_discord_handle
+from app.core.discord_link import clear_pending_link, normalize_discord_handle
 from app.database import get_db
-from app.models import Job, Member, User, UserRole
+from app.models import Job, Member, PendingDiscordLink, User, UserRole
 from app.schemas import (
     MemberCreate,
     MemberResponse,
@@ -33,6 +35,7 @@ from app.schemas import (
     MemberUpdate,
     PasswordConfirmRequest,
 )
+from app.schemas.member_discord import MemberDiscordLinkRequest
 
 router = APIRouter(prefix="/api/members", tags=["members"])
 
@@ -264,6 +267,66 @@ def update_member(
     db.commit()
     db.refresh(member)
     return member
+
+
+@router.post("/{member_id}/discord-link", response_model=MemberResponse)
+def manually_link_discord(
+    member_id: int,
+    payload: MemberDiscordLinkRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """管理員將尚未加入的成員連結到固定 Discord ID，沿用既有帳號與資料。"""
+    member = db.get(Member, member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="找不到成員")
+    account = (
+        db.query(User)
+        .filter_by(id=member.user_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if account is None:
+        raise HTTPException(status_code=409, detail="此成員沒有可連結的待加入帳號")
+    if account.discord_id is not None:
+        raise HTTPException(
+            status_code=409, detail="此成員已連結 Discord 帳號，請重新整理名冊"
+        )
+    if not account.is_active:
+        raise HTTPException(status_code=409, detail="此帳號已停權，請先恢復帳號再連結")
+    if db.query(User.id).filter_by(discord_id=payload.discord_id).first():
+        raise HTTPException(status_code=409, detail="此 Discord ID 已連結其他帳號")
+    pending = (
+        db.query(PendingDiscordLink)
+        .filter_by(discord_id=payload.discord_id)
+        .one_or_none()
+    )
+    account.discord_id = payload.discord_id
+    account.discord_username = (
+        (pending.discord_username if pending else None)
+        or payload.discord_username
+        or account.pending_discord_username
+    )
+    account.discord_global_name = pending.discord_global_name if pending else None
+    account.pending_discord_username = None
+    try:
+        clear_pending_link(db, payload.discord_id)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Discord 帳號連結衝突，請重新整理後確認"
+        ) from None
+    db.refresh(account)
+    logging.getLogger(__name__).info(
+        "member_discord_linked admin_id=%s member_id=%s account_id=%s discord_id=%s",
+        admin.id,
+        member.id,
+        account.id,
+        payload.discord_id,
+    )
+    return _member_response(member, account)
 
 
 @router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)

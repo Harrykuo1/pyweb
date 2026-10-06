@@ -129,6 +129,8 @@ The product is built. This section records decisions that are **not** obvious fr
 - Default sort is by join date, ascending, toggleable.
 - The public page is a read-only directory. Member lifecycle (role, suspend, delete) lives in the admin roster under 設定, and is driven off the **members** list — which is why the seeded `admin`/`viewer` accounts never appear there.
 
+- Admins can manually bind an unjoined member through `POST /api/members/{member_id}/discord-link` in the edit dialog. This preserves the existing account/profile and grants identity access by Discord ID; it does not create a session or bypass OAuth guild checks. Reject reassignment, suspended accounts, and duplicate IDs. See [`docs/manual-discord-link.md`](docs/manual-discord-link.md). Keep the account-row locking shared with OAuth matching and pending-link resolution.
+
 ### 3.3 Jobs `/jobs` and Events `/events`
 
 (The original spec called this "internships"; the route, model and tables are all `job`.)

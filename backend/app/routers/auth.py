@@ -342,7 +342,13 @@ def resolve_pending_link(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member account not found"
         )
-    user = db.query(User).filter_by(id=member.user_id).one()
+    user = (
+        db.query(User)
+        .filter_by(id=member.user_id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
     if user.discord_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Member already linked"

@@ -43,6 +43,9 @@ def pending_account_candidates(db: Session, username: str) -> list[User]:
             User.discord_id.is_(None),
             func.lower(User.pending_discord_username) == username.lower(),
         )
+        .order_by(User.id)
+        .populate_existing()
+        .with_for_update()
         .all()
     )
 

@@ -28,6 +28,11 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'saved'])
 
+const linkedDiscordId = ref('')
+const discordId = ref('')
+const linkingDiscord = ref(false)
+const discordLinkError = ref('')
+
 const isEdit = computed(() => props.member !== null)
 const title = computed(() => (isEdit.value ? '編輯成員' : '新增成員'))
 
@@ -38,7 +43,8 @@ const canEditPendingHandle = computed(
   () =>
     isEdit.value &&
     auth.isActuallyAdmin &&
-    props.member?.account_status === 'pending',
+    props.member?.account_status === 'pending' &&
+    !linkedDiscordId.value,
 )
 const showDiscordField = computed(
   () => (!isEdit.value && auth.isActuallyAdmin) || canEditPendingHandle.value,
@@ -110,6 +116,9 @@ function resetForm(member) {
     discord_username:
       member?.account_discord_username ?? member?.discord_username ?? '',
   })
+  discordId.value = ''
+  linkedDiscordId.value = ''
+  discordLinkError.value = ''
   pdfFile.value = null
   pdfDeletedThisSession.value = false
   pdfDeleteDialogOpen.value = false
@@ -125,7 +134,41 @@ watch(
   { immediate: true },
 )
 
+const canLinkDiscord = computed(
+  () =>
+    canEditPendingHandle.value &&
+    auth.isAdmin &&
+    props.member?.is_active !== false,
+)
+async function linkDiscord() {
+  if (!canLinkDiscord.value || submitting.value || linkingDiscord.value) return
+  const id = discordId.value.trim()
+  if (!/^[1-9][0-9]{0,19}$/.test(id)) {
+    discordLinkError.value =
+      '請填入純數字的 Discord 使用者 ID，不能填使用者名稱。'
+    return
+  }
+  linkingDiscord.value = true
+  discordLinkError.value = ''
+  try {
+    await membersApi.linkDiscord(props.member.id, {
+      discord_id: id,
+      discord_username: form.discord_username.trim() || null,
+    })
+    linkedDiscordId.value = id
+    ElMessage.success('已連結 Discord 帳號，成員狀態已更新為已加入')
+    emit('saved')
+  } catch (err) {
+    const detail = err?.response?.data?.detail
+    discordLinkError.value =
+      typeof detail === 'string' ? detail : '連結失敗，請稍後再試。'
+  } finally {
+    linkingDiscord.value = false
+  }
+}
+
 function close() {
+  if (linkingDiscord.value) return
   emit('update:modelValue', false)
 }
 
@@ -221,6 +264,7 @@ async function applyPdfChanges(memberId) {
 }
 
 async function handleSubmit() {
+  if (linkingDiscord.value) return
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
@@ -298,6 +342,8 @@ defineExpose({ handlePdfChange, clearPdfChange })
     :title="title"
     width="540"
     :close-on-click-modal="false"
+    :close-on-press-escape="!linkingDiscord"
+    :show-close="!linkingDiscord"
     :teleported="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -356,6 +402,45 @@ defineExpose({ handlePdfChange, clearPdfChange })
           data-test="form-discord-username"
         />
       </el-form-item>
+      <div
+        v-if="canLinkDiscord || linkedDiscordId"
+        class="discord-link-panel"
+        data-test="discord-link-panel"
+      >
+        <h4>手動連結 Discord 帳號</h4>
+        <p v-if="linkedDiscordId" role="status">
+          已連結 {{ linkedDiscordId }}，成員狀態為「已加入」。
+        </p>
+        <template v-else>
+          <p>
+            在 Discord 開啟開發者模式，右鍵點選成員並複製「使用者 ID」。請確認
+            ID 屬於本人，連結後該 Discord 帳號即可登入此成員帳號。
+          </p>
+          <el-input
+            v-model="discordId"
+            aria-label="Discord 使用者 ID"
+            placeholder="貼上純數字的使用者 ID"
+            maxlength="20"
+            :disabled="linkingDiscord || submitting"
+            data-test="form-discord-id"
+          />
+          <p v-if="discordLinkError" role="alert" class="discord-link-error">
+            {{ discordLinkError }}
+          </p>
+          <el-button
+            type="primary"
+            plain
+            :loading="linkingDiscord"
+            :disabled="submitting || !discordId.trim()"
+            data-test="link-discord-button"
+            @click="linkDiscord"
+            >連結 Discord 帳號</el-button
+          >
+          <small
+            >連結立即生效，其他表單欄位仍需按「儲存」。實際登入仍會驗證群組資格。</small
+          >
+        </template>
+      </div>
       <el-form-item label="履歷 PDF">
         <div class="pdf-control">
           <div
@@ -404,11 +489,12 @@ defineExpose({ handlePdfChange, clearPdfChange })
     </el-form>
 
     <template #footer>
-      <el-button @click="close">取消</el-button>
+      <el-button :disabled="linkingDiscord" @click="close">取消</el-button>
       <el-button
         type="primary"
         :loading="submitting"
         data-test="save-button"
+        :disabled="linkingDiscord"
         @click="handleSubmit"
       >
         {{ isEdit ? '儲存' : '新增' }}
@@ -428,6 +514,34 @@ defineExpose({ handlePdfChange, clearPdfChange })
 </template>
 
 <style scoped>
+.discord-link-panel {
+  padding: 16px;
+  margin-bottom: 22px;
+  border: 1px solid #ded9f4;
+  border-radius: 12px;
+  background: #f9f7ff;
+}
+.discord-link-panel h4 {
+  margin: 0 0 8px;
+  color: #6857b3;
+}
+.discord-link-panel p,
+.discord-link-panel small {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #817794;
+}
+.discord-link-panel .el-button {
+  margin-top: 12px;
+}
+.discord-link-panel small {
+  display: block;
+  margin-top: 10px;
+}
+.discord-link-panel .discord-link-error {
+  color: #c45162;
+}
+
 .pdf-control {
   display: flex;
   flex-direction: column;

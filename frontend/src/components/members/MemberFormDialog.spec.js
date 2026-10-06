@@ -661,3 +661,121 @@ describe('MemberFormDialog', () => {
     expect(wrapper.text()).not.toContain('已選擇')
   })
 })
+
+describe('manual Discord account linking', () => {
+  const pending = {
+    id: 7,
+    real_name: 'Alice',
+    institution: 'Test',
+    graduation_year: 2026,
+    account_status: 'pending',
+    account_discord_username: 'alice',
+    is_active: true,
+  }
+  it('links an unjoined member without saving or replacing the profile', async () => {
+    useAuthStore().user = { role: 'admin' }
+    const link = vi
+      .spyOn(membersApi, 'linkDiscord')
+      .mockResolvedValue({ account_status: 'claimed' })
+    const save = vi.spyOn(membersApi, 'update')
+    const wrapper = await mountDialog({ member: pending })
+    await wrapper
+      .find('[data-test="form-discord-id"]')
+      .setValue('123456789012345678')
+    await wrapper.find('[data-test="link-discord-button"]').trigger('click')
+    await flushPromises()
+    expect(link).toHaveBeenCalledWith(7, {
+      discord_id: '123456789012345678',
+      discord_username: 'alice',
+    })
+    expect(save).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    expect(wrapper.find('[data-test="discord-link-panel"]').text()).toContain(
+      '已加入',
+    )
+    expect(wrapper.find('[data-test="link-discord-button"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('[data-test="form-discord-username"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('rejects a username pasted as an ID and shows server conflicts', async () => {
+    useAuthStore().user = { role: 'admin' }
+    const link = vi.spyOn(membersApi, 'linkDiscord').mockRejectedValue({
+      response: {
+        status: 409,
+        data: { detail: '此 Discord ID 已連結其他帳號' },
+      },
+    })
+    const wrapper = await mountDialog({ member: pending })
+    await wrapper.find('[data-test="form-discord-id"]').setValue('@alice')
+    await wrapper.find('[data-test="link-discord-button"]').trigger('click')
+    expect(link).not.toHaveBeenCalled()
+    expect(wrapper.find('.discord-link-error').text()).toContain('純數字')
+    await wrapper
+      .find('[data-test="form-discord-id"]')
+      .setValue('123456789012345678')
+    await wrapper.find('[data-test="link-discord-button"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.discord-link-error').text()).toContain(
+      '已連結其他帳號',
+    )
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it.each(['claimed', 'suspended', 'legacy'])(
+    'does not allow relinking a %s member',
+    async (status) => {
+      useAuthStore().user = { role: 'admin' }
+      const wrapper = await mountDialog({
+        member: { ...pending, account_status: status },
+      })
+      expect(wrapper.find('[data-test="discord-link-panel"]').exists()).toBe(
+        false,
+      )
+      wrapper.unmount()
+    },
+  )
+  it('hides manual linking from members and admin preview', async () => {
+    const auth = useAuthStore()
+    auth.user = { role: 'member' }
+    const wrapper = await mountDialog({ member: pending })
+    expect(wrapper.find('[data-test="discord-link-panel"]').exists()).toBe(
+      false,
+    )
+    auth.user = { role: 'admin' }
+    auth.previewAsMember = true
+    await flushPromises()
+    expect(wrapper.find('[data-test="discord-link-panel"]').exists()).toBe(
+      false,
+    )
+    wrapper.unmount()
+  })
+  it('blocks profile save while the link request is pending', async () => {
+    useAuthStore().user = { role: 'admin' }
+    let resolve
+    vi.spyOn(membersApi, 'linkDiscord').mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r
+        }),
+    )
+    const save = vi.spyOn(membersApi, 'update')
+    const wrapper = await mountDialog({ member: pending })
+    await wrapper
+      .find('[data-test="form-discord-id"]')
+      .setValue('123456789012345678')
+    await wrapper.find('[data-test="link-discord-button"]').trigger('click')
+    expect(
+      wrapper.find('[data-test="save-button"]').attributes('disabled'),
+    ).toBeDefined()
+    await wrapper.find('[data-test="save-button"]').trigger('click')
+    expect(save).not.toHaveBeenCalled()
+    resolve({ account_status: 'claimed' })
+    await flushPromises()
+    wrapper.unmount()
+  })
+})

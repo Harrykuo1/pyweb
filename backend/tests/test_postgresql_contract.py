@@ -13,6 +13,7 @@ from app.models import User, UserRole
 def test_openapi_contract_matches_sqlite_release():
     # Preserve the pre-migration contract while allowing the new activity and documentation routes.
     analytics_paths = {
+        "/api/members/{member_id}/discord-link",
         "/api/admin/api-docs",
         "/api/activity/options",
         "/api/activity/analytics",
@@ -25,6 +26,7 @@ def test_openapi_contract_matches_sqlite_release():
     for path in analytics_paths:
         del legacy_contract["paths"][path]
     for schema in {
+        "MemberDiscordLinkRequest",
         "ActivityMetrics",
         "ActivityOptions",
         "ActivityPerson",
