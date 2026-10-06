@@ -182,9 +182,38 @@ def test_real_http_writes_ten_thousand_rows_and_survives_restart(live_api):
 
 def test_eight_concurrent_retries_insert_each_event_once(live_api):
     client, database, _ = live_api
+    # Force transactions to overlap after acquiring their first row lock.
+    with database.begin() as connection:
+        connection.exec_driver_sql("""
+            CREATE FUNCTION overlap_ingest() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF current_setting('pyweb.delayed', true) IS DISTINCT FROM '1'
+                   AND current_setting('pyweb.delayed', true) IS DISTINCT FROM '2' THEN
+                    PERFORM set_config('pyweb.delayed', '1', true);
+                ELSIF current_setting('pyweb.delayed', true) = '1' THEN
+                    PERFORM set_config('pyweb.delayed', '2', true);
+                    PERFORM pg_sleep(0.5);
+                END IF;
+                RETURN NEW;
+            END $$
+        """)
+        connection.exec_driver_sql("""
+            CREATE TRIGGER overlap_ingest BEFORE INSERT ON message_events
+            FOR EACH ROW EXECUTE FUNCTION overlap_ingest()
+        """)
     body = batch()
+    bodies = []
+    for offset in range(8):
+        variant = {"guild_id": body["guild_id"]}
+        for key in ("messages", "voice_samples"):
+            rows = body[key]
+            rotated = rows[offset * 61 :] + rows[: offset * 61]
+            variant[key] = rotated if offset % 2 else list(reversed(rotated))
+        bodies.append(variant)
     with ThreadPoolExecutor(max_workers=8) as pool:
-        responses = list(pool.map(lambda _: client.post(URL, json=body), range(8)))
+        responses = list(
+            pool.map(lambda payload: client.post(URL, json=payload), bodies)
+        )
     for response in responses:
         assert response.status_code == 200, response.text
     for kind in ("messages", "voice_samples"):
