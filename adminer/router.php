@@ -9,7 +9,8 @@ if ($webPassword === false || $webPassword === '' || !is_readable('/run/secrets/
 
 function adminer_object() {
     require_once '/opt/pyweb-adminer/login.php';
-    return new Adminer\Plugins([new PywebAdminerLogin()]);
+    require_once '/opt/pyweb-adminer/display.php';
+    return new Adminer\Plugins([new PywebAdminerLogin(), new PywebAdminerDisplay()]);
 }
 
 require '/var/www/html/adminer.php';

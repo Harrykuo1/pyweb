@@ -111,6 +111,8 @@ docker compose down
 
 完整流程、資料位置、失敗重試與還原方式見 [PostgreSQL 部署與資料保留](docs/postgresql-migration.md)。舊 sqlite-web 已由 Adminer 取代，沿用 8119 與 `.env` 中的 `SQLITE_WEB_PASSWORD`。Adminer 發布主機 `8119`，供另一台 nginx 反向代理；PostgreSQL 只綁定 `127.0.0.1:5432`；[Adminer 與 HeidiSQL 連線方式](docs/postgresql-migration.md#adminer-與-heidisql)。
 
+Adminer 資料表總覽的資料、索引與合計容量會自動換算為 KiB／MiB／GiB（每級 1024 倍），滑鼠移上數字可查看完整 bytes。PostgreSQL 未提供的「資料空間」欄會隱藏；容量排序與原本的操作連結維持可用。
+
 ### 環境變數
 
 | 變數 | 必填 | 說明 |

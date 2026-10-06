@@ -203,6 +203,21 @@ class AdminerTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertNotIn("adminer-insert-ok", body)
 
+    def test_display_plugin_is_loaded_with_csp_nonce_on_overview(self):
+        client, (status, body, url) = self.login()
+        self.assertEqual(status, 200)
+        for path in [
+            url.removeprefix(self.base),
+            url.removeprefix(self.base) + "&order=Data_length",
+        ]:
+            status, body, _ = self.request(client, path)
+            self.assertEqual(status, 200)
+            self.assertRegex(
+                body, r'(?s)<script nonce="[^"]+">.*?const units = .*?KiB.*?</script>'
+            )
+            self.assertIn("id='Data_length-adminer_probe'", body)
+            self.assertNotIn(DB_PASSWORD, body)
+
     def test_wrong_empty_and_database_password_rejected(self):
         for password in ["wrong-password", "", DB_PASSWORD]:
             with self.subTest(password_kind="empty" if not password else "incorrect"):
