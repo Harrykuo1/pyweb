@@ -107,6 +107,9 @@ useOutsideClick({
         <router-link to="/members" class="nav-link">成員</router-link>
         <router-link to="/jobs" class="nav-link">求職</router-link>
         <router-link to="/events" class="nav-link">活動</router-link>
+        <router-link to="/activity" class="nav-link" data-test="nav-activity"
+          >活躍度</router-link
+        >
         <router-link
           v-if="auth.isAdmin"
           to="/review"

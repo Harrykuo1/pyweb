@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta, timezone
@@ -10,9 +11,42 @@ from app.models import User, UserRole
 
 
 def test_openapi_contract_matches_sqlite_release():
-    # Captured from the running pre-migration release, including every path/schema.
+    # Preserve the pre-migration contract while allowing the new activity and documentation routes.
+    analytics_paths = {
+        "/api/admin/api-docs",
+        "/api/activity/options",
+        "/api/activity/analytics",
+        "/api/activity/channels",
+        "/api/activity/channels/{channel_id}",
+        "/api/activity/member-trends",
+    }
+    assert analytics_paths <= app.openapi()["paths"].keys()
+    legacy_contract = copy.deepcopy(app.openapi())
+    for path in analytics_paths:
+        del legacy_contract["paths"][path]
+    for schema in {
+        "ActivityMetrics",
+        "ActivityOptions",
+        "ActivityPerson",
+        "AnalyticsFilters",
+        "AnalyticsResponse",
+        "ChannelActivity",
+        "DailyActivity",
+        "HourlyActivity",
+        "MemberActivity",
+        "RhythmActivity",
+        "ChannelNameResponse",
+        "ChannelNameUpdate",
+        "ChannelNamesBatch",
+        "ChannelNamesResult",
+        "ChannelNameRecord",
+        "MemberTrendPoint",
+        "MemberTrendSeries",
+        "MemberTrendsResponse",
+    }:
+        del legacy_contract["components"]["schemas"][schema]
     digest = hashlib.sha256(
-        json.dumps(app.openapi(), sort_keys=True).encode()
+        json.dumps(legacy_contract, sort_keys=True).encode()
     ).hexdigest()
     assert digest == "fda9008ba1b503cc65f19eac67b4dffe8159fa4d3d3af991bbdd4d385af09881"
 

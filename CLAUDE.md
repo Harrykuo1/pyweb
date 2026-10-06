@@ -97,6 +97,15 @@ Superpowers skills are installed and load on every session. Where one conflicts 
 
 Specifically: the `brainstorming` skill mandates a spec document under `docs/superpowers/specs/` plus a `writing-plans` handoff. That is too heavy for this project. Use §2.3's TODO checklist instead, and reach for the skill's structure only on genuinely large features where the user asks for a written design.
 
+### 2.10 API Documentation (MANDATORY)
+
+- The admin API documentation lives at `/settings#api`, under the sidebar item after My Account. Guide and reference data are served by `GET /api/admin/api-docs` with `require_admin`; keep both the page and its data access admin-only.
+- **Every new, changed, or removed external API must update documentation in the same commit.** Follow [`docs/api-documentation.md`](docs/api-documentation.md).
+- FastAPI OpenAPI is the source of truth for paths, parameters, request/response schemas, and structural constraints. Keep route/schema descriptions accurate. The UI derives the endpoint catalog from it; do not hard-code a second catalog.
+- Human guidance lives in `backend/app/docs/api-guide.json`. Add/update/remove the `endpoint_notes` entry keyed by `METHOD /api/path` with auth and usage details. Also update `sections` and relevant `docs/*.md` when usage, authentication, token commands, limits, deduplication, time semantics, or retry behavior changes. Automatic catalog inclusion alone is insufficient documentation for new APIs.
+- Include copyable request/response examples and correct operator commands (`docker compose exec backend python -m app.activity_tokens ...`, plus `docker exec` when relevant). Use placeholders only; never include real credentials or personal data. Distinguish Bot Bearer tokens from website session cookies.
+- Test documentation access controls and examples alongside the API changes. Internal-only routes must be explicitly identified as such rather than advertised as public integrations.
+
 ---
 
 ## 3. Current Feature Surface

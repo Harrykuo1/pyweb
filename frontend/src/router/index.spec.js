@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useAuthStore } from '../stores/auth'
-import { createAuthGuard } from './index'
+import router, { createAuthGuard } from './index'
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -172,4 +172,23 @@ describe('auth guard', () => {
 
     expect(result).toEqual({ path: '/' })
   })
+})
+
+describe('API documentation deep link', () => {
+  it.each(['member', 'viewer', 'admin'])(
+    'enforces the actual settings route for %s',
+    async (role) => {
+      const auth = useAuthStore()
+      auth.user = { role, has_profile: true }
+      const target = router.resolve('/settings#api')
+      expect(target.meta.requiresAdmin).toBe(true)
+      expect(await createAuthGuard()(target)).toEqual(
+        role === 'admin' ? true : { path: '/' },
+      )
+      if (role === 'admin') {
+        auth.previewAsMember = true
+        expect(await createAuthGuard()(target)).toEqual({ path: '/' })
+      }
+    },
+  )
 })

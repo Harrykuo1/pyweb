@@ -10,10 +10,10 @@ class ActivityBodyLimitMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if (
-            scope["type"] != "http"
-            or scope["path"].rstrip("/") != "/api/activity/batches"
-        ):
+        if scope["type"] != "http" or scope["path"].rstrip("/") not in {
+            "/api/activity/batches",
+            "/api/activity/channels",
+        }:
             await self.app(scope, receive, send)
             return
         body = bytearray()
