@@ -1,5 +1,7 @@
 # Discord 活躍度資料寫入 API
 
+管理員也可在網站「設定 → API 文件」（`/settings#api`）查看串接指南與即時端點參考；維護規則見 [API 文件頁](api-documentation.md)。
+
 此 API 供 Discord Bot 每五分鐘批次上傳訊息事件與語音取樣。統計查詢與圖表見 [社群活躍度](activity-dashboard.md)。
 
 ## 部署與資料庫 migration

@@ -2,8 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { Avatar, SetUp, User } from '@element-plus/icons-vue'
+import { Avatar, SetUp, User, Connection } from '@element-plus/icons-vue'
 
+import ApiDocsSection from '../components/settings/ApiDocsSection.vue'
 import AccountSection from '../components/settings/AccountSection.vue'
 import AppearanceSection from '../components/settings/AppearanceSection.vue'
 import GuildConfigSection from '../components/settings/GuildConfigSection.vue'
@@ -15,7 +16,7 @@ import SettingsSubTabs from '../components/settings/SettingsSubTabs.vue'
 import SystemLimitsSection from '../components/settings/SystemLimitsSection.vue'
 import { authApi } from '../api/auth'
 
-// Two-level navigation: the sidebar lists three top-level GROUPS; each group
+// Two-level navigation: the sidebar lists top-level GROUPS; each group
 // opens a sub-tab bar of leaf sections. The leaf key is the single source of
 // truth synced to the URL hash — a hash resolves to (group, sub).
 const GROUPS = [
@@ -60,6 +61,13 @@ const GROUPS = [
     description: '更新使用者名稱與密碼',
     icon: User,
     subs: [{ key: 'account', label: '我的帳號', component: AccountSection }],
+  },
+  {
+    key: 'api',
+    label: 'API 文件',
+    description: '串接指南、Token 與端點參考',
+    icon: Connection,
+    subs: [{ key: 'api', label: 'API 文件', component: ApiDocsSection }],
   },
 ]
 

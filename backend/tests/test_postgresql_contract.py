@@ -11,8 +11,9 @@ from app.models import User, UserRole
 
 
 def test_openapi_contract_matches_sqlite_release():
-    # Preserve the pre-migration contract while allowing the new activity routes.
+    # Preserve the pre-migration contract while allowing the new activity and documentation routes.
     analytics_paths = {
+        "/api/admin/api-docs",
         "/api/activity/options",
         "/api/activity/analytics",
         "/api/activity/channels",

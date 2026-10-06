@@ -1,0 +1,146 @@
+{
+  "sections": [
+    {
+      "id": "connection",
+      "title": "01 · 連線與驗證",
+      "body": "網站 API 使用 /api 前綴。下方範例會帶入目前網站網址；遠端正式環境請使用 HTTPS。Discord Bot 使用專用 Bearer token，網站功能則依端點要求使用登入 session cookie，兩者不能互換。文件頁本身僅管理員可讀取。",
+      "snippets": [
+        {
+          "label": "設定 Bot 呼叫環境（Bash）",
+          "language": "bash",
+          "code": "export PYWEB_URL=\"{{origin}}\"\nexport PYWEB_ACTIVITY_TOKEN=\"<填入剛建立的 token>\""
+        }
+      ]
+    },
+    {
+      "id": "tokens",
+      "title": "02 · 建立、查看與撤銷 token",
+      "body": "在部署主機的專案根目錄執行 Docker Compose 指令。將群組 ID 換成要收集資料的 Discord 伺服器 ID；每個 token 僅能寫入其綁定群組。明文 token 只在建立時顯示一次，請保存在 Bot 的秘密設定或環境變數。token 沒有自動到期日，直到手動撤銷；不受網站 SESSION_MAX_AGE_SECONDS 影響。",
+      "snippets": [
+        {
+          "label": "建立 Bot token（建議使用 Compose 服務名稱）",
+          "language": "bash",
+          "code": "docker compose exec backend python -m app.activity_tokens create \\\n  --guild-id 123456789012345678 --name discord-activity-bot"
+        },
+        {
+          "label": "直接使用 docker exec",
+          "language": "bash",
+          "code": "# Check the backend container name; the default is usually pyweb-backend-1\ndocker compose ps backend\ndocker exec -it pyweb-backend-1 python -m app.activity_tokens create \\\n  --guild-id 123456789012345678 --name discord-activity-bot"
+        },
+        {
+          "label": "查看 token 清單（不顯示 token 明文或雜湊）",
+          "language": "bash",
+          "code": "docker compose exec backend python -m app.activity_tokens list"
+        },
+        {
+          "label": "撤銷指定 token（將 1 換成清單中的 id）",
+          "language": "bash",
+          "code": "docker compose exec backend python -m app.activity_tokens revoke 1"
+        }
+      ]
+    },
+    {
+      "id": "batches",
+      "title": "03 · 上傳文字訊息與語音取樣",
+      "body": "建議 Bot 每五分鐘批次上傳，仍保留每則訊息的實際發送時間與每次語音掃描時間。每批合計 1–1,000 筆、JSON 最大 1 MiB、同一來源 IP 每分鐘 60 次。所有 Discord ID 都必須是字串，時間必須含時區且不能超前伺服器超過五分鐘。可省略 messages 或 voice_samples，但不能兩者都空。",
+      "snippets": [
+        {
+          "label": "存為 batch.json（請替換成實際資料）",
+          "language": "json",
+          "code": "{\n  \"guild_id\": \"123456789012345678\",\n  \"messages\": [\n    {\n      \"message_id\": \"234567890123456789\",\n      \"user_id\": \"345678901234567890\",\n      \"channel_id\": \"456789012345678901\",\n      \"sent_at\": \"2026-10-01T18:03:12.123456+08:00\",\n      \"reply_to_user_id\": null,\n      \"text_length\": 12,\n      \"attachment_count\": 0\n    }\n  ],\n  \"voice_samples\": [\n    {\n      \"user_id\": \"345678901234567890\",\n      \"channel_id\": \"567890123456789012\",\n      \"sampled_at\": \"2026-10-01T18:04:23+08:00\"\n    }\n  ]\n}"
+        },
+        {
+          "label": "發送請求",
+          "language": "bash",
+          "code": "curl --fail-with-body \"$PYWEB_URL/api/activity/batches\" \\\n  -H \"Authorization: Bearer $PYWEB_ACTIVITY_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  --data-binary @batch.json"
+        },
+        {
+          "label": "成功回應範例",
+          "language": "json",
+          "code": "{\n  \"messages\": {\n    \"inserted\": 1,\n    \"duplicates\": 0\n  },\n  \"voice_samples\": {\n    \"inserted\": 1,\n    \"duplicates\": 0\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "retry",
+      "title": "04 · 重試、去重與資料意義",
+      "body": "訊息以 (guild_id, message_id) 去重，語音以 (guild_id, user_id, sampled_at) 去重。斷線重試時保留原 ID 與原時間，同一筆重送只會計入 duplicates，不會覆寫原紀錄。成功回應後才清除 Bot 待送佇列；收到 429 時依 Retry-After（若提供）延後重試，否則使用指數退避。語音每筆代表約一個人分鐘的頻道參與時間，不代表實際發言時長。系統不接收訊息原文，也不會由 ID 自動取得成員暱稱。",
+      "snippets": []
+    },
+    {
+      "id": "channels",
+      "title": "05 · 同步頻道名稱",
+      "body": "使用相同 Bot token 呼叫此獨立端點。建議 Bot 啟動、頻道改名或每五分鐘同步；同步一次即可替歷史活動顯示目前名稱。observed_at 是取得名稱的時間，重送保留原值；較舊或相同時間不覆蓋資料。同批重複頻道取最新時間，相同時間取第一筆。名稱去除前後空白後需 1–100 字，不接受控制字元，每批 1–1,000 筆、最大 1 MiB、每 IP 每分鐘 60 次。",
+      "snippets": [
+        {
+          "label": "存為 channels.json（請替換成實際資料）",
+          "language": "json",
+          "code": "{\n  \"guild_id\": \"123456789012345678\",\n  \"channels\": [\n    {\n      \"channel_id\": \"456789012345678901\",\n      \"name\": \"聊天大廳\",\n      \"observed_at\": \"2026-10-01T18:00:00+08:00\"\n    }\n  ]\n}"
+        },
+        {
+          "label": "同步名稱",
+          "language": "bash",
+          "code": "curl --fail-with-body \"$PYWEB_URL/api/activity/channels\" \\\n  -H \"Authorization: Bearer $PYWEB_ACTIVITY_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  --data-binary @channels.json"
+        },
+        {
+          "label": "成功回應範例",
+          "language": "json",
+          "code": "{\"updated\": 1, \"unchanged\": 0}"
+        }
+      ]
+    },
+    {
+      "id": "analytics",
+      "title": "06 · 活躍度查詢與管理",
+      "body": "GET /api/activity/options、/analytics、/member-trends 使用網站 session，須完成個人資料（管理員與舊 viewer 依現有規則豁免），不能用 Bot token 讀取。查詢固定使用網站設定的群組，非管理員不包含已停權帳號。PATCH /api/activity/channels/{channel_id} 僅管理員可修改名稱。以下可在已登入網站的瀏覽器開發者工具執行。",
+      "snippets": [
+        {
+          "label": "查詢近五天 18–24 點（範例日期請自行調整）",
+          "language": "javascript",
+          "code": "const params = new URLSearchParams({\n  start_date: '2026-10-01', end_date: '2026-10-05',\n  timezone: 'Asia/Taipei', hour_start: '18', hour_end: '24',\n})\nconst response = await fetch(`/api/activity/analytics?${params}`, {\n  credentials: 'same-origin',\n})\nconsole.log(response.status, await response.json())"
+        },
+        {
+          "label": "比較兩人的近 7 天與前期",
+          "language": "javascript",
+          "code": "const params = new URLSearchParams({\n  end_date: '2026-10-05', window_days: '7', timezone: 'Asia/Taipei',\n})\nparams.append('user_ids', '345678901234567890')\nparams.append('user_ids', '345678901234567891')\nconst response = await fetch(`/api/activity/member-trends?${params}`, {\n  credentials: 'same-origin',\n})\nconsole.log(response.status, await response.json())"
+        }
+      ]
+    },
+    {
+      "id": "errors",
+      "title": "07 · 常見回應與 token 輪替",
+      "body": "401：未登入、session 已失效，或 Bot token 無效／已撤銷。403：角色、個人資料、群組或資源存取權限不符。413：請求本體過大。422：欄位、格式、時區或日期不符限制，查看 detail 定位欄位。429：請求過於頻繁。5xx：伺服器異常，稍後以相同資料重試。輪替 token 時先建立新 token、更新 Bot、驗證上傳成功，再撤銷舊 token；重新部署不會自動換 token。",
+      "snippets": []
+    }
+  ],
+  "endpoint_notes": {
+    "POST /api/activity/batches": {
+      "auth": "Bot Bearer token",
+      "description": "批次寫入原始訊息與語音取樣；群組必須與 token 相符。重送依來源識別鍵去重，不更新既有事件。"
+    },
+    "POST /api/activity/channels": {
+      "auth": "Bot Bearer token",
+      "description": "批次同步頻道目前名稱；guild_id 與 token 相符，observed_at 較新才更新。"
+    },
+    "PATCH /api/activity/channels/{channel_id}": {
+      "auth": "管理員 session",
+      "description": "手動修改網站設定群組中的頻道名稱。下一次較新的 Bot 名稱同步可以覆蓋。"
+    },
+    "GET /api/activity/options": {
+      "auth": "已完成個人資料的 session",
+      "description": "取得成員、頻道 ID／名稱、資料時間範圍與最近收錄時間。"
+    },
+    "GET /api/activity/analytics": {
+      "auth": "已完成個人資料的 session",
+      "description": "查詢 1–366 天的統計。小時開始含、結束不含；跨午夜按每筆當地日期處理。weekdays 0 為週一、6 為週日，多選以重複 query key 傳入。"
+    },
+    "GET /api/activity/member-trends": {
+      "auth": "已完成個人資料的 session",
+      "description": "比較 1–6 人的兩個完整期間，window_days 為 7／14／30，排除今天。依所選星期的有效天數計算日平均；前期為零時百分比為 null。支援頻道、時段與星期條件。"
+    },
+    "GET /api/admin/api-docs": {
+      "auth": "管理員 session",
+      "description": "此文件頁的資料來源，回傳快速開始指南及目前版本 /api 端點的 OpenAPI 規格。"
+    }
+  }
+}

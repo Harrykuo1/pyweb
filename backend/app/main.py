@@ -11,6 +11,7 @@ from app.routers import activity as activity_router
 from app.routers import activity_analytics as activity_analytics_router
 from app.routers import activity_channels as activity_channels_router
 from app.routers import activity_trends as activity_trends_router
+from app.routers import api_docs as api_docs_router
 from app.routers import auth as auth_router
 from app.routers import event_comments as event_comments_router
 from app.routers import event_likes as event_likes_router
@@ -102,6 +103,7 @@ app.include_router(activity_router.router)
 app.include_router(activity_analytics_router.router)
 app.include_router(activity_channels_router.router)
 app.include_router(activity_trends_router.router)
+app.include_router(api_docs_router.router)
 app.include_router(auth_router.router)
 app.include_router(members_router.router)
 app.include_router(jobs_router.router)

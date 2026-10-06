@@ -32,6 +32,7 @@ const stubs = {
   AppearanceSection: { template: '<div data-test="stub-appearance" />' },
   SystemLimitsSection: { template: '<div data-test="stub-system" />' },
   AccountSection: { template: '<div data-test="stub-account" />' },
+  ApiDocsSection: { template: '<div data-test="stub-api" />' },
 }
 
 beforeEach(() => {
@@ -47,10 +48,19 @@ afterEach(() => {
 })
 
 describe('Settings.vue navigation shell', () => {
-  it('renders exactly the three top-level groups in the sidebar', () => {
+  it('renders four top-level groups with API after My Account in the sidebar', () => {
     const wrapper = mount(Settings, { global: { stubs } })
-    // Exactly three group tabs — a stray fourth group would fail here.
-    expect(wrapper.findAll('.settings-sidebar__item')).toHaveLength(3)
+    expect(wrapper.findAll('.settings-sidebar__item')).toHaveLength(4)
+    expect(
+      wrapper
+        .findAll('.settings-sidebar__item')
+        .map((item) => item.attributes('data-test')),
+    ).toEqual([
+      'settings-tab-members',
+      'settings-tab-site',
+      'settings-tab-account',
+      'settings-tab-api',
+    ])
     expect(wrapper.findAll('[data-test="settings-tab-members"]')).toHaveLength(
       1,
     )
@@ -102,6 +112,7 @@ describe('Settings.vue navigation shell', () => {
       { hash: '#appearance', group: 'site', sub: 'appearance' },
       { hash: '#system', group: 'site', sub: 'system' },
       { hash: '#account', group: 'account', sub: 'account' },
+      { hash: '#api', group: 'api', sub: 'api' },
     ]
     for (const { hash, group, sub } of cases) {
       routeMock.hash = hash
@@ -118,6 +129,14 @@ describe('Settings.vue navigation shell', () => {
       expect(replaceMock).not.toHaveBeenCalled()
       wrapper.unmount()
     }
+  })
+
+  it('opens the API guide below My Account and persists its deep link', async () => {
+    const wrapper = mount(Settings, { global: { stubs } })
+    await wrapper.find('[data-test="settings-tab-api"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="stub-api"]').exists()).toBe(true)
+    expect(replaceMock).toHaveBeenCalledWith({ hash: '#api' })
   })
 
   it('clicking the site group jumps to its first sub (#discord)', async () => {

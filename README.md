@@ -194,7 +194,7 @@ SEED_VIEWER_PASSWORD=...
 
 ## Discord 活躍度資料收集
 
-Bot 可透過 `POST /api/activity/batches` 每五分鐘批次寫入文字訊息事件與語音取樣。包含 migration、群組限定的 Bot 憑證、重送去重與整批交易；目前提供資料收集，統計圖表後續加入。
+Bot 可透過 `POST /api/activity/batches` 每五分鐘批次寫入文字訊息事件與語音取樣。包含 migration、群組限定的 Bot 憑證、重送去重與整批交易；統計圖表已提供於 `/activity`。
 
 部署方式、憑證建立／撤銷、完整欄位、curl 與 Python 範例請見 [Discord 活躍度資料寫入 API](docs/activity-ingestion.md)。
 
@@ -292,3 +292,5 @@ sudo systemctl enable --now pyweb-backup.timer
 ### 社群活躍度
 
 `/activity` 提供 Discord 訊息與語音的每日貢獻熱圖、趨勢、時段分布、成員及頻道排行。支援日期、時區、時段、星期與成員／頻道多選，查詢條件可透過網址分享。操作與統計定義見 [活躍度圖表](docs/activity-dashboard.md)。
+
+管理員可在「設定 → API 文件」（`/settings#api`）查看 token 操作、串接範例與可搜尋的端點參考。新增或修改 API 時須同步維護文件，見 [API 文件頁與維護規則](docs/api-documentation.md)。
